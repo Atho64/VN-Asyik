@@ -96,9 +96,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" \
-            target/release/bundle/msi/*.msi \
-            target/release/bundle/nsis/*.exe \
+          # The bundle names contain a space ("VN Asyik_0.1.0_x64_en-US.msi").
+          # An unquoted glob word-splits on it, so gh silently receives two
+          # bogus arguments and uploads nothing while still exiting 0.
+          shopt -s nullglob
+          files=(
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no installers found to upload"
+            ls -R target/release/bundle || true
+            exit 1
+          fi
+          for f in "${files[@]}"; do echo "uploading $f"; done
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" \
             --clobber --repo "$GITHUB_REPOSITORY"
 
   android:
