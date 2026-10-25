@@ -918,7 +918,7 @@ mod tests {
         let (mut tracker, _) = tracker();
         tracker.apply(Event::FocusGained, t(10_000));
         let segments = tracker.apply(Event::Tick { idle_for_ms: 0 }, t(5_000));
-        assert!(segments.is_empty());
+        assert_eq!(segments.len(), 0, "segments should be empty");
         let segment = tracker.apply(Event::Stop, t(10_000)).into_iter().next();
         assert!(
             segment.is_none(),

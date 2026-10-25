@@ -781,6 +781,6 @@ mod tests {
     async fn log_limits_its_page_size() {
         let db = fixture().await;
         let entries = recent_log(db.pool(), 10_000).await.expect("recent");
-        assert!(entries.is_empty());
+        assert_eq!(entries.len(), 0, "entries should be empty");
     }
 }

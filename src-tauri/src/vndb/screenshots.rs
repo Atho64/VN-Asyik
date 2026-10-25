@@ -838,7 +838,7 @@ mod tests {
         )
         .await
         .expect("no error");
-        assert!(cached.is_empty());
+        assert_eq!(cached.len(), 0, "cached should be empty");
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -865,7 +865,7 @@ mod tests {
         )
         .await
         .expect("a network failure is collected, not thrown");
-        assert!(cached.is_empty());
+        assert_eq!(cached.len(), 0, "cached should be empty");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

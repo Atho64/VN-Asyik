@@ -101,7 +101,11 @@ async fn soft_delete_hides_game_and_children() {
             .expect("read")
             .is_none()
     );
-    assert!(list_games(db.pool()).await.expect("list").is_empty());
+    assert_eq!(
+        list_games(db.pool()).await.expect("list").len(),
+        0,
+        "list_games(db.pool()).await.expect(\"list\") should be empty"
+    );
     assert!(
         list_chapters(db.pool(), game.meta.id)
             .await

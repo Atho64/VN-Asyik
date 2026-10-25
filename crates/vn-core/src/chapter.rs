@@ -487,13 +487,17 @@ mod route_total_tests {
         ];
         let totals = route_totals(&chapters);
         assert_eq!(totals.len(), 1);
-        assert!(totals[0].key.is_empty());
+        assert_eq!(totals[0].key.len(), 0, "totals[0].key should be empty");
         assert_eq!(totals[0].playtime_ms, 3000);
     }
 
     #[test]
     fn an_empty_route_set_has_no_totals() {
-        assert!(route_totals(&[]).is_empty());
+        assert_eq!(
+            route_totals(&[]).len(),
+            0,
+            "route_totals(&[]) should be empty"
+        );
     }
 
     #[test]

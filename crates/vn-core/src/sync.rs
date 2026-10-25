@@ -536,7 +536,7 @@ mod tests {
             merged[0].value, "local-time",
             "an existing session keeps its own value",
         );
-        assert!(added.is_empty());
+        assert_eq!(added.len(), 0, "added should be empty");
     }
 
     #[test]

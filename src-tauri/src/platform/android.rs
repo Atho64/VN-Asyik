@@ -347,7 +347,11 @@ mod tests {
             kind: 1,
             at_ms: 1_000,
         }];
-        assert!(intervals_from_raw(&packages, &raw, 100_000).is_empty());
+        assert_eq!(
+            intervals_from_raw(&packages, &raw, 100_000).len(),
+            0,
+            "intervals_from_raw(&packages, &raw, 100_000) should be empty"
+        );
     }
 
     #[test]

@@ -314,7 +314,7 @@ mod tests {
     fn a_response_missing_optional_fields_parses() {
         let raw: RawResponse = serde_json::from_str(r#"{"results":[]}"#).unwrap();
         assert!(raw.answer.is_none());
-        assert!(raw.results.is_empty());
+        assert_eq!(raw.results.len(), 0, "raw.results should be empty");
     }
 
     #[test]

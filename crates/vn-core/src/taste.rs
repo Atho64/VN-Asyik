@@ -376,7 +376,7 @@ mod tests {
         let games = vec![game("1", "Only", vec![tag("Nakige", 2.98)])];
         let built = profile(&games);
         assert_eq!(built.considered, 1);
-        assert!(built.themes.is_empty());
+        assert_eq!(built.themes.len(), 0, "built.themes should be empty");
     }
 
     #[test]
@@ -433,7 +433,7 @@ mod tests {
     fn an_empty_library_says_so_instead_of_crashing() {
         let built = profile(&[]);
         assert_eq!(built.considered, 0);
-        assert!(built.themes.is_empty());
+        assert_eq!(built.themes.len(), 0, "built.themes should be empty");
     }
 
     #[test]

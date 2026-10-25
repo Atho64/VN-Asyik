@@ -282,7 +282,7 @@ mod tests {
             &[],
         );
         assert!(built.is_noop());
-        assert!(built.conflicts.is_empty());
+        assert_eq!(built.conflicts.len(), 0, "built.conflicts should be empty");
     }
 
     #[test]
@@ -486,7 +486,11 @@ mod tests {
         assert_eq!(patch.notes, Some(Some("mine".to_owned())));
         assert_eq!(patch.started, Some(Some("2020-09-01".to_owned())));
         // Already Playing, so no label edit is emitted.
-        assert!(patch.labels_set.is_empty());
+        assert_eq!(
+            patch.labels_set.len(),
+            0,
+            "patch.labels_set should be empty"
+        );
     }
 
     #[test]

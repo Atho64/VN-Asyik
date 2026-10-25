@@ -298,7 +298,11 @@ mod tests {
             ev(UsageEventKind::Resumed, 1_000, Some("com.android.chrome")),
             ev(UsageEventKind::Paused, 50_000, Some("com.android.chrome")),
         ];
-        assert!(intervals_for(&pkg(), &events, 100_000).is_empty());
+        assert_eq!(
+            intervals_for(&pkg(), &events, 100_000).len(),
+            0,
+            "intervals_for(&pkg(), &events, 100_000) should be empty"
+        );
     }
 
     #[test]
@@ -376,7 +380,11 @@ mod tests {
             ev(UsageEventKind::Resumed, 1_000, Some("com.example.vn")),
             ev(UsageEventKind::Paused, 1_000, Some("com.example.vn")),
         ];
-        assert!(intervals_for(&pkg(), &events, 100_000).is_empty());
+        assert_eq!(
+            intervals_for(&pkg(), &events, 100_000).len(),
+            0,
+            "intervals_for(&pkg(), &events, 100_000) should be empty"
+        );
     }
 
     #[test]
@@ -407,7 +415,11 @@ mod tests {
 
     #[test]
     fn an_empty_log_produces_nothing() {
-        assert!(intervals_for(&pkg(), &[], 100_000).is_empty());
+        assert_eq!(
+            intervals_for(&pkg(), &[], 100_000).len(),
+            0,
+            "intervals_for(&pkg(), &[], 100_000) should be empty"
+        );
     }
 
     #[test]
@@ -444,6 +456,10 @@ mod tests {
             ev(UsageEventKind::Resumed, 2_000, Some("com.example.vn")),
             ev(UsageEventKind::ScreenInteractive, 10_000, None),
         ];
-        assert!(intervals_for(&pkg(), &events, 20_000).is_empty());
+        assert_eq!(
+            intervals_for(&pkg(), &events, 20_000).len(),
+            0,
+            "intervals_for(&pkg(), &events, 20_000) should be empty"
+        );
     }
 }

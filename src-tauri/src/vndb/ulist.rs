@@ -237,13 +237,17 @@ mod tests {
     fn an_unvoted_entry_has_no_vote() {
         let entry = UlistEntry::default();
         assert!(entry.vote.is_none());
-        assert!(entry.label_ids().is_empty());
+        assert_eq!(
+            entry.label_ids().len(),
+            0,
+            "entry.label_ids() should be empty"
+        );
     }
 
     #[test]
     fn patch_skips_untouched_fields() {
         let patch = UlistPatch::default();
-        assert!(patch.is_empty());
+        assert!(patch.is_empty(), "a default patch touches nothing");
         let json = serde_json::to_string(&patch).expect("serialize");
         assert_eq!(json, "{}");
     }
@@ -301,7 +305,7 @@ mod tests {
     fn empty_patch_round_trips() {
         let json = serde_json::to_string(&UlistPatch::default()).expect("serialize");
         let decoded: UlistPatch = serde_json::from_str(&json).expect("decode");
-        assert!(decoded.is_empty());
+        assert!(decoded.is_empty(), "decoded patch touches nothing");
     }
 
     #[test]

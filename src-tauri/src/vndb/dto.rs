@@ -499,8 +499,16 @@ mod tests {
             r#"{"results":[{"id":"v1","title":"X","some_future_field":{"a":1}}],"more":false}"#;
         let parsed: VnQueryResult = serde_json::from_str(json).expect("decode");
         assert_eq!(parsed.results[0].title.as_deref(), Some("X"));
-        assert!(parsed.results[0].tags.is_empty());
-        assert!(parsed.results[0].screenshots.is_empty());
+        assert_eq!(
+            parsed.results[0].tags.len(),
+            0,
+            "parsed.results[0].tags should be empty"
+        );
+        assert_eq!(
+            parsed.results[0].screenshots.len(),
+            0,
+            "parsed.results[0].screenshots should be empty"
+        );
     }
 
     #[test]

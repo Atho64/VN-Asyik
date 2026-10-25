@@ -406,7 +406,7 @@ mod tests {
             "visual novel recommendations recommendations"
                 .replace(" recommendations recommendations", " recommendations")
         );
-        assert!(!q.is_empty());
+        assert!(!q.is_empty(), "a seedless query is still a query");
     }
 
     #[test]
@@ -425,7 +425,11 @@ mod tests {
             "https://example.com/a",
             "If you liked CLANNAD, try Little Busters!",
         )];
-        assert!(unsupported_candidates(&["Little Busters".to_owned()], &sources).is_empty());
+        assert_eq!(
+            unsupported_candidates(&["Little Busters".to_owned()], &sources).len(),
+            0,
+            "unsupported_candidates(&[\"Little Busters\".to_owned()], &sources) should be empty"
+        );
     }
 
     #[test]
@@ -440,13 +444,21 @@ mod tests {
     fn punctuation_differences_do_not_reject_a_real_title() {
         // "Little Busters!" in a source must support "Little Busters".
         let sources = vec![source("x", "https://e.com", "Little Busters! is great")];
-        assert!(unsupported_candidates(&["Little Busters".to_owned()], &sources).is_empty());
+        assert_eq!(
+            unsupported_candidates(&["Little Busters".to_owned()], &sources).len(),
+            0,
+            "unsupported_candidates(&[\"Little Busters\".to_owned()], &sources) should be empty"
+        );
     }
 
     #[test]
     fn a_matching_word_in_the_url_counts_as_support() {
         let sources = vec![source("Tag", "https://vndb.org/g596", "")];
-        assert!(unsupported_candidates(&["g596".to_owned()], &sources).is_empty());
+        assert_eq!(
+            unsupported_candidates(&["g596".to_owned()], &sources).len(),
+            0,
+            "unsupported_candidates(&[\"g596\".to_owned()], &sources) should be empty"
+        );
     }
 
     #[test]
@@ -456,13 +468,21 @@ mod tests {
             source("a", "https://e.com/1", "Little"),
             source("b", "https://e.com/2", "Busters"),
         ];
-        assert!(unsupported_candidates(&["Little Busters".to_owned()], &sources).is_empty());
+        assert_eq!(
+            unsupported_candidates(&["Little Busters".to_owned()], &sources).len(),
+            0,
+            "unsupported_candidates(&[\"Little Busters\".to_owned()], &sources) should be empty"
+        );
     }
 
     #[test]
     fn a_short_title_needs_an_exact_match() {
         let sources = vec![source("x", "https://e.com", "Kanon is a classic")];
-        assert!(unsupported_candidates(&["Kanon".to_owned()], &sources).is_empty());
+        assert_eq!(
+            unsupported_candidates(&["Kanon".to_owned()], &sources).len(),
+            0,
+            "unsupported_candidates(&[\"Kanon\".to_owned()], &sources) should be empty"
+        );
 
         let unrelated = vec![source("y", "https://e.com", "Rewrite is a classic")];
         assert_eq!(
@@ -484,7 +504,11 @@ mod tests {
         );
         // But a source that does name it still supports it.
         let named = vec![source("y", "https://e.com", "Ai is a classic")];
-        assert!(unsupported_candidates(&["Ai".to_owned()], &named).is_empty());
+        assert_eq!(
+            unsupported_candidates(&["Ai".to_owned()], &named).len(),
+            0,
+            "unsupported_candidates(&[\"Ai\".to_owned()], &named) should be empty"
+        );
     }
 
     #[test]
@@ -510,7 +534,11 @@ mod tests {
     fn an_empty_title_is_not_reported_as_unsupported() {
         // Nothing to check; it is dropped elsewhere.
         let sources = vec![source("a", "https://e.com", "text")];
-        assert!(unsupported_candidates(&["   ".to_owned()], &sources).is_empty());
+        assert_eq!(
+            unsupported_candidates(&["   ".to_owned()], &sources).len(),
+            0,
+            "unsupported_candidates(&[\"   \".to_owned()], &sources) should be empty"
+        );
     }
 
     #[test]
@@ -567,7 +595,11 @@ mod tests {
     #[test]
     fn a_reply_with_prose_around_the_json_is_parsed() {
         let raw = "Here you go: {\"games\":[]} hope that helps";
-        assert!(parse_suggestions(raw).unwrap().games.is_empty());
+        assert_eq!(
+            parse_suggestions(raw).unwrap().games.len(),
+            0,
+            "parse_suggestions(raw).unwrap().games should be empty"
+        );
     }
 
     #[test]

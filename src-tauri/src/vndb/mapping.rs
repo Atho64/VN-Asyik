@@ -530,8 +530,8 @@ mod tests {
     fn label_edits_are_empty_when_already_correct() {
         let m = mapping();
         let (set, unset) = m.label_edits(&[2], GameStatus::Completed);
-        assert!(set.is_empty());
-        assert!(unset.is_empty());
+        assert_eq!(set.len(), 0, "set should be empty");
+        assert_eq!(unset.len(), 0, "unset should be empty");
     }
 
     #[test]
@@ -641,7 +641,11 @@ mod tests {
             finished_at: None,
             lastmod_ms: 1_000,
         };
-        assert!(diff(&local, &remote).is_empty());
+        assert_eq!(
+            diff(&local, &remote).len(),
+            0,
+            "diff(&local, &remote) should be empty"
+        );
     }
 
     #[test]
@@ -695,7 +699,11 @@ mod tests {
             ..LocalState::default()
         };
         let remote = RemoteState::default();
-        assert!(diff(&local, &remote).is_empty());
+        assert_eq!(
+            diff(&local, &remote).len(),
+            0,
+            "diff(&local, &remote) should be empty"
+        );
     }
 
     #[test]

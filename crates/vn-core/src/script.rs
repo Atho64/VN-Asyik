@@ -708,7 +708,11 @@ mod tests {
         // One agent is the whole story; zero chunks plan nothing; more agents
         // than chunks drops the empty shares instead of running them.
         assert_eq!(plan_agents(7, 1), vec![(0, 7)]);
-        assert!(plan_agents(0, 3).is_empty());
+        assert_eq!(
+            plan_agents(0, 3).len(),
+            0,
+            "plan_agents(0, 3) should be empty"
+        );
         assert_eq!(plan_agents(2, 5), vec![(0, 1), (1, 2)]);
         assert_eq!(plan_agents(4, 0), vec![(0, 4)], "zero agents means one");
     }
@@ -833,7 +837,11 @@ mod tests {
 
     #[test]
     fn an_empty_body_plans_no_chunks() {
-        assert!(plan_chunks("", DEFAULT_CHUNK_BYTES).is_empty());
+        assert_eq!(
+            plan_chunks("", DEFAULT_CHUNK_BYTES).len(),
+            0,
+            "plan_chunks(\"\", DEFAULT_CHUNK_BYTES) should be empty"
+        );
     }
 
     #[test]
@@ -867,9 +875,21 @@ mod tests {
         assert!(block.contains("keep this list itself out of the digest"));
 
         // A pair where both sides already agree adds noise, not information.
-        assert!(romaji_block(&[("Anna", "anna")]).is_empty());
-        assert!(romaji_block(&[("", "Yukki"), ("雪々", " ")]).is_empty());
-        assert!(romaji_block(&[]).is_empty());
+        assert_eq!(
+            romaji_block(&[("Anna", "anna")]).len(),
+            0,
+            "romaji_block(&[(\"Anna\", \"anna\")]) should be empty"
+        );
+        assert_eq!(
+            romaji_block(&[("", "Yukki"), ("雪々", " ")]).len(),
+            0,
+            "romaji_block(&[(\"\", \"Yukki\"), (\"雪々\", \" \")]) should be empty"
+        );
+        assert_eq!(
+            romaji_block(&[]).len(),
+            0,
+            "romaji_block(&[]) should be empty"
+        );
         // The cap keeps a huge cast from riding on every reduce call.
         let many: Vec<(&str, &str)> = (0..200).map(|_| ("x", "y")).collect();
         assert_eq!(

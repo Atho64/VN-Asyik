@@ -210,7 +210,7 @@ mod tests {
         // local, and local is what keeps this offline-capable.
         let config = ChatConfig::default();
         assert!(config.base_url.starts_with("https://"));
-        assert!(!config.model.is_empty());
+        assert!(!config.model.is_empty(), "a default config names a model");
     }
 
     #[test]

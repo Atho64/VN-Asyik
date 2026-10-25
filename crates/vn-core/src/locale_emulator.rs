@@ -396,13 +396,21 @@ mod tests {
         // Without a GUID it cannot be passed to -runas, so it is not offerable.
         let xml =
             r#"<LEConfig><Profile Name="Broken"><Location>ja-JP</Location></Profile></LEConfig>"#;
-        assert!(parse_profiles(xml).is_empty());
+        assert_eq!(
+            parse_profiles(xml).len(),
+            0,
+            "parse_profiles(xml) should be empty"
+        );
     }
 
     #[test]
     fn a_missing_config_file_yields_no_profiles() {
         let dir = temp_dir("no-config");
-        assert!(read_profiles(&dir).is_empty());
+        assert_eq!(
+            read_profiles(&dir).len(),
+            0,
+            "read_profiles(&dir) should be empty"
+        );
     }
 
     #[test]
@@ -416,7 +424,7 @@ mod tests {
         let plan = plan(Path::new("game.exe"), None, None);
         assert!(!plan.localized);
         assert_eq!(plan.program, PathBuf::from("game.exe"));
-        assert!(plan.args.is_empty());
+        assert_eq!(plan.args.len(), 0, "plan.args should be empty");
         // The message must say what to do, not just that something is missing.
         assert!(plan.explanation.contains("Locale Emulator"));
     }

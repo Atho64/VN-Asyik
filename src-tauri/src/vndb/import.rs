@@ -376,7 +376,7 @@ mod tests {
         let payload = DetailPayload::from_vn(&sample_vn());
         assert_eq!(payload.vn_id, "v24");
         assert_eq!(payload.alttitle.as_deref(), Some("うみねこのなく頃に"));
-        assert!(payload.tags.is_empty());
+        assert_eq!(payload.tags.len(), 0, "payload.tags should be empty");
     }
 
     #[test]

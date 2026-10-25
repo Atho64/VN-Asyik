@@ -159,7 +159,11 @@ mod tests {
     async fn an_empty_line_is_ignored() {
         let host = host();
         host.push_external("").await;
-        assert!(host.lines().await.is_empty());
+        assert_eq!(
+            host.lines().await.len(),
+            0,
+            "host.lines().await should be empty"
+        );
     }
 
     #[tokio::test]
@@ -191,7 +195,11 @@ mod tests {
         let host = host();
         let huge = "x".repeat(MAX_LINE_BYTES + 1);
         host.push_external(&huge).await;
-        assert!(host.lines().await.is_empty());
+        assert_eq!(
+            host.lines().await.len(),
+            0,
+            "host.lines().await should be empty"
+        );
     }
 
     #[tokio::test]
@@ -225,6 +233,10 @@ mod tests {
         let status = host.status().await;
         assert_eq!(status.line_count, 0);
         assert!(!status.connected);
-        assert!(host.lines().await.is_empty());
+        assert_eq!(
+            host.lines().await.len(),
+            0,
+            "host.lines().await should be empty"
+        );
     }
 }

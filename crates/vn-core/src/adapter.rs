@@ -271,7 +271,11 @@ mod tests {
 
         // And the order reflects it: KiriKiri gets no source at all on desktop,
         // because neither a title read nor a scene table applies to it.
-        assert!(source_order(Some("kirikiri"), Platform::Windows).is_empty());
+        assert_eq!(
+            source_order(Some("kirikiri"), Platform::Windows).len(),
+            0,
+            "source_order(Some(\"kirikiri\"), Platform::Windows) should be empty"
+        );
     }
 
     #[test]

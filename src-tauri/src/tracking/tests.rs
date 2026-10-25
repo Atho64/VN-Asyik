@@ -142,7 +142,11 @@ async fn an_unsupported_platform_reports_why() {
     let status = service.status(db.pool()).await;
     // The service was built with an explicit probe, so it believes tracking works;
     // what matters is that an unsupported probe yields no candidates and no errors.
-    assert!(status.candidates.is_empty());
+    assert_eq!(
+        status.candidates.len(),
+        0,
+        "status.candidates should be empty"
+    );
 }
 
 #[tokio::test]
@@ -512,7 +516,7 @@ async fn shutdown_flushes_and_clears_the_open_run() {
     let sessions = queries::list_sessions(db.pool(), game_id)
         .await
         .expect("sessions");
-    assert!(!sessions.is_empty());
+    assert!(!sessions.is_empty(), "the flushed run is written");
 }
 
 #[tokio::test]
@@ -569,7 +573,11 @@ async fn a_probe_failure_does_not_panic_the_loop() {
     assert!(result.is_ok());
     // Status must stay readable even while the probe is broken.
     let status = service.status(db.pool()).await;
-    assert!(status.candidates.is_empty());
+    assert_eq!(
+        status.candidates.len(),
+        0,
+        "status.candidates should be empty"
+    );
 }
 
 /// Poll `steps` times, two seconds apart, starting at `from`.
