@@ -292,8 +292,9 @@ mod tests {
         // be the wrong reason and would hide a real gap.
         for engine in ["kirikiri", "artemis"] {
             assert!(is_known_engine(engine), "{engine} should be recognised");
-            assert!(
-                source_order(Some(engine), Platform::Windows).is_empty(),
+            assert_eq!(
+                source_order(Some(engine), Platform::Windows).len(),
+                0,
                 "{engine} has no verified chapter source"
             );
         }

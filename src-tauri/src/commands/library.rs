@@ -1056,8 +1056,9 @@ mod route_tests {
         let live = queries::list_routes(db.pool(), game.meta.id)
             .await
             .expect("list");
-        assert!(
-            live.is_empty(),
+        assert_eq!(
+            live.len(),
+            0,
             "a route whose game is gone must not be listed"
         );
 

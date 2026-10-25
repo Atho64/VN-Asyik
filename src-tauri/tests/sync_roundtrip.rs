@@ -278,11 +278,12 @@ async fn invalid_ending_rolls_back_transfer_sessions_and_negative_idle_time_is_r
             .is_err()
     );
     assert!(title_of(b.db.pool(), game).await.is_none());
-    assert!(
+    assert_eq!(
         queries::list_sessions(b.db.pool(), game)
             .await
             .expect("sessions")
-            .is_empty()
+            .len(),
+        0
     );
 
     payload.endings.clear();
@@ -462,8 +463,9 @@ async fn syncing_twice_changes_nothing_the_second_time() {
         .await
         .expect("b again");
     assert_eq!(second.pulled, 0, "nothing new to pull");
-    assert!(
-        second.conflicts.is_empty(),
+    assert_eq!(
+        second.conflicts.len(),
+        0,
         "conflicts: {:?}",
         second.conflicts
     );
@@ -472,11 +474,7 @@ async fn syncing_twice_changes_nothing_the_second_time() {
         .await
         .expect("a again");
     assert_eq!(twice.pulled, 0);
-    assert!(
-        twice.conflicts.is_empty(),
-        "conflicts: {:?}",
-        twice.conflicts
-    );
+    assert_eq!(twice.conflicts.len(), 0, "conflicts: {:?}", twice.conflicts);
 
     assert!(title_of(a.db.pool(), game).await.is_some());
     let _ = std::fs::remove_dir_all(&folder);

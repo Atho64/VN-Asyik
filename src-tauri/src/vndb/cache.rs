@@ -565,11 +565,9 @@ mod tests {
             get_screenshots(db.pool(), "v17").await.expect("get").len(),
             1
         );
-        assert!(
-            get_screenshots(db.pool(), "v999")
-                .await
-                .expect("get")
-                .is_empty()
+        assert_eq!(
+            get_screenshots(db.pool(), "v999").await.expect("get").len(),
+            0
         );
     }
 

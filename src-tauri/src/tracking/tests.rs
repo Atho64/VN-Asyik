@@ -221,8 +221,9 @@ async fn a_caption_belonging_to_a_different_game_is_not_attributed() {
         .expect("poll");
 
     let chapters = chapters_of(db.pool(), game_id).await;
-    assert!(
-        chapters.is_empty(),
+    assert_eq!(
+        chapters.len(),
+        0,
         "a caption for another game must not create a chapter, got {chapters:?}",
     );
 }
@@ -549,11 +550,12 @@ async fn recovery_promotes_pending_checkpoints() {
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].counted_ms, 20_000);
     assert_eq!(sessions[0].afk_ms, 10_000);
-    assert!(
+    assert_eq!(
         mapping::list_pending_sessions(db.pool())
             .await
             .expect("pending")
-            .is_empty()
+            .len(),
+        0
     );
 }
 

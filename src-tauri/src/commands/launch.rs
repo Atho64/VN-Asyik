@@ -509,7 +509,7 @@ mod tests {
     #[test]
     fn an_empty_directory_clears_the_setting() {
         // The UI needs a way to unset this, and "" is what it sends.
-        assert!(
+        assert_eq!(
             LaunchSettingsInput {
                 launcher_dir: Some(String::new()),
                 guid: None,
@@ -518,7 +518,8 @@ mod tests {
             .launcher_dir
             .unwrap()
             .trim()
-            .is_empty()
+            .len(),
+            0
         );
     }
 

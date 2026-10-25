@@ -523,8 +523,9 @@ mod tests {
             "Summer is warm, pockets hold keys",
         )];
         for sources in [together, apart] {
-            assert!(
-                unsupported_candidates(&["Summer Pockets".to_owned()], &sources).is_empty(),
+            assert_eq!(
+                unsupported_candidates(&["Summer Pockets".to_owned()], &sources).len(),
+                0,
                 "both phrasings must support the title"
             );
         }

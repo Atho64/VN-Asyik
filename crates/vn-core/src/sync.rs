@@ -469,7 +469,7 @@ mod tests {
         let remote = vec![Row::new(ROW2, DEV_B, 1_000, "remote")];
         let (merged, conflicts) = merge_rows("games", &local, &remote);
         assert_eq!(merged.len(), 2);
-        assert!(conflicts.is_empty(), "no overlap means no conflict");
+        assert_eq!(conflicts.len(), 0, "no overlap means no conflict");
     }
 
     #[test]
@@ -519,8 +519,9 @@ mod tests {
         let local = vec![Row::new(ROW, DEV_A, 1_000, "same")];
         let remote = vec![Row::new(ROW, DEV_A, 1_000, "same")];
         let (_, conflicts) = merge_rows("games", &local, &remote);
-        assert!(
-            conflicts.is_empty(),
+        assert_eq!(
+            conflicts.len(),
+            0,
             "unchanged rows must not fill the log, got {conflicts:?}",
         );
     }
@@ -557,7 +558,7 @@ mod tests {
         let (once, _) = merge_rows("games", &local, &remote);
         let (twice, conflicts) = merge_rows("games", &once, &remote);
         assert_eq!(once, twice);
-        assert!(conflicts.is_empty(), "re-merging must be quiet");
+        assert_eq!(conflicts.len(), 0, "re-merging must be quiet");
     }
 
     #[test]

@@ -340,8 +340,9 @@ mod tests {
             ev(UsageEventKind::DeviceBoundary, 3_600_000, None),
         ];
         let intervals = intervals_for(&pkg(), &events, 4_000_000);
-        assert!(
-            intervals.is_empty(),
+        assert_eq!(
+            intervals.len(),
+            0,
             "an interval across a restart must be dropped, got {intervals:?}",
         );
     }

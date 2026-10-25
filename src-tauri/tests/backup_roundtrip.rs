@@ -203,11 +203,12 @@ async fn a_backup_from_a_newer_schema_is_refused() {
 
     payload.header.schema_version = 0;
     assert!(import_payload(target.pool(), &payload).await.is_err());
-    assert!(
+    assert_eq!(
         queries::list_games(target.pool())
             .await
             .expect("games")
-            .is_empty()
+            .len(),
+        0
     );
 }
 

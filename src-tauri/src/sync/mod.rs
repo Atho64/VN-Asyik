@@ -531,7 +531,7 @@ mod tests {
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
             .filter(|name| name.to_lowercase().ends_with(".tmp"))
             .collect();
-        assert!(leftovers.is_empty(), "left {leftovers:?}");
+        assert_eq!(leftovers.len(), 0, "left {leftovers:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

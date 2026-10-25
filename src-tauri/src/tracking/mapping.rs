@@ -1575,11 +1575,9 @@ mod tests {
             .await
             .expect("promote");
 
-        assert!(
-            list_pending_sessions(db.pool())
-                .await
-                .expect("list")
-                .is_empty(),
+        assert_eq!(
+            list_pending_sessions(db.pool()).await.expect("list").len(),
+            0,
             "promotion clears the pending row"
         );
         let sessions = crate::db::queries::list_sessions(db.pool(), game_id)

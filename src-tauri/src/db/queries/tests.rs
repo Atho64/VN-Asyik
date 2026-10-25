@@ -106,11 +106,12 @@ async fn soft_delete_hides_game_and_children() {
         0,
         "list_games(db.pool()).await.expect(\"list\") should be empty"
     );
-    assert!(
+    assert_eq!(
         list_chapters(db.pool(), game.meta.id)
             .await
             .expect("chapters")
-            .is_empty()
+            .len(),
+        0
     );
     assert_eq!(
         tracked_playtime_ms(db.pool(), game.meta.id)
@@ -263,11 +264,12 @@ async fn an_ending_can_be_soft_deleted_and_the_tombstone_hides_it() {
         .await
         .expect("delete");
 
-    assert!(
+    assert_eq!(
         list_endings(db.pool(), game.meta.id)
             .await
             .expect("list")
-            .is_empty(),
+            .len(),
+        0,
         "a deleted ending must not appear in the game's list"
     );
     let row = ending_by_id(db.pool(), ending.meta.id)
@@ -361,11 +363,12 @@ async fn an_ending_of_a_removed_game_is_not_listed() {
     removed.meta.updated_at = now();
     upsert_game(db.pool(), &removed).await.expect("delete game");
 
-    assert!(
+    assert_eq!(
         list_endings(db.pool(), game.meta.id)
             .await
             .expect("list")
-            .is_empty(),
+            .len(),
+        0,
         "an ending must not outlive its game in the read path"
     );
     assert!(
@@ -690,8 +693,9 @@ async fn a_route_of_a_removed_game_is_not_listed() {
         .expect("tombstone game");
 
     let listed = list_routes(db.pool(), game.meta.id).await.expect("list");
-    assert!(
-        listed.is_empty(),
+    assert_eq!(
+        listed.len(),
+        0,
         "a route whose game is gone must not be listed: {listed:?}"
     );
 }

@@ -570,7 +570,7 @@ mod tests {
         let (mut tracker, _) = tracker();
         assert_eq!(tracker.phase(), Phase::Unfocused);
         let emitted = tracker.apply(Event::Tick { idle_for_ms: 0 }, t(1_000));
-        assert!(emitted.is_empty(), "no focus, no time");
+        assert_eq!(emitted.len(), 0, "no focus, no time");
     }
 
     #[test]
@@ -579,7 +579,7 @@ mod tests {
         tracker.apply(Event::FocusGained, t(0));
         assert_eq!(tracker.phase(), Phase::Tracking);
         let segments = tick_for(&mut tracker, 0, 10_000, 1_000);
-        assert!(segments.is_empty(), "under the checkpoint interval");
+        assert_eq!(segments.len(), 0, "under the checkpoint interval");
 
         let final_segment = tracker
             .apply(Event::Stop, t(10_000))
@@ -803,10 +803,7 @@ mod tests {
         tracker.apply(Event::ChapterChanged(Some(chapter)), t(0));
         tick_for(&mut tracker, 0, 5_000, 1_000);
         let segments = tracker.apply(Event::ChapterChanged(Some(chapter)), t(5_000));
-        assert!(
-            segments.is_empty(),
-            "no split when the chapter is unchanged"
-        );
+        assert_eq!(segments.len(), 0, "no split when the chapter is unchanged");
     }
 
     #[test]
@@ -887,7 +884,7 @@ mod tests {
         let (mut tracker, _) = tracker();
         tracker.apply(Event::FocusGained, t(0));
         let segments = tracker.apply(Event::Stop, t(0));
-        assert!(segments.is_empty(), "a zero-length run is not worth a row");
+        assert_eq!(segments.len(), 0, "a zero-length run is not worth a row");
     }
 
     #[test]
