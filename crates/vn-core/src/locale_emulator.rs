@@ -429,6 +429,11 @@ mod tests {
         assert!(plan.explanation.contains("Locale Emulator"));
     }
 
+    // Both tests below assert Windows path semantics, which is the only place
+    // Locale Emulator runs. On Linux `Path` is POSIX, so `C:\Games\VN\game.exe`
+    // is a single file name with no separator and `parent()` is `Some("")` — the
+    // assertion would be testing the host, not the function.
+    #[cfg(windows)]
     #[test]
     fn the_game_directory_is_the_executables_parent() {
         assert_eq!(
@@ -437,6 +442,7 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn a_bare_file_name_has_no_directory() {
         assert_eq!(game_directory(Path::new("game.exe")), Some(Path::new("")));

@@ -79,11 +79,19 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      # The runner image already ships an SDK; setup-android@v3 rejects it with
+      # "Wrong version in preinstalled sdkmanager" and then fails while accepting
+      # licences. Pointing at the existing install is enough, and the NDK version
+      # below is the one this project builds against.
+      - name: locate the preinstalled Android SDK
+        run: |
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
+          yes | "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - name: install NDK
         run: |
-          sdkmanager --install "ndk;27.3.13750724"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.3.13750724"
           echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.3.13750724" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@stable
