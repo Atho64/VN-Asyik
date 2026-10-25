@@ -549,6 +549,7 @@ struct DetailRow {
     screenshots_json: String,
     developers_json: String,
     extlinks_json: String,
+    characters_json: String,
 }
 
 /// Stored detail for a game's VN, when available.
@@ -558,7 +559,7 @@ pub async fn vndb_detail(
     vn_id: String,
 ) -> CommandResult<Option<DetailPayload>> {
     let row: Option<DetailRow> = sqlx::query_as(
-        "SELECT title, alttitle, titles_json, aliases_json, length_minutes, length, length_votes, description, rating, average, votecount, released, olang, devstatus, languages_json, platforms_json, tags_json, screenshots_json, developers_json, extlinks_json FROM vndb_details WHERE vn_id = ?",
+        "SELECT title, alttitle, titles_json, aliases_json, length_minutes, length, length_votes, description, rating, average, votecount, released, olang, devstatus, languages_json, platforms_json, tags_json, screenshots_json, developers_json, extlinks_json, characters_json FROM vndb_details WHERE vn_id = ?",
     )
     .bind(&vn_id)
     .fetch_optional(state.db().pool())
@@ -594,6 +595,11 @@ pub async fn vndb_detail(
         screenshots: serde_json::from_str(&row.screenshots_json).unwrap_or_default(),
         developers: serde_json::from_str(&row.developers_json).unwrap_or_default(),
         extlinks: serde_json::from_str(&row.extlinks_json).unwrap_or_default(),
+        // Stored by `store_detail` since the beginning but never selected back
+        // out, so the game page had nothing to show. A row written before this
+        // column existed decodes to an empty list rather than failing the whole
+        // payload (AGENTS.md §6: assume old rows lack the field).
+        characters: serde_json::from_str(&row.characters_json).unwrap_or_default(),
     }))
 }
 

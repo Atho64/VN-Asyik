@@ -1786,3 +1786,55 @@ select optgroup {
   flex: 1 1 14rem;
   min-width: 0;
 }
+
+/* The cast list: small portraits in a wrapping grid so a phone shows two or
+   three across and a desktop shows several rows of them. */
+.cast {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cast__item {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.cast__art {
+  display: block;
+  inline-size: 48px;
+  block-size: 48px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+
+.cast__art img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.cast__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* A long romanised name must wrap rather than push the row wider. */
+.cast__name {
+  overflow-wrap: anywhere;
+}
+
+.cast__original,
+.cast__role {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}

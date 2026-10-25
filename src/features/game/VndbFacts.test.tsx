@@ -42,6 +42,7 @@ function payload(overrides: Partial<DetailPayload> = {}): DetailPayload {
     screenshots: [],
     developers: [],
     extlinks: [],
+  characters: [],
     ...overrides,
   };
 }

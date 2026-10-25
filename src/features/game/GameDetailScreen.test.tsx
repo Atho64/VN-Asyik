@@ -110,6 +110,7 @@ function vndbPayload(overrides: Record<string, unknown> = {}) {
     screenshots: [],
     developers: [],
     extlinks: [],
+  characters: [],
     ...overrides,
   };
 }

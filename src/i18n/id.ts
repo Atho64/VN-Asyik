@@ -542,6 +542,18 @@ export const id: Messages = {
   "detail.viewOnVndb": "Buka di VNDB",
   "detail.viewOnVndbHint": "Membuka {{vn}} di vndb.org lewat browser",
   "detail.links": "Tautan",
+  "detail.cast":
+    "Karakter",
+  "detail.castMore":
+    "{{count}} lainnya",
+  "detail.castRole.main":
+    "Utama",
+  "detail.castRole.primary":
+    "Pendukung utama",
+  "detail.castRole.side":
+    "Pendukung",
+  "detail.castRole.appears":
+    "Muncul",
   "detail.linksMore": "Basis data dan wiki",
   "detail.screenshots": "Tangkapan layar",
   "detail.screenshotsEmpty": "VNDB belum punya tangkapan layar untuk visual novel ini.",

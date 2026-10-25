@@ -165,6 +165,14 @@ pub struct DetailPayload {
     /// Official, encyclopaedia and store links from the VN's page.
     #[serde(default)]
     pub extlinks: Vec<ExtLink>,
+    /// Cast, in VNDB's own order (main roles first).
+    ///
+    /// Stored since the first import but never read back, which is why the game
+    /// page had no cast to show. `#[serde(default)]` so a payload stored before
+    /// the field was exposed still decodes as an empty list instead of failing
+    /// the whole detail load.
+    #[serde(default)]
+    pub characters: Vec<crate::vndb::dto::Character>,
 }
 
 impl DetailPayload {
@@ -193,6 +201,7 @@ impl DetailPayload {
             screenshots: vn.screenshots.clone(),
             developers: vn.developers.clone(),
             extlinks: vn.extlinks.clone(),
+            characters: vn.characters.clone(),
         }
     }
 }

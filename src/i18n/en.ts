@@ -541,6 +541,18 @@ export const en = {
   "detail.viewOnVndb": "Open on VNDB",
   "detail.viewOnVndbHint": "Opens {{vn}} on vndb.org in your browser",
   "detail.links": "Links",
+  "detail.cast":
+    "Characters",
+  "detail.castMore":
+    "{{count}} more",
+  "detail.castRole.main":
+    "Main",
+  "detail.castRole.primary":
+    "Primary",
+  "detail.castRole.side":
+    "Side",
+  "detail.castRole.appears":
+    "Appears",
   "detail.linksMore": "Databases and wikis",
   "detail.screenshots": "Screenshots",
   "detail.screenshotsEmpty": "VNDB has no screenshots for this visual novel.",

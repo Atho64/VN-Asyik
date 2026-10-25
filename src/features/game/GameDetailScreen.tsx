@@ -10,6 +10,7 @@ import { PlayButton } from "@/features/game/PlayButton";
 import { alternateTitles } from "@/features/game/alternateTitles";
 import { RatingPicker } from "@/features/game/RatingPicker";
 import { ScreenshotGallery } from "@/features/game/ScreenshotGallery";
+import { CastCard } from "@/features/game/CastCard";
 import { VndbFacts } from "@/features/game/VndbFacts";
 import { vndbVnUrl } from "@/features/game/vndbMetadata";
 import { Card, CardHeader } from "@/components/Card";
@@ -597,7 +598,10 @@ export function GameDetailScreen() {
               is the VN they are thinking of needs the date, the developer and the
               platforms, not 2,000 words of synopsis. */}
           {vndb && game.vndb_id ? (
-            <VndbFacts payload={vndb} vnId={game.vndb_id} playtimeMs={totalMs} />
+            <>
+              <VndbFacts payload={vndb} vnId={game.vndb_id} playtimeMs={totalMs} />
+              <CastCard characters={vndb.characters} />
+            </>
           ) : null}
 
           {/* The description is prose and belongs at a reading width, not in a

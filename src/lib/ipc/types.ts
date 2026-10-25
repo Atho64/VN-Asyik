@@ -228,6 +228,17 @@ export const vndbExtLinkSchema = z.object({
 });
 export type VndbExtLink = z.infer<typeof vndbExtLinkSchema>;
 
+/** One character on a VN's cast list. */
+export const vndbCharacterSchema = z.object({
+  id: z.string().nullable().default(null),
+  name: z.string().nullable().default(null),
+  original: z.string().nullable().default(null),
+  /** `main`, `primary`, `side` or `appears`. */
+  role: z.string().nullable().default(null),
+  image: vndbImageSchema.nullable().default(null),
+});
+export type VndbCharacter = z.infer<typeof vndbCharacterSchema>;
+
 export const detailPayloadSchema = z.object({
   vn_id: z.string(),
   title: z.string(),
@@ -255,6 +266,7 @@ export const detailPayloadSchema = z.object({
   screenshots: vndbImageSchema.array().default([]),
   developers: vndbProducerSchema.array().default([]),
   extlinks: vndbExtLinkSchema.array().default([]),
+  characters: vndbCharacterSchema.array().default([]),
 });
 export type DetailPayload = z.infer<typeof detailPayloadSchema>;
 
