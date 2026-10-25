@@ -4,7 +4,7 @@ A visual novel library and playtime tracker for Windows and Android. It reads
 from VNDB, keeps everything in a local SQLite database, and works with no
 network. Rust and Tauri on the backend, React on the front.
 
-![VN Asyik](src/assets/vn-asyik.svg)
+![The library grid, showing imported games with their covers and playtime](docs/screenshot-library.png)
 
 ## What it does
 
