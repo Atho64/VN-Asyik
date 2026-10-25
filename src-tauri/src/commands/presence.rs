@@ -198,12 +198,26 @@ pub async fn presence_preview(
         match queries::get_game(state.db().pool(), entity_id).await? {
             Some(game) => {
                 let base = presence::context_for_game(state.db().pool(), &game).await;
+                // `vndb_loaded` is forced on: it means "the facts below are what
+                // the card will draw on", and the preview exists to show the
+                // drawn card. A game with no VNDB link has an empty
+                // `vndb_details_items`, and with the real flag left off the
+                // preview rendered the "Reading / Loading VNDB data..." placeholder
+                // forever, which read as a broken preview rather than a game with
+                // no facts. Real games still show that placeholder while loading,
+                // because that is a fact about the moment, not the settings.
+                let chapter = if game.vndb_id.is_some() {
+                    Some("Chapter 1".to_string())
+                } else {
+                    None
+                };
                 PresenceContext {
                     exe_name: "game.exe".to_string(),
                     elapsed_time: "01:23".to_string(),
-                    chapter: Some("Chapter 1".to_string()),
+                    chapter,
                     route: Some("Common Route".to_string()),
                     session_start_epoch: Some(1_700_000_000),
+                    vndb_loaded: true,
                     ..base
                 }
             }

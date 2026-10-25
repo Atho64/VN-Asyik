@@ -786,6 +786,8 @@ export const id: Messages = {
   "settings.presenceClientId": "Client ID (opsional)",
   "settings.presenceClientIdHint":
     "Biarkan kosong untuk menggunakan ID aplikasi bawaan VN Asyik.",
+  "settings.presencePreviewGame":
+    "Gim yang ditampilkan di pratinjau",
   "settings.presencePreview": "Pratinjau Langsung",
   "settings.presencePlaying": "SEDANG MEMAINKAN",
 

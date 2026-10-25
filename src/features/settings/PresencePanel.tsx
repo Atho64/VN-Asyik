@@ -302,6 +302,11 @@ export function PresencePanel() {
   const [activeField, setActiveField] = useState<WhichField>("details");
   // Which entry of each rotation list the preview is showing.
   const [previewCycle, setPreviewCycle] = useState(0);
+  // Which game the preview renders. Until now the backend was always called
+  // with no id, so the panel previewed the built-in sample no matter what the
+  // user's library held -- {vn_name} could never show their own title.
+  const [previewGameId, setPreviewGameId] = useState<string>("");
+  const [games, setGames] = useState<{ id: string; title: string }[]>([]);
   const [previewStateCycle, setPreviewStateCycle] = useState(0);
   const [linkError, setLinkError] = useState<string | null>(null);
 
@@ -354,12 +359,38 @@ export function PresencePanel() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    void api
+      .listGames()
+      .then((cards) => {
+        if (!active) return;
+        const options = cards.map((card) => ({
+          id: card.game.meta.id,
+          title: card.game.title,
+        }));
+        setGames(options);
+        // Default to the first game so the preview is about a real title from
+        // the moment the panel opens.
+        setPreviewGameId((current) => current || (options[0]?.id ?? ""));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Update live preview when settings or the previewed rotation entry change.
   useEffect(() => {
     if (!settings) return;
     let active = true;
     void api
-      .presencePreview(settings, undefined, previewCycle, previewStateCycle)
+      .presencePreview(
+        settings,
+        previewGameId || undefined,
+        previewCycle,
+        previewStateCycle,
+      )
       .then((next) => {
         if (active) setPreview(next);
       })
@@ -368,7 +399,7 @@ export function PresencePanel() {
     return () => {
       active = false;
     };
-  }, [settings, previewCycle, previewStateCycle]);
+  }, [settings, previewCycle, previewStateCycle, previewGameId]);
 
   // A saved-to-play switch is not a field; the reset keeps the preview honest about
   // where a fresh rotation starts.
@@ -1164,6 +1195,27 @@ export function PresencePanel() {
 
               <div className="settings__field">
                 <span className="settings__label">{t("settings.presencePreview")}</span>
+                {games.length > 0 ? (
+                  <label className="settings__preview-game">
+                    <span className="settings__hint">
+                      {t("settings.presencePreviewGame")}
+                    </span>
+                    <select
+                      className="input"
+                      value={previewGameId}
+                      onChange={(event) => {
+                        setPreviewGameId(event.target.value);
+                        resetPreview();
+                      }}
+                    >
+                      {games.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 {renderCycleControls(
                   rotationLengths.details,
                   previewCycle,

@@ -785,6 +785,8 @@ export const en = {
   "settings.presenceClientId": "Client ID (optional override)",
   "settings.presenceClientIdHint":
     "Leave blank to use the default VN Asyik application ID.",
+  "settings.presencePreviewGame":
+    "Game shown in the preview",
   "settings.presencePreview": "Live Preview",
   "settings.presencePlaying": "PLAYING A GAME",
 

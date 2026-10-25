@@ -59,6 +59,7 @@ vi.mock("@/lib/ipc/client", () => ({
     presenceImageKeySave: vi.fn(),
     presenceImageKeyClear: vi.fn(),
     presenceImageKeyPreview: vi.fn(),
+    listGames: vi.fn(),
   },
   // Mirrors the real class: the panel branches on `code` to decide whether the
   // message belongs under the field or only in a toast.
@@ -83,6 +84,39 @@ beforeEach(() => {
   vi.mocked(api.presenceImageKeySave).mockResolvedValue();
   vi.mocked(api.presenceImageKeyClear).mockResolvedValue();
   vi.mocked(api.presenceImageKeyPreview).mockResolvedValue(null);
+  // The preview now names a real game, so the panel asks for the library.
+  vi.mocked(api.listGames).mockResolvedValue([
+    {
+      game: {
+        meta: {
+          id: "g1",
+          updated_at: 0,
+          device_id: "d1",
+          deleted: false,
+        },
+        title: "Steins;Gate",
+        title_original: null,
+        vndb_id: "v2002",
+        status: "playing",
+        rating: null,
+        notes: null,
+        length_minutes: null,
+        manual_playtime_ms: 0,
+        accent_color: null,
+        cover_url: null,
+        cover_sexual: null,
+        cover_violence: null,
+        custom_cover_path: null,
+        custom_cover_source_vndb: false,
+        started_at: null,
+        finished_at: null,
+      },
+      tracked_ms: 0,
+      afk_ms: 0,
+      total_ms: 0,
+    },
+  ] as never);
+
   vi.mocked(api.presencePreview).mockResolvedValue({
     name: "Steins;Gate",
     details: "5pb. / Nitroplus",
@@ -181,9 +215,11 @@ describe("PresencePanel", () => {
     const next = await screen.findByRole("button", { name: "Next line" });
     await user.click(next);
     await waitFor(() => {
+      // The game id is asserted, not `undefined`: passing no id was the bug that
+      // made the preview always render the built-in sample.
       expect(api.presencePreview).toHaveBeenLastCalledWith(
         expect.objectContaining({ custom_details_items: ["entry one", "entry two"] }),
-        undefined,
+        "g1",
         1,
         0,
       );
@@ -273,7 +309,40 @@ describe("PresencePanel", () => {
       my_vndb_link: "https://vndb.org/u123456",
     });
     vi.mocked(api.presenceStatus).mockResolvedValue({ status: "connected" });
-    vi.mocked(api.presencePreview).mockResolvedValue({
+    // The preview now names a real game, so the panel asks for the library.
+  vi.mocked(api.listGames).mockResolvedValue([
+    {
+      game: {
+        meta: {
+          id: "g1",
+          updated_at: 0,
+          device_id: "d1",
+          deleted: false,
+        },
+        title: "Steins;Gate",
+        title_original: null,
+        vndb_id: "v2002",
+        status: "playing",
+        rating: null,
+        notes: null,
+        length_minutes: null,
+        manual_playtime_ms: 0,
+        accent_color: null,
+        cover_url: null,
+        cover_sexual: null,
+        cover_violence: null,
+        custom_cover_path: null,
+        custom_cover_source_vndb: false,
+        started_at: null,
+        finished_at: null,
+      },
+      tracked_ms: 0,
+      afk_ms: 0,
+      total_ms: 0,
+    },
+  ] as never);
+
+  vi.mocked(api.presencePreview).mockResolvedValue({
       name: "Steins;Gate",
       details: "5pb. / Nitroplus",
       state: "Reading",
