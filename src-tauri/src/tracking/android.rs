@@ -283,15 +283,34 @@ async fn apply_query_result(
         .map(RawUsageEvent::to_usage_event)
         .collect();
     events.sort_by_key(|event| event.at_ms);
-    let boundary = events.iter().find(|event| {
-        event.kind == vn_core::usage::UsageEventKind::DeviceBoundary
-            || (event.kind == vn_core::usage::UsageEventKind::Resumed
-                && event.package.as_deref() == Some(SELF_PACKAGE_MARKER)
-                && event.at_ms > selection.started_at_ms)
+    // Only a device boundary ends the selection.
+    //
+    // Our own `Resumed` used to count as one, on the theory that returning to VN
+    // Asyik means the game is no longer in front. That is true, but it is not the
+    // end of the *session*: the user launches a game, alt-tabs to check something,
+    // and comes back to keep reading. Treating the return as an endpoint ended the
+    // session on every trip away, so the next stretch never accrued -- while the
+    // time spent in the other app was counted, because the game's interval stays
+    // open until a different package resumes.
+    //
+    // The interval replay already handles the away stretch correctly: another
+    // package resuming closes the game's interval. What was missing is stopping
+    // *time* at that point, which is what the resumed-away cutoff below does.
+    let boundary = events
+        .iter()
+        .find(|event| event.kind == vn_core::usage::UsageEventKind::DeviceBoundary);
+
+    // The moment our own app took the foreground, if it did. Recording stops
+    // here, because whatever runs after is the user in VN Asyik, not reading.
+    let left_to_self = events.iter().find(|event| {
+        event.kind == vn_core::usage::UsageEventKind::Resumed
+            && event.package.as_deref() == Some(SELF_PACKAGE_MARKER)
+            && event.at_ms > selection.started_at_ms
     });
     // Include the boundary event in the exclusive window: DEVICE_* must discard
     // an open activity rather than close it at an invented shutdown time.
     let cutoff = boundary.map_or(until_ms, |event| event.at_ms.saturating_add(1));
+    let cutoff = left_to_self.map_or(cutoff, |event| cutoff.min(event.at_ms));
     let cutoff = selection
         .stopped_at_ms
         .map_or(cutoff, |stop| stop.min(cutoff));
@@ -556,6 +575,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn leaving_for_another_app_keeps_the_session_alive() {
+        // Reported bug: start a game from VN Asyik, open another app, come back.
+        // The time away was counted and the session ended on return -- the exact
+        // inverse of what should happen.
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Away").await;
+        let selected = selection(game);
+
+        // Reading for 90 s, then another app for 5 minutes, then VN Asyik itself
+        // resumes at 400_000 -- which is what `tracking_android_session` replays
+        // when the user comes back.
+        let events = vec![
+            event(Some("org.example.runner"), 1, 2_000),
+            event(Some("com.android.chrome"), 1, 92_000),
+            event(Some(SELF_PACKAGE_MARKER), 1, 400_000),
+        ];
+        let view = apply_query_result(db.pool(), &device, selected, 401_000, false, Ok(events))
+            .await
+            .expect("replay");
+
+        // The session must still be open, so the next stretch keeps accruing.
+        assert!(view.active, "coming back must not end the session");
+        // Only the reading stretch is counted; the 5 minutes in Chrome are not.
+        assert_eq!(view.counted_ms, 90_000, "away time must not be counted");
+        assert_eq!(total(db.pool(), game).await, 90_000);
+        assert!(
+            load_selection(db.pool()).await.expect("load").is_some(),
+            "the selection survives so reading can continue"
+        );
+    }
+
+    #[tokio::test]
     async fn a_two_second_foreground_stretch_writes_no_session_row() {
         // The reported bug: a game flicked to for a moment left a `0:00` row,
         // and doing that repeatedly filled the session list with entries for
@@ -672,11 +724,18 @@ mod tests {
         let view = apply_query_result(db.pool(), &device, selected, 73_000, false, Ok(history))
             .await
             .expect("replay");
-        assert!(!view.active);
+        // The session stays open: returning to VN Asyik records *no further time*
+        // but does not end the run, so the next stretch continues the same
+        // session. It used to end here, which meant a reader who checked
+        // something mid-scene lost everything after the trip.
+        assert!(
+            view.active,
+            "coming back to the app must not end the session"
+        );
         assert_eq!(view.counted_ms, 30_000);
         assert_eq!(total(db.pool(), game).await, 30_000);
         assert_eq!(total(db.pool(), other).await, 0);
-        assert!(load_selection(db.pool()).await.expect("load").is_none());
+        assert!(load_selection(db.pool()).await.expect("load").is_some());
     }
 
     #[tokio::test]
