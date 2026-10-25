@@ -257,22 +257,18 @@ impl AndroidUsage {
 // emitted per function and an impl-level allow does not reach it.
 #[cfg(not(target_os = "android"))]
 impl AndroidUsage {
-    #[allow(clippy::unused_async, reason = "mirrors the Android signature")]
     pub async fn installed_apps() -> Result<Vec<AndroidApp>, AndroidUsageError> {
         Err(AndroidUsageError::Unsupported)
     }
 
-    #[allow(clippy::unused_async, reason = "mirrors the Android signature")]
     pub async fn launch_package(_package: &str) -> Result<(), AndroidUsageError> {
         Err(AndroidUsageError::Unsupported)
     }
 
-    #[allow(clippy::unused_async, reason = "mirrors the Android signature")]
     pub async fn access() -> Result<UsageAccess, AndroidUsageError> {
         Err(AndroidUsageError::Unsupported)
     }
 
-    #[allow(clippy::unused_async, reason = "mirrors the Android signature")]
     pub async fn query(
         _packages: &[String],
         _since_ms: i64,

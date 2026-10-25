@@ -63,6 +63,14 @@ missing_debug_implementations = "warn"
 all = { level = "deny", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
+# Platform stubs mirror the async signatures of their real implementation, so
+# every call site compiles once instead of behind a `#[cfg]`. The bodies return
+# immediately when the platform is absent, which is what these two lints object
+# to. Allowed here rather than at each stub because naming the lint by attribute
+# is a hard error on a toolchain that predates it — the local 1.97 does not know
+# `unused_async_trait_impl`, and CI's 1.99 does.
+unused_async = "allow"
+unused_async_trait_impl = "allow"
 must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
