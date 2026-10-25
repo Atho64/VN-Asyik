@@ -24,7 +24,30 @@ permissions:
   contents: write
 
 jobs:
+  # Owns the release so the two build jobs cannot race on creating it. Both of
+  # them only attach files, via gh release upload.
+  create-release:
+    name: create release
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: create the pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release already exists"
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "VN Asyik $GITHUB_REF_NAME" \
+            --prerelease \
+            --notes "Pre-release. Installers are unsigned: Windows SmartScreen will warn, and Android will ask you to allow installation from an unknown source. Known limitations: chapter detection is window-title only, and there is no in-app game hooking."
+
   windows:
+    needs: create-release
     name: windows (msi + nsis)
     runs-on: windows-latest
     steps:
@@ -114,6 +137,7 @@ jobs:
             --clobber --repo "$GITHUB_REPOSITORY"
 
   android:
+    needs: create-release
     name: android (apk)
     runs-on: ubuntu-24.04
     steps:
@@ -202,10 +226,19 @@ jobs:
           if-no-files-found: error
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
+      # Upload only, like the Windows job. Creating the release here made the
+      # two jobs race on tag_name; the `create-release` job owns that instead.
       - name: publish to the release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          prerelease: true
-          generate_release_notes: false
-          files: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob globstar
+          files=(src-tauri/gen/android/app/build/outputs/apk/**/*.apk)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no APK found"
+            exit 1
+          fi
+          for f in "${files[@]}"; do echo "uploading $f"; done
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}"             --clobber --repo "$GITHUB_REPOSITORY"
