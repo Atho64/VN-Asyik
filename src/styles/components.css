@@ -1771,3 +1771,18 @@ select optgroup {
   padding-inline: var(--space-2);
   font-size: var(--text-xs);
 }
+
+/* Scope picker: a game select plus the reset button on one row. Wraps rather
+   than squeezing, because game titles are long and the button must stay tappable
+   at 44px on a phone. */
+.settings__scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.settings__scope > select {
+  flex: 1 1 14rem;
+  min-width: 0;
+}

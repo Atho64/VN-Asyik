@@ -185,6 +185,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::presence::presence_status,
         commands::presence::presence_get_settings,
         commands::presence::presence_save_settings,
+        commands::presence::presence_effective_settings,
+        commands::presence::presence_reset_game_settings,
         commands::presence::presence_set_enabled,
         commands::presence::presence_clear,
         commands::presence::presence_preview,

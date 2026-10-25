@@ -785,6 +785,16 @@ export const en = {
   "settings.presenceClientId": "Client ID (optional override)",
   "settings.presenceClientIdHint":
     "Leave blank to use the default VN Asyik application ID.",
+  "settings.presenceScope":
+    "Presence scope",
+  "settings.presenceScopeHint":
+    "Pick a game to override just that game. Anything you change here is stored alone; the rest keeps following the global default.",
+  "settings.presenceScopeGlobal":
+    "Global default",
+  "settings.presenceScopeResetButton":
+    "Reset this game to global",
+  "settings.presenceScopeReset":
+    "This game is back on the global settings.",
   "settings.presencePreviewGame":
     "Game shown in the preview",
   "settings.presencePreview": "Live Preview",

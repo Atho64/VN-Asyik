@@ -1089,6 +1089,15 @@ async fn sync_presence_loop(state: &AppState, now: Timestamp) {
         None => (None, None),
     };
 
+    // Per-game overrides layer on the global settings for the game that is
+    // actually running. Read here rather than at the top of the loop because the
+    // target is what decides which overrides apply; the global row is still the
+    // fallback, and is what `enabled` above was read from.
+    let presence_settings =
+        queries::effective_presence_settings(pool, Some(&game.meta.id.to_string()))
+            .await
+            .unwrap_or(presence_settings);
+
     let mut base = crate::presence::context_for_game(pool, &game).await;
     // `{date}` / `{time}` are wall-clock display values, refreshed on every poll;
     // the debouncer only pushes an update when a template actually renders them.

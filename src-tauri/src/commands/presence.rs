@@ -25,13 +25,56 @@ pub async fn presence_get_settings(state: State<'_, AppState>) -> CommandResult<
 pub async fn presence_save_settings(
     state: State<'_, AppState>,
     mut settings: PresenceSettings,
+    game_id: Option<String>,
 ) -> CommandResult<()> {
     settings.client_id = validate_client_id(&settings.client_id)?;
     settings.my_vndb_link = validate_profile_link(&settings.my_vndb_link)?;
-    queries::save_presence_settings(state.db().pool(), &settings).await?;
-    state.presence().set_settings(settings).await;
+    let pool = state.db().pool();
+    match game_id.as_deref() {
+        None => {
+            queries::save_presence_settings(pool, &settings).await?;
+            // The in-memory copy feeds the poll loop and is the global fallback,
+            // so it only ever holds the global row.
+            state.presence().set_settings(settings).await;
+        }
+        Some(id) => {
+            // What the UI sends for a game scope is the *effective* settings:
+            // global already merged with whatever this game had. Storing the
+            // difference keeps every untouched field following future global
+            // changes.
+            let global = queries::load_presence_settings(pool).await?;
+            let overrides = vn_core::presence::diff_settings(&global, &settings);
+            queries::save_presence_overrides(pool, id, &overrides).await?;
+        }
+    }
     super::tracking::sync_presence_now(&state).await;
     Ok(())
+}
+
+/// The settings in force for one scope: global, or a game's with overrides
+/// applied. The settings screen uses this to show what a scope really means.
+#[tauri::command]
+pub async fn presence_effective_settings(
+    state: State<'_, AppState>,
+    game_id: Option<String>,
+) -> CommandResult<PresenceSettings> {
+    Ok(queries::effective_presence_settings(state.db().pool(), game_id.as_deref()).await?)
+}
+
+/// Drop a game's overrides, putting it back on the global settings.
+#[tauri::command]
+pub async fn presence_reset_game_settings(
+    state: State<'_, AppState>,
+    game_id: String,
+) -> CommandResult<PresenceSettings> {
+    queries::save_presence_overrides(
+        state.db().pool(),
+        &game_id,
+        &vn_core::presence::PresenceOverrides::default(),
+    )
+    .await?;
+    super::tracking::sync_presence_now(&state).await;
+    Ok(queries::effective_presence_settings(state.db().pool(), Some(&game_id)).await?)
 }
 
 /// A Discord application id is a numeric snowflake. Anything else can never

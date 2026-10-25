@@ -305,6 +305,101 @@ pub struct PresenceContext {
     pub state_cycle_index: u32,
 }
 
+/// A per-game override of [`PresenceSettings`].
+///
+/// Sparse on purpose: a field left out is inherited from the global settings, so
+/// changing a global template later still reaches every game that did not
+/// override that one field. With 32 settings, a full copy would silently fork a
+/// game's configuration the first time any single field was touched.
+///
+/// Stored as a JSON object of only the overridden keys — which is what
+/// `#[serde(default)]` on the inner struct already produces when serialising a
+/// partially-populated value through [`PresenceOverrides::new`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PresenceOverrides {
+    fields: serde_json::Map<String, serde_json::Value>,
+}
+
+impl PresenceOverrides {
+    /// No overrides: the game follows the global settings entirely.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.fields.is_empty()
+    }
+
+    /// Build from a serialised settings difference.
+    ///
+    /// # Errors
+    /// Fails only if `value` is not a JSON object, which cannot happen for a
+    /// serialised [`PresenceSettings`].
+    pub fn from_value(value: serde_json::Value) -> Result<Self, serde_json::Error> {
+        let fields = match value {
+            serde_json::Value::Object(map) => map,
+            other => {
+                return Err(serde::de::Error::custom(format!(
+                    "presence overrides must be an object, got {}",
+                    other.type_name_hint()
+                )));
+            }
+        };
+        Ok(Self { fields })
+    }
+
+    /// Apply these overrides on top of `base`, returning the effective settings.
+    #[must_use]
+    pub fn apply(&self, base: &PresenceSettings) -> PresenceSettings {
+        if self.fields.is_empty() {
+            return base.clone();
+        }
+        let Ok(serde_json::Value::Object(mut merged)) = serde_json::to_value(base) else {
+            return base.clone();
+        };
+        for (key, value) in &self.fields {
+            merged.insert(key.clone(), value.clone());
+        }
+        serde_json::from_value(serde_json::Value::Object(merged)).unwrap_or_else(|_| base.clone())
+    }
+}
+
+/// What differs between two settings values, as an override set.
+///
+/// Empty when nothing differs. This is what the settings screen saves for a game
+/// scope: only the fields the user actually changed.
+#[must_use]
+pub fn diff_settings(global: &PresenceSettings, scoped: &PresenceSettings) -> PresenceOverrides {
+    let (Ok(serde_json::Value::Object(all)), Ok(serde_json::Value::Object(scope))) =
+        (serde_json::to_value(global), serde_json::to_value(scoped))
+    else {
+        return PresenceOverrides::default();
+    };
+    let mut fields = serde_json::Map::new();
+    for (key, value) in scope {
+        if all.get(&key) != Some(&value) {
+            fields.insert(key, value);
+        }
+    }
+    PresenceOverrides { fields }
+}
+
+/// Small helper so the error above names the value's type without a dependency.
+trait TypeNameHint {
+    fn type_name_hint(&self) -> &'static str;
+}
+
+impl TypeNameHint for serde_json::Value {
+    fn type_name_hint(&self) -> &'static str {
+        match self {
+            Self::Null => "null",
+            Self::Bool(_) => "a boolean",
+            Self::Number(_) => "a number",
+            Self::String(_) => "a string",
+            Self::Array(_) => "an array",
+            Self::Object(_) => "an object",
+        }
+    }
+}
+
 /// Single button on Discord Rich Presence activity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PresenceButton {
@@ -988,6 +1083,74 @@ mod tests {
         };
         let act = build_activity(&settings, &ctx);
         assert_eq!(act.details.as_deref(), Some("5pb. / Nitroplus"));
+    }
+
+    #[test]
+    fn a_sparse_override_leaves_every_other_field_on_the_global_value() {
+        let global = PresenceSettings {
+            custom_details: "global {vn_name}".to_string(),
+            custom_state: "global state".to_string(),
+            show_cover: true,
+            ..Default::default()
+        };
+        let mut scope = global.clone();
+        scope.custom_details = "NUTS".to_string();
+        let overrides = diff_settings(&global, &scope);
+
+        // Only the one changed field is stored.
+        assert_eq!(overrides.fields.len(), 1, "only custom_details differs");
+        assert!(overrides.fields.contains_key("custom_details"));
+
+        // Applying it changes that field and nothing else.
+        let effective = overrides.apply(&global);
+        assert_eq!(effective.custom_details, "NUTS");
+        assert_eq!(effective.custom_state, "global state");
+        assert!(effective.show_cover);
+    }
+
+    #[test]
+    fn a_later_global_change_reaches_a_game_that_did_not_override_that_field() {
+        // The reason field-level inherit was chosen over a full copy: improving
+        // the global template must not require re-editing every game.
+        let mut global = PresenceSettings {
+            custom_state: "old".to_string(),
+            ..Default::default()
+        };
+        let mut scope = global.clone();
+        scope.custom_details = "NUTS".to_string();
+        let overrides = diff_settings(&global, &scope);
+
+        global.custom_state = "improved".to_string();
+        let effective = overrides.apply(&global);
+        assert_eq!(
+            effective.custom_state, "improved",
+            "inherited, so it follows"
+        );
+        assert_eq!(effective.custom_details, "NUTS", "still overridden");
+    }
+
+    #[test]
+    fn identical_settings_produce_no_overrides_at_all() {
+        let global = PresenceSettings::default();
+        let overrides = diff_settings(&global, &global.clone());
+        assert!(overrides.is_empty());
+        // An empty override set must be a byte-for-byte pass-through.
+        assert_eq!(overrides.apply(&global), global);
+    }
+
+    #[test]
+    fn overrides_round_trip_through_json_as_a_plain_object() {
+        // Stored in local_prefs as JSON, so the shape has to be a bare object
+        // rather than a wrapper the loader would have to know about.
+        let global = PresenceSettings::default();
+        let mut scope = global.clone();
+        scope.show_cover = false;
+        let overrides = diff_settings(&global, &scope);
+        let json = serde_json::to_string(&overrides).expect("serialise");
+        assert!(json.starts_with('{'), "got {json}");
+        let back: PresenceOverrides = serde_json::from_str(&json).expect("deserialise");
+        assert_eq!(back, overrides);
+        assert!(!back.apply(&global).show_cover);
     }
 
     #[test]

@@ -175,7 +175,19 @@ describe("PresencePanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByText("Steins;Gate")).toBeInTheDocument();
+    // Scoped to the preview card: the scope picker and the preview-game picker
+    // both list the same title, so a bare findByText would pass even if the card
+    // itself were blank.
+    // Wait for the title inside the card, not merely for the card: the shell
+    // renders before the preview round-trip resolves, so waiting on the
+    // container alone raced the async preview and failed only in a full run.
+    const card = await waitFor(() => {
+      const found = document.querySelector(".dc-card");
+      expect(found).not.toBeNull();
+      expect(within(found as HTMLElement).getByText("Steins;Gate")).toBeInTheDocument();
+      return found as HTMLElement;
+    });
+    expect(within(card).getByText("Steins;Gate")).toBeInTheDocument();
     expect(screen.queryByText("VN Asyik")).not.toBeInTheDocument();
   });
 
@@ -376,8 +388,11 @@ describe("PresencePanel", () => {
     ).toBeInTheDocument();
 
     await user.click(await screen.findByText("Save presence settings"));
+    // The second argument is the scope: undefined means the global default.
+    // Asserted so a save can never silently write a game's override instead.
     expect(api.presenceSaveSettings).toHaveBeenCalledWith(
       expect.objectContaining({ show_when_unfocused: true }),
+      undefined,
     );
   });
 
@@ -401,6 +416,7 @@ describe("PresencePanel", () => {
 
     expect(api.presenceSaveSettings).toHaveBeenCalledWith(
       expect.objectContaining({ show_when_unfocused: false }),
+      undefined,
     );
   });
 

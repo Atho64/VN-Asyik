@@ -348,7 +348,9 @@ export interface Api {
   platformInfo(): Promise<PlatformInfo>;
   presenceStatus(): Promise<PresenceStatus>;
   presenceGetSettings(): Promise<PresenceSettings>;
-  presenceSaveSettings(settings: PresenceSettings): Promise<void>;
+  presenceSaveSettings(settings: PresenceSettings, gameId?: string): Promise<void>;
+  presenceEffectiveSettings(gameId?: string): Promise<PresenceSettings>;
+  presenceResetGameSettings(gameId: string): Promise<PresenceSettings>;
   presenceSetEnabled(enabled: boolean): Promise<PresenceSettings>;
   presenceClear(): Promise<void>;
   /**
@@ -553,8 +555,12 @@ export const api: Api = {
   platformInfo: () => call("platform_info", platformInfoSchema),
   presenceStatus: () => call("presence_status", presenceStatusSchema),
   presenceGetSettings: () => call("presence_get_settings", presenceSettingsSchema),
-  presenceSaveSettings: (settings) =>
-    call("presence_save_settings", voidSchema, { settings }),
+  presenceSaveSettings: (settings, gameId) =>
+    call("presence_save_settings", voidSchema, { settings, gameId }),
+  presenceEffectiveSettings: (gameId) =>
+    call("presence_effective_settings", presenceSettingsSchema, { gameId }),
+  presenceResetGameSettings: (gameId) =>
+    call("presence_reset_game_settings", presenceSettingsSchema, { gameId }),
   presenceSetEnabled: (enabled) =>
     call("presence_set_enabled", presenceSettingsSchema, { enabled }),
   presenceClear: () => call("presence_clear", voidSchema),

@@ -786,6 +786,16 @@ export const id: Messages = {
   "settings.presenceClientId": "Client ID (opsional)",
   "settings.presenceClientIdHint":
     "Biarkan kosong untuk menggunakan ID aplikasi bawaan VN Asyik.",
+  "settings.presenceScope":
+    "Cakupan presence",
+  "settings.presenceScopeHint":
+    "Pilih gim untuk menimpa gim itu saja. Yang kamu ubah di sini disimpan sendiri; sisanya tetap mengikuti bawaan global.",
+  "settings.presenceScopeGlobal":
+    "Bawaan global",
+  "settings.presenceScopeResetButton":
+    "Kembalikan gim ini ke global",
+  "settings.presenceScopeReset":
+    "Gim ini kembali memakai pengaturan global.",
   "settings.presencePreviewGame":
     "Gim yang ditampilkan di pratinjau",
   "settings.presencePreview": "Pratinjau Langsung",

@@ -452,6 +452,64 @@ pub async fn save_presence_settings(
     set_pref(pool, "presence_settings", &json).await
 }
 
+/// The per-game override for `game_id`, or an empty set.
+///
+/// Stored under a per-game key in `local_prefs` rather than a new table: the
+/// settings are already JSON, and a sparse object needs no 32-column schema to
+/// stay in step with `PresenceSettings`.
+///
+/// # Errors
+/// Fails only when the database cannot be read. A value that cannot be decoded
+/// is treated as "no override", because a corrupt key must not stop the app
+/// from showing a presence card at all.
+pub async fn load_presence_overrides(
+    pool: &SqlitePool,
+    game_id: &str,
+) -> Result<vn_core::presence::PresenceOverrides, DbError> {
+    let key = format!("presence_override:{game_id}");
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM local_prefs WHERE key = ?")
+        .bind(&key)
+        .fetch_optional(pool)
+        .await?;
+    let Some((json,)) = row else {
+        return Ok(vn_core::presence::PresenceOverrides::default());
+    };
+    Ok(serde_json::from_str::<vn_core::presence::PresenceOverrides>(&json).unwrap_or_default())
+}
+
+/// Replace the per-game override. An empty set deletes the key entirely, so a
+/// game that is back on the global settings leaves nothing behind.
+pub async fn save_presence_overrides(
+    pool: &SqlitePool,
+    game_id: &str,
+    overrides: &vn_core::presence::PresenceOverrides,
+) -> Result<(), DbError> {
+    let key = format!("presence_override:{game_id}");
+    if overrides.is_empty() {
+        sqlx::query("DELETE FROM local_prefs WHERE key = ?")
+            .bind(&key)
+            .execute(pool)
+            .await?;
+        return Ok(());
+    }
+    let json = serde_json::to_string(overrides).map_err(|e| DbError::Corrupt(e.to_string()))?;
+    set_pref(pool, &key, &json).await
+}
+
+/// The settings that actually apply to `game_id`: global, with the game's
+/// overrides layered on top.
+pub async fn effective_presence_settings(
+    pool: &SqlitePool,
+    game_id: Option<&str>,
+) -> Result<vn_core::presence::PresenceSettings, DbError> {
+    let global = load_presence_settings(pool).await?;
+    let Some(game_id) = game_id else {
+        return Ok(global);
+    };
+    let overrides = load_presence_overrides(pool, game_id).await?;
+    Ok(overrides.apply(&global))
+}
+
 /// Persist a single preference.
 pub async fn set_pref<'e, E>(executor: E, key: &str, value: &str) -> Result<(), DbError>
 where

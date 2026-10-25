@@ -309,6 +309,10 @@ export function PresencePanel() {
   // with no id, so the panel previewed the built-in sample no matter what the
   // user's library held -- {vn_name} could never show their own title.
   const [previewGameId, setPreviewGameId] = useState<string>("");
+  // Which scope the form edits. "" means the global default; a game id means
+  // that game's overrides. The backend stores only the fields that differ from
+  // global, so untouched fields keep following the global row.
+  const [scopeGameId, setScopeGameId] = useState<string>("");
   const [games, setGames] = useState<{ id: string; title: string }[]>([]);
   const [previewStateCycle, setPreviewStateCycle] = useState(0);
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -429,6 +433,24 @@ export function PresencePanel() {
     };
   }, [settings]);
 
+  // Switching scope loads that scope's effective settings into the form, so the
+  // fields show what the card will really render rather than a blank override
+  // panel the user has to guess the baseline of.
+  const switchScope = useCallback(
+    (gameId: string) => {
+      setScopeGameId(gameId);
+      resetPreview();
+      void api
+        .presenceEffectiveSettings(gameId || undefined)
+        .then((next) => {
+          setSettings(next);
+          setSaved(false);
+        })
+        .catch(() => undefined);
+    },
+    [resetPreview],
+  );
+
   if (!settings) return null;
 
   const updateSettings = (patch: Partial<PresenceSettings>) => {
@@ -446,12 +468,27 @@ export function PresencePanel() {
     }
   };
 
+  const resetToGlobal = async (): Promise<void> => {
+    if (!scopeGameId) return;
+    setBusy(true);
+    try {
+      const next = await api.presenceResetGameSettings(scopeGameId);
+      setSettings(next);
+      setSaved(false);
+      pushToast("info", t("settings.presenceScopeReset"));
+    } catch (caught) {
+      pushToast("error", caught instanceof IpcError ? caught.message : t("common.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const save = async () => {
     setBusy(true);
     setSaved(false);
     setLinkError(null);
     try {
-      await api.presenceSaveSettings(settings);
+      await api.presenceSaveSettings(settings, scopeGameId || undefined);
       setSaved(true);
       setStatus(await api.presenceStatus());
       pushToast("info", t("settings.presenceSaved"));
@@ -1194,6 +1231,30 @@ export function PresencePanel() {
                 <span className="settings__hint">
                   {t("settings.presenceClientIdHint")}
                 </span>
+              </div>
+
+              <div className="settings__field">
+                <span className="settings__label">{t("settings.presenceScope")}</span>
+                <span className="settings__hint">{t("settings.presenceScopeHint")}</span>
+                <div className="settings__scope">
+                  <select
+                    className="input"
+                    value={scopeGameId}
+                    onChange={(event) => switchScope(event.target.value)}
+                  >
+                    <option value="">{t("settings.presenceScopeGlobal")}</option>
+                    {games.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.title}
+                      </option>
+                    ))}
+                  </select>
+                  {scopeGameId ? (
+                    <Button onClick={() => void resetToGlobal()} disabled={busy}>
+                      {t("settings.presenceScopeResetButton")}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="settings__field">
