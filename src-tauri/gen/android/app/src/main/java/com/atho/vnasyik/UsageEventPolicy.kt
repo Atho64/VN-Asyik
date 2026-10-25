@@ -1,4 +1,4 @@
-package app.vntracker.desktop
+package com.atho.vnasyik
 
 /** Removes unrelated app identities before any usage event crosses into Rust. */
 internal object UsageEventPolicy {

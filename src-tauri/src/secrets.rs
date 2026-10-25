@@ -17,7 +17,7 @@ use thiserror::Error;
 
 /// Service name used in the OS credential store.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-const SERVICE: &str = "app.vntracker.desktop";
+const SERVICE: &str = "com.atho.vnasyik";
 /// Entry name for the VNDB token.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 const VNDB_TOKEN_USER: &str = "vndb-api-token";

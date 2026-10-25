@@ -29,10 +29,10 @@ val hasReleaseKeystore = keystoreProperties.getProperty("storeFile") != null
 
 android {
     compileSdk = 37
-    namespace = "app.vntracker.desktop"
+    namespace = "com.atho.vnasyik"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "app.vntracker.desktop"
+        applicationId = "com.atho.vnasyik"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 24
         targetSdk = 37

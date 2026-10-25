@@ -1,11 +1,11 @@
-package app.vntracker.desktop
+package com.atho.vnasyik
 
 import org.junit.Assert.*
 import org.junit.Test
 
 class UsageEventPolicyTest {
     private val wanted = setOf("org.example.runner")
-    private val selfPackage = "app.vntracker.desktop"
+    private val selfPackage = "com.atho.vnasyik"
 
     @Test
     fun unrelatedResumeClosesTimeWithoutExposingAppIdentity() {

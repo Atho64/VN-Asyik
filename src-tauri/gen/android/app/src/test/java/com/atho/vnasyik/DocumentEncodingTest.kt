@@ -1,4 +1,4 @@
-package app.vntracker.desktop
+package com.atho.vnasyik
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail

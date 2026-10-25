@@ -83,9 +83,21 @@ Android SDK and NDK, and the Android Rust target:
 pnpm tauri android build --apk --target aarch64
 ```
 
-The application ID `app.vntracker.desktop` is deliberately not renamed: changing
-it would orphan an existing library and its stored credentials. The product name
-you see everywhere is VN Asyik.
+The application ID is `com.atho.vnasyik`. Android keys app data, the Keystore
+credential store and the Usage Access grant to that string, so it is permanent:
+changing it again makes the store treat the app as a different installation.
+
+## Upgrading from the `app.vntracker.desktop` build
+
+The package was renamed once, before the first public release. A build made
+before the rename cannot update in place, because Android sees a different app:
+it installs alongside the old one with an empty library.
+
+- **Android:** export with _Settings → Backup & transfer_ in the old build, then
+  import in this one.
+- **Windows:** the library lives in `%APPDATA%\com.atho.vnasyik\`. Copy the
+  folder from `%APPDATA%\app.vntracker.desktop\` before the first launch, and
+  the games, sessions and settings come with it.
 
 ## Development
 

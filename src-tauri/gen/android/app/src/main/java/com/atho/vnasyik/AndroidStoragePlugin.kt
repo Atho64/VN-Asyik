@@ -1,4 +1,4 @@
-package app.vntracker.desktop
+package com.atho.vnasyik
 
 import android.app.Activity
 import android.content.ClipData

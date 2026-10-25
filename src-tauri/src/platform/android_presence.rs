@@ -12,7 +12,7 @@ mod platform_impl {
         Builder::<tauri::Wry, ()>::new("discord-presence")
             .setup(|_app, api| {
                 let handle =
-                    api.register_android_plugin("app.vntracker.desktop", "DiscordGatewayPlugin")?;
+                    api.register_android_plugin("com.atho.vnasyik", "DiscordGatewayPlugin")?;
                 let _ = HANDLE.set(handle);
                 Ok(())
             })

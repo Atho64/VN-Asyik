@@ -15,7 +15,7 @@ mod mobile {
         tauri::plugin::Builder::<tauri::Wry, ()>::new("android-storage")
             .setup(|_app, api| {
                 let handle =
-                    api.register_android_plugin("app.vntracker.desktop", "AndroidStoragePlugin")?;
+                    api.register_android_plugin("com.atho.vnasyik", "AndroidStoragePlugin")?;
                 let _ = HANDLE.set(handle);
                 Ok(())
             })

@@ -66,6 +66,25 @@ jobs:
 
       # Attach to the GitHub release, creating it as a pre-release when the tag
       # has no release yet. Unsigned, and the notes say so.
+      # Only one job may create the release: both run concurrently on a tag and
+      # the second would fail with "already_exists". Android owns creation and
+      # the notes; this job waits for it and only attaches files.
+      - name: wait for the release to exist
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          for attempt in $(seq 1 60); do
+            if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "release exists"
+              exit 0
+            fi
+            echo "waiting for the release ($attempt/60)"
+            sleep 10
+          done
+          echo "::error::the release was never created"
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: publish to the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

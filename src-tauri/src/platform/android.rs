@@ -110,8 +110,7 @@ mod platform_impl {
     pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         Builder::<tauri::Wry, ()>::new("usage-stats")
             .setup(|_app, api| {
-                let handle =
-                    api.register_android_plugin("app.vntracker.desktop", "UsageStatsPlugin")?;
+                let handle = api.register_android_plugin("com.atho.vnasyik", "UsageStatsPlugin")?;
                 let _ = HANDLE.set(handle);
                 Ok(())
             })

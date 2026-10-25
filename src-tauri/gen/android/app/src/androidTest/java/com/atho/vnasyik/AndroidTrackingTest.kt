@@ -1,4 +1,4 @@
-package app.vntracker.desktop
+package com.atho.vnasyik
 
 import android.app.Activity
 import android.content.Intent
@@ -74,7 +74,7 @@ class AndroidTrackingTest {
             Thread.sleep(4_000)
             shell("am start -W -a android.settings.SETTINGS")
             Thread.sleep(4_000)
-            shell("am start -W -n $verificationPackage/app.vntracker.desktop.MainActivity")
+            shell("am start -W -n $verificationPackage/com.atho.vnasyik.MainActivity")
             Thread.sleep(1_500)
             val until = System.currentTimeMillis()
             val (querySucceeded, raw) = nativeQuery(since, until)

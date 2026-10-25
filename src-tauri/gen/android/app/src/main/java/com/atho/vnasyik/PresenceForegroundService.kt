@@ -1,4 +1,4 @@
-package app.vntracker.desktop
+package com.atho.vnasyik
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -18,9 +18,9 @@ import android.os.IBinder
 class PresenceForegroundService : Service() {
 
     companion object {
-        const val ACTION_START = "app.vntracker.desktop.PRESENCE_START"
-        const val ACTION_UPDATE = "app.vntracker.desktop.PRESENCE_UPDATE"
-        const val ACTION_STOP = "app.vntracker.desktop.PRESENCE_STOP"
+        const val ACTION_START = "com.atho.vnasyik.PRESENCE_START"
+        const val ACTION_UPDATE = "com.atho.vnasyik.PRESENCE_UPDATE"
+        const val ACTION_STOP = "com.atho.vnasyik.PRESENCE_STOP"
         const val EXTRA_TITLE = "title"
         const val EXTRA_TEXT = "text"
         const val CHANNEL_ID = "vn_asyik_discord_rpc"
