@@ -554,6 +554,38 @@ export const id: Messages = {
     "Pendukung",
   "detail.castRole.appears":
     "Muncul",
+  "detail.castTraits":
+    "Sifat",
+  "detail.castBirthday":
+    "Ulang tahun",
+  "detail.castHeight":
+    "Tinggi",
+  "detail.castWeight":
+    "Berat",
+  "detail.castBlood":
+    "Golongan darah",
+  "detail.castVoicedBy":
+    "Diisi suara oleh",
+  "detail.castTraitsMore":
+    "{{count}} grup lainnya",
+  "detail.castShowSpoilers":
+    "Tampilkan {{count}} sifat spoiler",
+  "detail.castHideSpoilers":
+    "Sembunyikan sifat spoiler",
+  "detail.titleRole.english":
+    "Inggris",
+  "detail.titleRole.romaji":
+    "Romaji",
+  "detail.titleRole.japanese":
+    "Jepang",
+  "detail.titleRole.original":
+    "Asli",
+  "detail.titleRole.chinese":
+    "Mandarin",
+  "detail.titleRole.korean":
+    "Korea",
+  "detail.titleRole.alias":
+    "Juga disebut",
   "detail.linksMore": "Basis data dan wiki",
   "detail.screenshots": "Tangkapan layar",
   "detail.screenshotsEmpty": "VNDB belum punya tangkapan layar untuk visual novel ini.",

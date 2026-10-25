@@ -1799,11 +1799,34 @@ select optgroup {
 }
 
 .cast__item {
+  min-width: 0;
+}
+
+/* The whole row is the control: a 48px portrait plus the name. Sized to the
+   container so a long romanised name wraps inside the card, never the page. */
+.cast__summary {
   display: grid;
   grid-template-columns: 48px 1fr;
   gap: var(--space-2);
   align-items: center;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
   min-width: 0;
+  border-radius: var(--radius-sm);
+}
+
+.cast__summary:hover .cast__name {
+  text-decoration: underline;
+}
+
+.cast__summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .cast__art {
@@ -1837,4 +1860,121 @@ select optgroup {
 .cast__role {
   color: var(--text-muted);
   font-size: var(--text-xs);
+}
+
+/* One cast entry: a summary row (portrait + name) that opens into details. */
+.cast__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.cast__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+}
+
+.cast__fact,
+.cast__trait {
+  display: flex;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.cast__fact > dt,
+.cast__trait > dt {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.cast__fact > dt::after,
+.cast__trait > dt::after {
+  content: ":";
+}
+
+.cast__fact > dd,
+.cast__trait > dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cast__traits {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.cast__spoiler {
+  padding-block-start: var(--space-1);
+}
+
+/* Labelled alternate titles: the role on the left, the name on the right.
+   `max-content` sizes the label column to its longest word ("Japanese", "Also
+   called") instead of a fixed 6.5rem, which left a gulf between a short label and
+   its value. The gap does the separating, not empty space. */
+.detail__alt {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.detail__alt-role {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.detail__alt-text {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  /* On a phone the two-column grid squeezes the name to nothing. */
+  .detail__alt {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+/* Inside the sheet the portrait has room to be a portrait rather than a thumbnail. */
+.cast__portrait {
+  inline-size: 100%;
+  max-block-size: 22rem;
+  object-fit: contain;
+  object-position: top;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.cast__sheet-original {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.cast__trait-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cast__trait-block > .caption {
+  margin: 0;
+}
+
+/* Inside the sheet each trait group gets its own line: the two-column inline
+   layout squeezed long trait lists into unreadable fragments. */
+.cast__details .cast__traits {
+  gap: var(--space-2);
+}
+
+.cast__details .cast__trait {
+  display: block;
 }

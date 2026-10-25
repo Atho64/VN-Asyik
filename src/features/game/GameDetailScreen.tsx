@@ -7,7 +7,7 @@ import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
 import { MapExecutable } from "@/features/tracking/MapExecutable";
 import { PlayButton } from "@/features/game/PlayButton";
-import { alternateTitles } from "@/features/game/alternateTitles";
+import { titledNames } from "@/features/game/alternateTitles";
 import { RatingPicker } from "@/features/game/RatingPicker";
 import { ScreenshotGallery } from "@/features/game/ScreenshotGallery";
 import { CastCard } from "@/features/game/CastCard";
@@ -296,7 +296,7 @@ export function GameDetailScreen() {
     }
   };
 
-  const otherTitles = alternateTitles(
+  const otherTitles = titledNames(
     game.title,
     game.title_original,
     vndb?.titles ?? [],
@@ -469,8 +469,9 @@ export function GameDetailScreen() {
           {otherTitles.length > 0 ? (
             <ul className="detail__alts" aria-label={t("detail.alsoKnownAs")}>
               {otherTitles.map((title) => (
-                <li key={title} className="detail__alt">
-                  {title}
+                <li key={`${title.role}:${title.text}`} className="detail__alt">
+                  <span className="detail__alt-role">{t(`detail.titleRole.${title.role}`)}</span>
+                  <span className="detail__alt-text">{title.text}</span>
                 </li>
               ))}
             </ul>

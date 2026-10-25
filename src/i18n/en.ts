@@ -553,6 +553,38 @@ export const en = {
     "Side",
   "detail.castRole.appears":
     "Appears",
+  "detail.castTraits":
+    "Traits",
+  "detail.castBirthday":
+    "Birthday",
+  "detail.castHeight":
+    "Height",
+  "detail.castWeight":
+    "Weight",
+  "detail.castBlood":
+    "Blood type",
+  "detail.castVoicedBy":
+    "Voiced by",
+  "detail.castTraitsMore":
+    "{{count}} more groups",
+  "detail.castShowSpoilers":
+    "Show {{count}} spoiler traits",
+  "detail.castHideSpoilers":
+    "Hide spoiler traits",
+  "detail.titleRole.english":
+    "English",
+  "detail.titleRole.romaji":
+    "Romaji",
+  "detail.titleRole.japanese":
+    "Japanese",
+  "detail.titleRole.original":
+    "Original",
+  "detail.titleRole.chinese":
+    "Chinese",
+  "detail.titleRole.korean":
+    "Korean",
+  "detail.titleRole.alias":
+    "Also called",
   "detail.linksMore": "Databases and wikis",
   "detail.screenshots": "Screenshots",
   "detail.screenshotsEmpty": "VNDB has no screenshots for this visual novel.",
