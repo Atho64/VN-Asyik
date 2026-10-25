@@ -24,9 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The version comes from package.json's "packageManager" field. Passing
+      # `version:` here as well makes the action refuse to run with
+      # "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
-        with:
-          version: 12
 
       - uses: actions/setup-node@v4
         with:
@@ -63,9 +64,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The version comes from package.json's "packageManager" field. Passing
+      # `version:` here as well makes the action refuse to run with
+      # "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
-        with:
-          version: 12
 
       - uses: actions/setup-node@v4
         with:
@@ -94,30 +96,38 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Release keystore. Without these secrets the build still produces a
-      # debug-signed or unsigned APK, which installs but cannot be updated in
-      # place over a properly signed one. See the setup note in the README.
+      # Release keystore. `secrets` cannot appear in a job-level `if:` (GitHub
+      # rejects the whole workflow with zero jobs), so the emptiness check runs
+      # in a step that always executes. Without the secret the APK is built but
+      # unsigned: it installs, yet cannot replace a properly signed install.
       - name: decode keystore
-        if: ${{ secrets.ANDROID_KEY_BASE64 != '' }}
-        run: echo "$ANDROID_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
         env:
           ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEY_BASE64" ]; then
+            echo "$ANDROID_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "keystore decoded"
+          else
+            echo "::warning::ANDROID_KEY_BASE64 is not set; the APK will be unsigned"
+          fi
 
       - name: build apk
-        run: |
-          if [ -n "${{ secrets.ANDROID_KEY_BASE64 }}" ]; then
-            export NDK_HOME
-            export ANDROID_KEY_STORE_PATH="$RUNNER_TEMP/release.keystore"
-            export ANDROID_KEY_STORE_PASSWORD="${{ secrets.ANDROID_KEY_PASSWORD }}"
-            export ANDROID_KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}"
-            export ANDROID_KEY_PASSWORD="${{ secrets.ANDROID_KEY_PASSWORD }}"
-          fi
-          pnpm tauri android build --apk --target aarch64
         env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           NDK_BIN: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin
           CC_aarch64_linux_android: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
           AR_aarch64_linux_android: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+        run: |
+          if [ -n "$ANDROID_KEY_BASE64" ]; then
+            export ANDROID_KEY_STORE_PATH="$RUNNER_TEMP/release.keystore"
+            export ANDROID_KEY_STORE_PASSWORD="$ANDROID_KEY_PASSWORD"
+            export ANDROID_KEY_ALIAS="$ANDROID_KEY_ALIAS"
+            export ANDROID_KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
+          fi
+          pnpm tauri android build --apk --target aarch64
 
       - uses: actions/upload-artifact@v4
         with:

@@ -16,9 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The version comes from package.json's "packageManager" field. Passing
+      # `version:` here as well makes the action refuse to run with
+      # "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
-        with:
-          version: 12
 
       - uses: actions/setup-node@v4
         with:
@@ -69,9 +70,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The version comes from package.json's "packageManager" field. Passing
+      # `version:` here as well makes the action refuse to run with
+      # "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
-        with:
-          version: 12
 
       - uses: actions/setup-node@v4
         with:
