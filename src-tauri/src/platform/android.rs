@@ -253,26 +253,26 @@ impl AndroidUsage {
 
 // The call shapes must match the Android implementation exactly, or every call
 // site would need a `#[cfg]`. The bodies here are immediate, so newer clippy
-// flags the `async` as unused; the allow is what keeps the two halves the same
-// shape, which is the whole point of the stub.
+// flags the `async` as unused. Each stub carries its own allow: that lint is
+// emitted per function and an impl-level allow does not reach it.
 #[cfg(not(target_os = "android"))]
-#[allow(
-    clippy::unused_async,
-    reason = "same async interface as the Android impl"
-)]
 impl AndroidUsage {
+    #[allow(clippy::unused_async, reason = "mirrors the Android signature")]
     pub async fn installed_apps() -> Result<Vec<AndroidApp>, AndroidUsageError> {
         Err(AndroidUsageError::Unsupported)
     }
 
+    #[allow(clippy::unused_async, reason = "mirrors the Android signature")]
     pub async fn launch_package(_package: &str) -> Result<(), AndroidUsageError> {
         Err(AndroidUsageError::Unsupported)
     }
 
+    #[allow(clippy::unused_async, reason = "mirrors the Android signature")]
     pub async fn access() -> Result<UsageAccess, AndroidUsageError> {
         Err(AndroidUsageError::Unsupported)
     }
 
+    #[allow(clippy::unused_async, reason = "mirrors the Android signature")]
     pub async fn query(
         _packages: &[String],
         _since_ms: i64,
