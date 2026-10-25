@@ -1,0 +1,13 @@
+-- 0007_chapter_renamed.sql
+--
+-- Record explicitly whether the user renamed a chapter.
+--
+-- Migrations 0001-0006 are applied and must not be edited.
+--
+-- Why a column rather than inferring it: `display_name` is seeded with the
+-- detected name on insert, so "is display_name set" is always true, and
+-- "does display_name differ from name" is always true for detected chapters
+-- because `name` holds the raw engine identity (`title:...`). Both inferences
+-- reported every chapter as renamed. A user rename is an explicit act, so it is
+-- recorded as one.
+ALTER TABLE chapters ADD COLUMN renamed INTEGER NOT NULL DEFAULT 0;

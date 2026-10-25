@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Baseline capability for the main window. Deliberately minimal: no filesystem, no shell, no process access. dialog:allow-open only lets the user pick a file through the OS picker; it grants no ability to read arbitrary paths.",
+  "windows": ["main"],
+  "platforms": ["windows", "linux", "macOS"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open"
+  ]
+}

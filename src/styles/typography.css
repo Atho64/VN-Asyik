@@ -1,0 +1,80 @@
+/*
+ * Display face: Inter Tight, bundled rather than assumed.
+ *
+ * The previous serif read as a literary book jacket, which fought a grid of
+ * manga and anime covers. Inter Tight is a neutral grotesque: the title is the
+ * same on every platform, and nothing about the face competes with the art.
+ *
+ * SIL Open Font License 1.1; the licence ships beside the file.
+ */
+@font-face {
+  font-family: "Inter Tight";
+  src: url("./fonts/InterTight-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  /* Latin only: Japanese titles fall through to the body stack's CJK face
+     rather than rendering tofu from this one. */
+  unicode-range: U+0000-00FF, U+0100-024F, U+2000-206F;
+}
+
+/*
+ * typography.css
+ *
+ * Two voices. UI text is the workhorse; the display serif appears only on game
+ * titles and screen headings, which is the editorial part of the identity.
+ * Japanese titles rely on the CJK fallback stack in tokens.css.
+ */
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: var(--leading-tight);
+  text-wrap: balance;
+}
+
+.h1 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(24px, 1.6rem + 1.2vw, 40px);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(19px, 1.1rem + 0.6vw, 28px);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+}
+
+.h3 {
+  font-size: var(--text-m);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+}
+
+.body {
+  font-size: var(--text-s);
+  line-height: var(--leading-normal);
+  color: var(--text-muted);
+}
+
+.caption {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Playtime and any column of numbers: tabular so digits do not jitter. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Text sitting directly on artwork gets a scrim-backed shadow, never shadow alone. */
+.over-art {
+  text-shadow: var(--text-shadow-over-art);
+}

@@ -1,0 +1,70 @@
+[package]
+name = "vn-tracker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "VN Asyik: offline-first Visual Novel library and playtime tracker."
+default-run = "vn-tracker"
+
+[lib]
+name = "vn_tracker_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-opener = "2"
+# Native file picker for mapping a game executable. Added rather than a web
+# <input type="file">, which cannot report a real filesystem path.
+tauri-plugin-dialog = "2"
+vn-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+time.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+libsqlite3-sys.workspace = true
+reqwest.workspace = true
+image.workspace = true
+base64.workspace = true
+keyring.workspace = true
+# URL parsing for outbound links (Discord activity buttons, VNDB profile links).
+# Already in the tree via reqwest/tauri; declaring it keeps the dependency
+# explicit instead of relying on a transitive version, and it is the only
+# validator that rejects `javascript:` and interior whitespace in one step.
+url = "2"
+# Content digest for extracted-script imports: re-importing the same file for
+# the same game must return the stored row, not fork compaction progress.
+# RustCrypto, actively maintained.
+sha2 = "0.10"
+# WebSocket client for LunaTranslator's network service (loopback ws:// only,
+# so no TLS feature). tokio-tungstenite is the standard maintained choice;
+# reqwest 0.13 has no websocket feature (verified 2026-10-24).
+tokio-tungstenite = "0.30"
+# StreamExt over the websocket's message stream (tiny companion crate to
+# tokio, no features needed).
+tokio-stream = "0.1"
+# SinkExt for the websocket test server's send(); already in the tree via
+# tokio-tungstenite, declared explicitly like `url`.
+futures-util = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+discord-rich-presence = "1.1.0"
+# Only to turn off WebView2's built-in browser context menu, which Tauri v2 does
+# not expose. Pinned to the same major as tauri-runtime-wry so there is one copy.
+webview2-com = "0.39"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# reqwest 0.13 defaults to rustls-platform-verifier, which panics on Android
+# unless JNI and its Maven helper class are initialized. Supplying Mozilla roots
+# via tls_certs_only uses pure-Rust WebPKI verification instead.
+webpki-root-certs = "1"
+
+[lints]
+workspace = true

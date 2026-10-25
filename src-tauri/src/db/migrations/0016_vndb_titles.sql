@@ -1,0 +1,24 @@
+-- 0016_vndb_titles.sql
+--
+-- Keep every title VNDB publishes for a VN, not just two of them.
+--
+-- The API response has always carried a `titles` array (one entry per language
+-- and script: `ja`, `en`, `ar`, plus romanised `latin` forms) and an `aliases`
+-- list. `DETAIL_FIELDS` requests both, the DTO parses both, and `store_detail`
+-- dropped both on the floor. The result was a hero header that could only show
+-- `title` and `alttitle` -- and for a game like KANADE those are the same string,
+-- so the page printed the name twice and offered nothing else.
+--
+-- One JSON array per row, shaped like the DTO's `TitleVariant`:
+--
+--   [{"lang":"ja","title":"かなで","latin":"Kanade","official":true,"main":true}]
+--
+-- Not a child table: nothing queries an individual title, the whole set is read
+-- and rendered at once, and a child table would need its own sync rules for data
+-- that is a cache of VNDB rather than user-authored content. `vndb_details` is
+-- already a cache with a TTL, so the list belongs beside it.
+--
+-- Existing rows get `[]`, which the UI reads as "no extra titles known". The next
+-- detail fetch fills them in; nothing is broken while they are empty.
+ALTER TABLE vndb_details
+    ADD COLUMN titles_json TEXT NOT NULL DEFAULT '[]';

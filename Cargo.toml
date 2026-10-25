@@ -1,0 +1,82 @@
+[workspace]
+members = ["src-tauri", "crates/vn-core"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "GPL-3.0-only"
+
+[workspace.dependencies]
+vn-core = { path = "crates/vn-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Linear-time matching guaranteed by the engine, so a user-supplied title pattern
+# cannot hang the tracking loop. Used only for window-title parsing.
+regex = "1"
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+# local-offset resolves the user's timezone for the presence {date}/{time} tags
+# (display only; stored timestamps stay UTC). Since 0.3.37 the Unix impl uses
+# thread-safe libc localtime_r, so this is safe in the multithreaded app.
+time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros", "local-offset"] }
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "net", "io-util"] }
+# Only jpeg/png/webp are enabled: VNDB serves covers as jpeg, and every extra
+# codec is compile time and binary size on Android for no benefit here.
+base64 = "0.23"
+# v1 = the all-in-one API choosing the OS store per platform:
+# Windows Credential Manager, macOS Keychain, Linux Secret Service. Android is
+# explicitly unsupported by the crate; see src/secrets.rs.
+keyring = { version = "4.2", default-features = false, features = ["v1"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+# multipart: catbox.moe file uploads; form: imgbb's urlencoded API, both for
+# the opt-in presence image host.
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "charset", "http2", "system-proxy", "gzip", "multipart", "form"] }
+sqlx = { version = "0.9", default-features = false, features = [
+  "runtime-tokio",
+  "sqlite",
+  "migrate",
+  "macros",
+  "uuid",
+  "time",
+] }
+# sqlx 0.9 declares libsqlite3-sys as a version range; pin it so a stray
+# `cargo update` cannot silently swap the SQLite build under us.
+libsqlite3-sys = "=0.35.0"
+# Win32 bindings for the playtime tracker. Only the features the probe calls are
+# enabled, to keep the Android build from compiling Windows-only shims.
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_System_Threading",
+  "Win32_System_SystemInformation",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+# Keep line tables for workspace crates and strip full DWARF/PDB debug symbols
+# from third-party dependencies so dev builds link fast and stay compact on disk.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# Release libraries ship without their symbol table: the Android .so was
+# ~35 MB per ABI mostly symbols, and a stripped one is 30-50% smaller with no
+# runtime cost. Crash traces lose symbol names; acceptable for a personal app.
+[profile.release]
+strip = "symbols"

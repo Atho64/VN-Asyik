@@ -1,0 +1,266 @@
+/*
+ * app.css — shell layout.
+ *
+ * Three real states, not two (antislop-layoutmobile): compact under 600,
+ * medium 600-1024, expanded above 1024. The medium state exists because a
+ * phone stack stretched across a tablet is its own failure.
+ */
+
+.app {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.app__content {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app__main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scroll-padding-block: var(--space-5);
+  padding: var(--space-5) var(--space-5) var(--space-7);
+}
+
+/* desktop rail */
+
+/* The rail is glass so the artwork shows through it, which is the whole point of
+ * the backdrop. With effects off it becomes a plain surface, matching the plain
+ * background behind it. */
+.rail {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: var(--rail-width);
+  flex-shrink: 0;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-3);
+  border-right: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+/* Glass is what the blurred artwork needs to stay readable, so it only exists
+ * while effects are on. Without it the rail would be a translucent pane over a
+ * flat colour, which is just a slightly wrong grey. */
+:root[data-reduce-effects="true"] .rail {
+  background: var(--bg-elevated);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.rail__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2);
+}
+
+.rail__mark {
+  width: var(--brand-mark-size);
+  height: var(--brand-mark-size);
+  flex-shrink: 0;
+  border-radius: var(--radius-s);
+}
+
+.rail__name {
+  font-family: var(--font-display);
+  font-size: var(--text-m);
+  letter-spacing: -0.01em;
+}
+
+.rail__nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rail__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-m);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: var(--text-s);
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.rail__item:hover {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.rail__item[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.rail__item[aria-current="page"] .rail__icon {
+  color: var(--accent-strong);
+}
+
+.rail__icon {
+  display: grid;
+  place-items: center;
+  width: var(--nav-icon-size);
+  height: var(--nav-icon-size);
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.rail__footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+}
+
+/* mobile bottom nav */
+
+.bottomnav {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .app__main {
+    padding-bottom: var(--space-5);
+  }
+
+  .bottomnav {
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    min-height: var(--bottom-nav-height);
+    padding: var(--space-1) var(--space-1)
+      calc(var(--space-1) + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  }
+
+  :root[data-reduce-effects="true"] .bottomnav {
+    background: var(--bg-elevated);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .bottomnav__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-half);
+    min-width: 0;
+    min-height: var(--touch-target);
+    padding: var(--space-half);
+    border-radius: var(--radius-m);
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: var(--text-nav);
+    line-height: var(--leading-tight);
+  }
+
+  .bottomnav__label {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+
+  .bottomnav__item[aria-current="page"],
+  .bottomnav__item[data-active="true"] {
+    color: var(--accent-strong);
+    background: var(--accent-soft);
+  }
+}
+
+@media (max-width: 1023px) {
+  .rail {
+    display: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .app__main {
+    padding: var(--space-4) var(--space-4) var(--space-5);
+  }
+}
+
+@media (min-width: 600px) and (max-width: 1023px) {
+  .app__main {
+    padding: var(--space-5) var(--space-5) var(--space-6);
+  }
+}
+
+/* Now playing bar.
+   Sticky above the page, but below the mobile bottom nav (z 4), and it sits
+   clear of that nav by its own height instead of covering it. */
+.nowplaying {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 1023px) {
+  .nowplaying {
+    padding: var(--space-2) var(--space-4);
+  }
+}
+
+.more-nav {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.more-nav__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+  padding: var(--space-3);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: var(--radius-m);
+}
+
+.more-nav__item:hover,
+.more-nav__item[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}

@@ -1,0 +1,21 @@
+-- A user-chosen cover for a game VNDB cannot supply art for.
+--
+-- `custom_cover_path` is a path relative to the app data directory, e.g.
+-- `covers/custom/0198....jpg`, never an absolute path. A relative name is the
+-- only useful form because the library database itself can be carried between
+-- devices; an absolute path from another machine would point at nothing.
+--
+-- The image file is NOT shipped by folder sync, backup export or transfer: those
+-- carry sync rows only (see sync/mod.rs and commands/data.rs), exactly as they
+-- already exclude cached VNDB art. A peer that receives this column without the
+-- file resolves no custom art and falls back to the game's other artwork, so a
+-- missing file degrades to the previous behaviour instead of breaking the cover.
+--
+-- NULL means the game uses its VNDB cover (or the neutral title surface).
+--
+-- `custom_cover_source_vndb` records whether this image was downloaded from
+-- VNDB (whose content rating is authoritative and synced) or chosen by the user
+-- (whose image we never rated). A VNDB metadata refresh must not overwrite a
+-- file the user picked, so it reads this flag before touching the path.
+ALTER TABLE games ADD COLUMN custom_cover_path TEXT;
+ALTER TABLE games ADD COLUMN custom_cover_source_vndb INTEGER NOT NULL DEFAULT 0;

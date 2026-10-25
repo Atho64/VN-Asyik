@@ -1,0 +1,107 @@
+/*
+ * backdrop.css
+ *
+ * The identity motif: the focused cover is the light source (DESIGN.md §0).
+ * Layering, bottom to top: blurred art -> functional scrim -> content.
+ *
+ * Performance rule (§2): the backdrop image is pre-blurred and downscaled in
+ * Rust, then upscaled here. No CSS filter blur on a scrolling surface, which
+ * is what keeps Android WebView at frame rate.
+ */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+.backdrop__layer {
+  position: absolute;
+  inset: -6%;
+  background-position: center;
+  background-size: cover;
+  /* Upscaled from a 96px-wide pre-blurred source; cheap and visually identical. */
+  transform: scale(1.04);
+  opacity: 0;
+  transition: opacity var(--dur-backdrop) var(--ease);
+  will-change: opacity;
+}
+
+.backdrop__layer[data-visible="true"] {
+  opacity: 1;
+}
+
+/*
+ * Scrim: not decoration. Artwork is unpredictable, so text contrast cannot be
+ * guaranteed by the art. Two stops, darker where body text sits.
+ */
+.backdrop__scrim {
+  position: absolute;
+  inset: 0;
+  /* Three stops, not two: a light top edge, the readable middle, a grounded
+     bottom. The middle stop is what keeps text legible over any artwork. */
+  background: linear-gradient(
+    to bottom,
+    var(--scrim-top) 0%,
+    var(--scrim-mid) 28%,
+    var(--scrim-mid) 62%,
+    var(--scrim-bottom) 100%
+  );
+}
+
+/* Grain: hides gradient banding on large flat scrims. 3% max. */
+.backdrop__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+}
+
+:root[data-reduce-effects="true"] .backdrop__grain {
+  display: none;
+}
+
+/*
+ * Procedural fallback: no art for this game. A stable gradient from the title
+ * hash, so the same game always looks the same. Never a broken image.
+ */
+.backdrop__fallback {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+
+/* Accent bloom behind the focused cover: the one allowed glow (R-13). */
+.backdrop__bloom {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42%;
+  background: radial-gradient(
+    60% 100% at 50% 100%,
+    color-mix(in srgb, var(--accent) 18%, transparent) 0%,
+    transparent 70%
+  );
+  opacity: 0.9;
+}
+
+/* Reduced effects: no artwork at all.
+ *
+ * "Less effects" previously only removed the grain, leaving a 30px blur over a
+ * full-window image -- still the most expensive thing on screen, and still a
+ * moving background behind every word. Someone who asks for fewer effects wants
+ * a plain surface, so the artwork and every overlay that decorates it are gone
+ * and the base colour remains.
+ */
+:root[data-reduce-effects="true"] .backdrop__layer,
+:root[data-reduce-effects="true"] .backdrop__bloom,
+:root[data-reduce-effects="true"] .backdrop__grain {
+  display: none;
+}
+
+:root[data-reduce-effects="true"] .backdrop__scrim {
+  background: var(--bg);
+}

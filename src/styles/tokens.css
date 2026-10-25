@@ -1,0 +1,206 @@
+/*
+ * tokens.css — the only place literal colours and sizes are allowed.
+ * Components must use var(--token). See docs/DESIGN.md §4.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* base surfaces (dark default) */
+  --bg: #101719;
+  --bg-elevated: #182225;
+  --surface-1: rgb(255 255 255 / 0.05);
+  /* Form fields sit above artwork. A white tint lifts them; a dark one reads as
+     a slab, which is what "black bar" described. */
+  --field-bg: rgb(255 255 255 / 0.08);
+  --surface-2: rgb(255 255 255 / 0.08);
+  --surface-3: rgb(255 255 255 / 0.12);
+  --surface-solid: #202d30;
+  --border: rgb(255 255 255 / 0.1);
+  --border-strong: rgb(255 255 255 / 0.18);
+
+  /* text */
+  --text: #edf7f4;
+  --text-muted: #b6c9c4;
+  --text-faint: #91aaa4;
+
+  /* accents: overwritten per game from the extracted palette */
+  --accent: #65d8c5;
+  /* Text on an accent-filled control. The dark theme's accent is light, so the
+     label is dark; the light theme's accent is dark, so it inverts. */
+  --accent-contrast: #102125;
+  --accent-soft: rgb(101 216 197 / 0.15);
+  --accent-strong: #8ce6d7;
+  --on-accent: #102125;
+
+  /* semantic */
+  --danger: #ff6b6b;
+  --danger-soft: rgb(255 107 107 / 0.16);
+  --success: #5be0a0;
+  --success-soft: rgb(91 224 160 / 0.16);
+  --warning: #ffc861;
+  --warning-soft: rgb(255 200 97 / 0.16);
+
+  /* scrim over artwork: tuned so body text clears WCAG AA */
+  /* Scrim stops are set so muted text (--text-muted) still clears AA against
+     the worst artwork behind it. 0.55 left muted text at 2.4:1 over dark art,
+     which fails; these values are the measured fix, not a guess. */
+  /* Light at the top edge so the artwork reaches the window frame, deepening
+     only where body text sits. A uniform wash reads as a bar across the top. */
+  --scrim-top: rgb(16 23 25 / 0.3);
+  --scrim-mid: rgb(16 23 25 / 0.7);
+  --scrim-bottom: rgb(16 23 25 / 0.94);
+  --text-shadow-over-art: 0 1px 2px rgb(0 0 0 / 0.55), 0 2px 12px rgb(0 0 0 / 0.35);
+
+  /* shape */
+  --radius-xs: 6px;
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --radius-l: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* elevation */
+  --shadow-1: 0 2px 8px rgb(0 0 0 / 0.25);
+  --shadow-2: 0 12px 40px rgb(0 0 0 / 0.45);
+  --shadow-glow: 0 0 0 1px var(--accent-soft), 0 8px 32px var(--accent-soft);
+
+  /* glass */
+  --glass-blur: 24px;
+  --glass-saturate: 1.4;
+  --glass-bg: rgb(255 255 255 / 0.06);
+
+  /* spacing scale: 4,8,12,16,24,32,48,64 */
+  --space-1: 4px;
+  --space-half: 2px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* typography */
+  --font-ui:
+    Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans",
+    "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  /* A grotesque for titles: clean, quiet, and the same on every platform.
+   * Fraunces was too mannered for a library grid of manga covers. */
+  --font-display:
+    "Inter Tight", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP",
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-nav: 11px;
+  /* `--text-sm` is used by page subtitles and card intros. It was referenced in
+   * fourteen places but never defined, so every one of them silently inherited
+   * body size and the hierarchy collapsed. */
+  --text-sm: 14px;
+  --text-s: 14px;
+  --text-md: 17px;
+  --text-m: 16px;
+  --text-l: 20px;
+  --text-xl: 28px;
+  --text-2xl: 40px;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+
+  /* motion */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 400ms;
+  --dur-backdrop: 360ms;
+
+  /* layout */
+  --rail-width: 248px;
+  --rail-width-compact: 72px;
+  --bottom-nav-height: 64px;
+  --brand-mark-size: 36px;
+  --nav-icon-size: 20px;
+  --settings-width: 56rem;
+  --settings-label-width: 12rem;
+  --input-number-width: 6rem;
+  --touch-target: 44px;
+  --focus-ring: 2px solid var(--accent-strong);
+  --focus-offset: 2px;
+}
+
+/* Light theme: same token names, mirrored values. Not a tint of the dark theme. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f2f7f5;
+  --bg-elevated: #ffffff;
+  --surface-1: rgb(16 18 28 / 0.04);
+  /* Light theme inverts the direction: the backdrop is bright, so the field is
+     lifted with white rather than tinted grey. */
+  --field-bg: rgb(255 255 255 / 0.72);
+  --surface-2: rgb(16 18 28 / 0.07);
+  --surface-3: rgb(16 18 28 / 0.11);
+  --surface-solid: #ffffff;
+  --border: rgb(16 18 28 / 0.12);
+  --border-strong: rgb(16 18 28 / 0.2);
+
+  --text: #172c28;
+  --text-muted: #475f59;
+  --text-faint: #5c756d;
+
+  --accent: #147363;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgb(20 115 99 / 0.12);
+  --accent-strong: #0d6455;
+  --on-accent: #ffffff;
+
+  --danger: #c92a2a;
+  --danger-soft: rgb(201 42 42 / 0.12);
+  --success: #177f4a;
+  --success-soft: rgb(23 127 74 / 0.12);
+  --warning: #8a5a00;
+  --warning-soft: rgb(138 90 0 / 0.12);
+
+  --scrim-top: rgb(242 247 245 / 0.3);
+  --scrim-mid: rgb(242 247 245 / 0.7);
+  --scrim-bottom: rgb(242 247 245 / 0.94);
+  --text-shadow-over-art:
+    0 1px 2px rgb(255 255 255 / 0.6), 0 2px 12px rgb(255 255 255 / 0.4);
+
+  --shadow-1: 0 2px 8px rgb(16 18 28 / 0.08);
+  --shadow-2: 0 12px 40px rgb(16 18 28 / 0.14);
+  --glass-bg: rgb(255 255 255 / 0.55);
+}
+
+/* Reduce effects: swap glass for solid surfaces. Also the Android low-end path. */
+:root[data-reduce-effects="true"] {
+  --glass-bg: var(--surface-solid);
+  --glass-blur: 0px;
+  --glass-saturate: 1;
+  --shadow-2: var(--shadow-1);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root:not([data-reduce-effects="false"]) {
+    --glass-bg: var(--surface-solid);
+    --glass-blur: 0px;
+    --glass-saturate: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+    --dur-backdrop: 0ms;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: var(--border-strong);
+    --text-muted: var(--text);
+  }
+}

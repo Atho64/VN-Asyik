@@ -1,0 +1,1773 @@
+/*
+ * components.css — base components.
+ *
+ * Radius is a hierarchy tool, not a default (R-11): buttons use --radius-m,
+ * inputs --radius-m, cards --radius-l, sheets only the top corners.
+ * Shadow marks elevation only (R-12): one floating layer exists at a time.
+ */
+
+/* Button */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-m);
+  border: 1px solid transparent;
+  font-size: var(--text-s);
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.btn--secondary {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+
+.btn--ghost {
+  color: var(--text-muted);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.btn--danger {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 24%, transparent);
+}
+
+.btn--icon {
+  width: var(--touch-target);
+  min-height: var(--touch-target);
+  padding: 0;
+}
+
+/* Chip */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+button.chip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* Metadata, not status: an engine/ending origin tag beside a route name. It
+   must read quieter than the status chips around it, so it drops the surface
+   and lets the border carry the shape. */
+.chip--quiet {
+  background: transparent;
+  color: var(--text-faint);
+}
+
+/* A chip that leaves the app: the VNDB entry id in the hero facts row.
+ *
+ * Marked as a link by the accent on hover rather than by an underline. It sits in
+ * a row of status and rating chips, so its shape must not shout, but clicking it
+ * must not be a surprise either: the accent is the app's established "this goes
+ * somewhere" signal. */
+.chip--link {
+  cursor: pointer;
+  font-family: var(--font-mono, var(--font-ui));
+  letter-spacing: 0.02em;
+}
+
+button.chip--link:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.chip[aria-pressed="true"],
+.chip--selected {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  color: var(--text);
+}
+
+/* Status chips carry meaning through a 6px ring in the status hue, not a
+   coloured stripe or a glowing dot (R-01, R-13). */
+.chip__status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chip--playing .chip__status {
+  background: var(--success);
+}
+.chip--completed .chip__status {
+  background: var(--accent-strong);
+}
+.chip--wishlist .chip__status {
+  background: var(--text-faint);
+}
+.chip--on-hold .chip__status {
+  background: var(--warning);
+}
+.chip--dropped .chip__status {
+  background: var(--danger);
+}
+
+/* Touch: every chip becomes a real 44px target. A 32px chip is fine under a
+   cursor and hostile under a thumb (antislop-layoutmobile). */
+@media (max-width: 1023px) {
+  .chip {
+    min-height: var(--touch-target);
+    padding-inline: var(--space-4);
+  }
+}
+
+/* Card */
+
+/* Cards are glass over the artwork while effects are on: a 5% wash alone reads as
+ * a flat panel floating on nothing, which is what made the page look unstyled.
+ * With effects off they fall back to a solid surface. */
+.card {
+  border-radius: var(--radius-l);
+  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+:root[data-reduce-effects="true"] .card {
+  background: var(--bg-elevated);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.card__body {
+  padding: var(--space-4);
+}
+
+/* A card whose content lays itself out with its own padding (the presence
+   panel): the body default would double it. */
+.settings__card > .card__body {
+  padding: 0;
+}
+
+/* The header lives inside that zeroed body, above the padded panel, so it must
+   replace the lost top and side padding itself — otherwise the title sits on
+   the card edge. The panel's own top padding keeps the gap below it. */
+.settings__card .card__header {
+  padding: var(--space-4) var(--space-4) 0;
+}
+
+/* The aside (a status badge or a small action) sits beside the title: pinned to
+ * the far edge of a wide card it reads as floating in empty space. Centered,
+ * not baseline-aligned: a pill's border-box rides ~one padding above its text
+ * baseline, so baseline alignment makes the badge hang above the title line. */
+.card__header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+/* One or two lines of orientation under a card title. Muted, never a wall of
+   text: the card body is where the work happens. */
+.card__intro {
+  margin: 0 0 var(--space-4);
+  max-width: 60ch;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+/* Inputs */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field__label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Guidance under a field. Muted rather than small-and-faint, because this is
+   where the reason a sync folder matters is explained. */
+.field__hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.field__error {
+  font-size: var(--text-sm);
+  color: var(--danger, #e5484d);
+}
+
+/* Definition lists */
+
+.stat-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.stat-list__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-list__row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.stat-list dt {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.stat-list dd {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Conflict log */
+
+.conflict-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conflict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.conflict-row:last-child {
+  border-bottom: none;
+}
+
+.conflict-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.conflict-row__what {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.conflict-row__when {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* On narrow screens the chip would squeeze the record name to nothing. */
+@media (max-width: 40rem) {
+  .conflict-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* A 5% white wash over artwork reads as a grey slab, not as a field: on a dark
+ * backdrop the tint darkens rather than lifts. Blurring the backdrop instead lets
+ * the artwork show through, so the field belongs to the surface it sits on. The
+ * tint stays as a fallback for reduce-effects, where blur is off.
+ */
+.input,
+.textarea,
+.select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-m);
+  border: 1px solid var(--border);
+  background: var(--field-bg);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  color: var(--text);
+  font-size: var(--text-s);
+  width: 100%;
+}
+
+/* No blur, so an 8% tint would be invisible: the field needs an opaque backing.
+ * This is also what a low-end Android device gets, where blur is expensive. */
+:root[data-reduce-effects="true"] .input,
+:root[data-reduce-effects="true"] .textarea,
+:root[data-reduce-effects="true"] .select {
+  background: var(--surface-solid);
+  border-color: var(--border-strong);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: var(--leading-normal);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.input:focus-visible,
+.textarea:focus-visible,
+/* The dropdown list itself is drawn by the platform, not by this document, so it
+ * ignores the translucent field styling and would otherwise paint white on a
+ * dark theme. `color-scheme` handles the scrollbar and menus on most engines;
+ * explicit option colours cover the rest. */
+select option,
+select optgroup {
+  background-color: var(--surface-solid);
+  color: var(--text);
+}
+
+.select:focus-visible {
+  border-color: var(--accent);
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.search {
+  min-width: 0;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.search .input {
+  padding-left: 36px;
+}
+
+.search__icon {
+  position: absolute;
+  left: var(--space-3);
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+/* Skeleton */
+
+.skeleton {
+  border-radius: var(--radius-s);
+  background: linear-gradient(
+    90deg,
+    var(--surface-1) 0%,
+    var(--surface-2) 50%,
+    var(--surface-1) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    background: var(--surface-2);
+  }
+}
+
+/* ProgressRing */
+
+.ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.ring__svg {
+  transform: rotate(-90deg);
+}
+
+.ring__track {
+  stroke: var(--border);
+}
+
+.ring__value {
+  stroke: var(--accent-strong);
+  transition: stroke-dashoffset var(--dur-slow) var(--ease);
+}
+
+.ring__label {
+  position: absolute;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Sheet / Dialog */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 0.55);
+  animation: fade-in var(--dur) var(--ease);
+}
+
+.sheet {
+  width: min(560px, 100%);
+  max-height: min(84dvh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-2);
+  animation: sheet-in var(--dur) var(--ease);
+}
+
+/* A sheet whose content is an image rather than a column of text (the screenshot
+ * lightbox). At the default 560px an 800x600 screenshot renders smaller than the
+ * tile that opened it. Bounded by both viewport width and height so the footer
+ * controls stay reachable on a short laptop screen. */
+.sheet--wide {
+  width: min(960px, 100%);
+  max-height: min(92dvh, 900px);
+}
+
+.sheet__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet__body {
+  min-height: 0;
+  padding: var(--space-5);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sheet__footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+:root[data-platform="android"] .input,
+:root[data-platform="android"] .textarea,
+:root[data-platform="android"] .select {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+}
+
+/* Mobile: sheet becomes a bottom sheet, thumb reachable. */
+@media (max-width: 599px) {
+  .scrim {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  .sheet {
+    width: 100%;
+    max-height: 90dvh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-bottom: none;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up var(--dur) var(--ease);
+  }
+
+  .sheet__footer {
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+  }
+}
+
+/* Tabs */
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  width: fit-content;
+  min-width: 0;
+}
+
+.tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.tabs__tab[aria-selected="true"] {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+@media (max-width: 599px) {
+  .tabs {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .tabs__tab {
+    min-height: var(--touch-target);
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* Toast */
+
+.toasts {
+  position: fixed;
+  z-index: 40;
+  inset: auto var(--space-5) var(--space-5) auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: min(380px, calc(100vw - var(--space-6)));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-m);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-2);
+  font-size: var(--text-s);
+  pointer-events: auto;
+  animation: toast-in var(--dur) var(--ease);
+}
+
+.toast--error {
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+
+.toast--success {
+  border-color: color-mix(in srgb, var(--success) 50%, transparent);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (max-width: 1023px) {
+  .toasts {
+    inset: auto var(--space-3) calc(var(--bottom-nav-height) + var(--space-4))
+      var(--space-3);
+    max-width: none;
+  }
+}
+
+/* EmptyState */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 44ch;
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-l);
+  border: 1px dashed var(--border-strong);
+}
+
+.empty__title {
+  font-family: var(--font-display);
+  font-size: var(--text-l);
+}
+
+.empty__body {
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+
+/* Command palette */
+
+.palette {
+  width: min(640px, 100%);
+  align-self: start;
+  margin-top: 12vh;
+  border-radius: var(--radius-l);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+
+.palette__input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--space-5);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font-size: var(--text-m);
+}
+
+.palette__input:focus-visible {
+  outline: none;
+}
+
+.palette__list {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-s);
+  color: var(--text);
+  text-align: left;
+}
+
+.palette__item[data-active="true"] {
+  background: var(--accent-soft);
+}
+
+.palette__hint {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.palette__empty {
+  padding: var(--space-4) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+
+@media (max-width: 599px) {
+  .palette {
+    margin-top: 0;
+    border-radius: var(--radius-l) var(--radius-l) 0 0;
+  }
+}
+
+/* Chapters */
+
+/* A chapter list grouped by route.
+ *
+ * Rows are pick-buttons rather than checkboxes: the selection decides which
+ * chapter the manual timer records, so it behaves like a radio group without
+ * needing one. Each row keeps a 44px hit area for touch. */
+.chapter-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The route is the primary unit and its chapters are the detail, so the route
+ * header carries the weight: larger name, the time in the display face, and a
+ * rule under it that the chapter rows hang from.
+ *
+ * No `text-transform: uppercase`: route names are usually Japanese, which has
+ * no case, so only the Latin ones would shout and the two headings would stop
+ * looking like the same element. */
+.chapter-group__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-m);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* The route total: the number someone actually came to see. */
+.chapter-group__total {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-s);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.chapter-group__count {
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+/* The merge offer under a route that duplicates another one.
+ *
+ * This used to be `row row--wrap`, borrowing the library's list-row class, which
+ * is a three-column card grid with a 44 px art column. A bare Button dropped into
+ * that grid got the art cell and was clipped to 44 px, so the label read
+ * "…e route as Misaki's Route" hanging off the left edge. A container with its own
+ * name, not another surface's. */
+.chapter-group__merge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.chapter-group__merge > .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+/* A phone has no room for a route name and its counts side by side. The counts
+ * became a 30 px column and wrapped to one word per line ("0 / 1 of 1" stacked
+ * six deep), which also forced the header to 101 px tall. */
+@media (max-width: 599px) {
+  .chapter-group__title {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+
+  .chapter-group__total {
+    /* Full width under the name, and it keeps its own line rather than being
+     * squeezed by whatever the name claims. */
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+  }
+
+  .chapter-group__count {
+    white-space: normal;
+  }
+}
+
+.chapter-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  /* Indented from the route heading so the nesting is visible, not implied. */
+  padding: 0 0 0 var(--space-3);
+  border-left: 2px solid var(--border);
+  list-style: none;
+}
+
+.chapter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-2) 0 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  transition:
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.chapter-row:hover {
+  background: var(--surface-1);
+}
+
+.chapter-row--selected {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* An ending listed under its route: the same row shape as a chapter, but the
+   row is a plain div (no pick button), so its name column and its actions must
+   be pushed to opposite ends instead of bunching after the name. */
+.chapter-row--ending {
+  justify-content: space-between;
+}
+
+.chapter-row__pick {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 var(--space-3);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.chapter-row__name {
+  overflow: hidden;
+  /* Long engine names must not push the row wider than the card. */
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Chapters are the detail under a route heading: quieter than the route name
+     so the eye reads route first and chapter second. */
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+
+.chapter-row--selected .chapter-row__name {
+  color: var(--text);
+}
+
+.chapter-row__meta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chapter-row__rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+/* Two actions in one card header or row end: add a past session, add a
+   chapter, mark an ending. The rule was deleted in a later redesign while the
+   markup kept using the name, which left the buttons bunched after the text. */
+.chapter-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  justify-content: flex-end;
+}
+
+.input--compact {
+  min-height: 44px;
+  flex: 1;
+  min-width: 8rem;
+}
+
+.chapter-form {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.chapter-form__actions {
+  display: flex;
+  gap: var(--space-2);
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 40rem) {
+  .chapter-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The manual timer: clock, controls, and one line of explanation. */
+.manual-timer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.manual-timer__status {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.manual-timer__clock {
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The Start button names the chapter it will time, and a VN chapter title can be
+   long or CJK. Clip rather than wrap: the button sits in a fixed row and a second
+   line would push the timer controls around. */
+.manual-timer__start-label {
+  display: block;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-timer__label {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.manual-timer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.manual-timer__hint {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.chip--accent {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Similar games */
+
+.similar-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.similar-row {
+  display: grid;
+  /* The score column is fixed so digits line up down the list. A flex row put
+     the badge and the score side by side, so a two-line title pushed the score
+     below the badge and the right edge came out ragged. */
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.similar-row:last-child {
+  border-bottom: none;
+}
+
+.similar-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.similar-row__title {
+  font-size: var(--text-sm);
+  color: var(--text);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.similar-row__title:hover {
+  text-decoration: underline;
+}
+
+/* The score owns the row's right column. It gets a floor and right alignment
+   so the digits line up down the list: without them the `auto` column resizes
+   per row and every percentage lands at a different x. */
+.similar-row__score {
+  font-size: var(--text-sm);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+  justify-self: end;
+}
+
+/* The reason a game was suggested. Without this the score is a bare number.
+   It sits under the title so the score keeps one column, and it reads as a
+   badge rather than a footnote: muted small print under a title looks like a
+   subtitle and the eye skips it. */
+.similar-row__why {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  max-width: 100%;
+  margin-top: var(--space-1);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  /* A solid accent edge, not `--accent-soft`: that token is a translucent fill,
+     and using it for the border too leaves the pill with no visible outline. */
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* A claim about quality that is not yet true must not look like a normal hint. */
+.notice {
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-s);
+  /* Uses the existing soft token rather than mixing one inline: `color-mix`
+     against a transparent stop resolved to nothing in the WebView. */
+  border: 1px solid var(--warning);
+  background: var(--warning-soft);
+  color: var(--text);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+/* Not every claim about quality is an error: a blocked capability is a warning,
+ * a failed request is a failure. Both read as a notice, coloured by severity. */
+.notice--warn {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.notice--danger {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* Screen head: the title block at the top of Stats and Settings. The rule was
+   renamed to `.discover__head` when Discover got its own column, but two
+   screens still render the old name and lost their spacing with it. */
+.page-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Screen title shared by Chat, Discover, Stats and Settings. It was referenced by
+ * four screens but never defined, so every one of them depended on whatever
+ * heading default the reset happened to leave behind. */
+.page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+/* Visually hidden but present for screen readers and as a form label. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Loading placeholder line, sized like a paragraph so the layout does not jump. */
+.skeleton--row {
+  height: 1em;
+  width: 100%;
+  margin-block: var(--space-2);
+}
+
+@media (max-width: 40rem) {
+  .similar-row {
+    /* On a narrow card the score stays beside the title, but the badge drops
+       under it so the title gets the full width instead of wrapping around a
+       pill. */
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+}
+
+/* Taste: a plain wrap of tag chips, strongest count first. Hover names the
+   games behind a count, so the claim stays checkable without a list per tag. */
+.taste-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Recommendations */
+
+/* A key field and its submit sharing one row. Used wherever a settings form is
+ * a single value plus a button; it used to borrow Discover's class name. */
+.settings__row-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.settings__row-form > .input {
+  flex: 1 1 18ch;
+  min-width: 0;
+}
+
+/* Discover: one centred reading column.
+ *
+ * The screen previously stretched its key row and search row across the whole
+ * window, so the submit button sat a screen away from the input it submits. A
+ * bounded column keeps the action next to what it acts on. */
+.discover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 74ch;
+  margin-inline: auto;
+  padding-block: var(--space-2);
+}
+
+.discover__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Collapsed by default: the search key is configured once, then irrelevant. */
+.discover__settings {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.discover__settings > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--text-s);
+  color: var(--text-muted);
+}
+.discover__settings > summary::-webkit-details-marker {
+  display: none;
+}
+.discover__settings > summary:hover {
+  color: var(--text);
+}
+.discover__settings > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+.discover__settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-4);
+}
+
+.discover__keyrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.discover__keyrow code {
+  font-size: var(--text-xs);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.discover__keyform {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.discover__keyform > .input {
+  flex: 1 1 18ch;
+  min-width: 0;
+}
+
+/* The ask box: one rounded target, icon, text, action. */
+.discover__ask {
+  display: block;
+}
+.discover__field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.discover__field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.discover__field > svg {
+  flex: none;
+  color: var(--text-faint);
+}
+/* The action keeps its full label; the input yields space instead. */
+.discover__field > button {
+  flex: none;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+}
+.discover__input {
+  flex: 1;
+  /* `min-width: 0` lets the input shrink below its placeholder so the action
+   * beside it never clips; without it the placeholder wins the flex race. */
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-m);
+  padding: var(--space-2) 0;
+  min-height: 40px;
+}
+.discover__input:focus {
+  outline: none;
+}
+.discover__input::placeholder {
+  color: var(--text-faint);
+}
+
+.discover__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding-block: var(--space-5);
+}
+.discover__empty > svg {
+  color: var(--accent);
+}
+.discover__empty h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-l);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.discover__empty > p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-muted);
+  font-size: var(--text-s);
+  line-height: 1.6;
+}
+.discover__examples {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-3);
+}
+.discover__example {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-s);
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+.discover__example:hover {
+  background: var(--surface-2);
+  border-color: var(--text-faint);
+}
+.discover__example:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.discover__busy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+}
+.discover__busy > p {
+  margin: 0;
+  font-size: var(--text-s);
+  color: var(--text-muted);
+}
+
+.discover__results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.discover__answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.discover__answer > h2 {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.discover__sources {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
+}
+.discover__sources > summary {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--text-s);
+  color: var(--text-muted);
+}
+.discover__sources > summary::-webkit-details-marker {
+  display: none;
+}
+.discover__sources > summary:hover {
+  color: var(--text);
+}
+.discover__sources > ul {
+  padding-top: var(--space-2);
+}
+
+.discover__cost {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A suggestion is a stated pick with its evidence, not a card to shuffle. The
+ * left rule groups the why + sources without boxing each one. */
+.rec-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0 var(--space-3) var(--space-4);
+  border-left: 2px solid var(--border);
+}
+.rec-card:hover {
+  border-left-color: var(--accent);
+}
+
+.rec-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.rec-card__title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.rec-card__why {
+  margin: 0;
+  font-size: var(--text-s);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* Sources stay visible: a suggestion without one is a guess, so they are part of
+   the card rather than collected in a footnote. */
+.rec-card__sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rec-card__source {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+.rec-card__source:hover {
+  color: var(--accent);
+}
+
+.rec-answer {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* Play */
+
+.play {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The one primary action on the screen, and shaped like it: taller than a
+ * standard control, with its own surface so it reads as a button rather than a
+ * chip among chips. */
+.play__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: 0 var(--space-5) 0 var(--space-4);
+  border-radius: var(--radius-l);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--accent) 92%, white),
+    var(--accent)
+  );
+  color: var(--accent-contrast, #10131a);
+  font-size: var(--text-m);
+  font-weight: 600;
+  cursor: pointer;
+  /* The accent is the light source: a soft throw, not a drop shadow. */
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.25) inset,
+    0 8px 24px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition:
+    transform var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+.play__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.3) inset,
+    0 12px 30px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.play__button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.play__button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.play__button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The glyph sits in its own disc so the label reads as text, not as an icon
+ * caption. */
+.play__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgb(16 19 26 / 0.16);
+}
+
+.play__label {
+  letter-spacing: 0.01em;
+}
+
+.play__badge {
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.play > .settings__hint,
+.play > .notice {
+  flex-basis: 100%;
+}
+
+/* Rating */
+
+/* An inline field that reads as part of the fact row, not as a full form row. */
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2) 2px var(--space-3);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-solid) 40%, transparent);
+}
+
+/* Narrow on purpose: the widest legitimate value is "10.0". */
+.input--rating {
+  width: 4.5ch;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.input--rating:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.input--rating[aria-invalid="true"] {
+  color: var(--danger);
+}
+
+.rating__of {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.rating__error {
+  font-size: var(--text-xs);
+  color: var(--danger);
+  white-space: nowrap;
+}
+
+/* Context menu */
+
+/* Above sheets (40): a menu opened from inside one still has to be on top. */
+.ctxmenu {
+  position: fixed;
+  z-index: 60;
+  min-width: 12rem;
+  max-width: 18rem;
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+}
+
+.ctxmenu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+.ctxmenu__item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.ctxmenu__item:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.ctxmenu__item:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.ctxmenu__divider {
+  height: 1px;
+  margin: var(--space-1) var(--space-2);
+  background: var(--border);
+}
+
+/* Concealed list artwork uses a neutral thumb; no filter on scrolling content. */
+.row__concealed {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.row__reveal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.row__reveal .btn {
+  min-height: var(--touch-target);
+  padding-inline: var(--space-2);
+  font-size: var(--text-xs);
+}

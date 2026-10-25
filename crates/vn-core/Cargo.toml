@@ -1,0 +1,18 @@
+[package]
+name = "vn-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pure domain logic for VN Asyik: models, play sessions, chapter mapping. No Tauri, no OS calls."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+uuid.workspace = true
+time.workspace = true

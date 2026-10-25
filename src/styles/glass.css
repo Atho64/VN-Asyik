@@ -1,0 +1,38 @@
+/*
+ * glass.css
+ *
+ * Glass is an accent, not a character trait (DESIGN.md §0, antislop R-10).
+ * Dose cap: at most two glass layers visible at once, nav plus one panel.
+ * `.glass-strong` is reserved for a surface that must read above artwork.
+ */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--border);
+}
+
+.glass-strong {
+  background: color-mix(in srgb, var(--surface-solid) 72%, transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--border-strong);
+}
+
+/* Reduce effects: solid surfaces. Also what a low-end Android device gets. */
+:root[data-reduce-effects="true"] .glass,
+:root[data-reduce-effects="true"] .glass-strong {
+  background: var(--surface-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-strong {
+    background: var(--surface-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

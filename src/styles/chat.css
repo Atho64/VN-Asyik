@@ -1,0 +1,889 @@
+/* Chat is a workspace, not a form.
+ *
+ * Two structural decisions drive the rest:
+ * - The conversation owns the remaining height and scrolls internally, so the
+ *   composer stays put and the page itself never double-scrolls.
+ * - The sidebar reads top-to-bottom as context (what am I asking about), not as
+ *   a stack of labelled inputs. Settings that only matter before the first
+ *   message collapse to a summary once the conversation starts.
+ */
+
+.vnchat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* Fill the shell's scroll area instead of collapsing to content height. The
+   * page box is `auto`-height by default, so the flex chain below needs an
+   * explicit bound to divide space between thread and composer. */
+  height: 100%;
+  min-height: 0;
+}
+
+.vnchat__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.vnchat__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 248px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+.vnchat__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--space-1);
+}
+
+.vnchat__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.vnchat__group:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.vnchat__label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* A quiet, full-width control: reads as a value you can change, not a text box
+ * waiting for input. */
+.vnchat__select {
+  width: 100%;
+  min-width: 0;
+  /* 40 px was 4 short of the target; every other input in the app is 44. */
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-s);
+}
+.vnchat__select:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.vnchat__select:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.vnchat__select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Spoiler choice is three positions on one line — a segmented control, because
+ * the options are ordered from safest to most revealing. Labels are sets of
+ * words, not single tokens, so they wrap inside their own cell instead of
+ * squeezing the group. */
+.vnchat__segments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+}
+.vnchat__segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--space-1) 2px;
+  border: 0;
+  border-radius: calc(var(--radius-s) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  cursor: pointer;
+}
+.vnchat__segment:hover:not(:disabled) {
+  color: var(--text);
+}
+.vnchat__segment[aria-pressed="true"] {
+  background: var(--surface-1);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.vnchat__segment:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.vnchat__segment:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.vnchat__check {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  min-height: 32px;
+  font-size: var(--text-s);
+  cursor: pointer;
+}
+
+/* The whole label is the hit area, not the 16 px box.
+ *
+ * A bare checkbox is 13 px by default and 16 px here; on a touch screen that is a
+ * target a third of the size the design system asks for. The input stays 16 px
+ * because that is what a checkbox should look like, but the <label> wraps it and
+ * the row is a full touch target, so tapping the words toggles it too. */
+.vnchat__check input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  flex: none;
+  /* Grow the hit area to the target without growing the drawn box: the extra
+   * space is outside the border, so it is clickable but invisible. */
+  position: relative;
+}
+
+.vnchat__check input::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--touch-target) - 16px) / -2);
+}
+
+@media (max-width: 599px) {
+  .vnchat__check {
+    min-height: var(--touch-target);
+    align-items: center;
+  }
+
+  .vnchat__check input {
+    margin-top: 0;
+  }
+}
+
+.vnchat__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+/* Collapsed frame for anything that is only worth reading once. */
+.vnchat__details {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
+}
+.vnchat__details > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--text-s);
+  color: var(--text-muted);
+}
+.vnchat__details > summary::-webkit-details-marker {
+  display: none;
+}
+.vnchat__details > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+.vnchat__details[open] > summary::before {
+  transform: rotate(45deg);
+}
+.vnchat__details > summary:hover {
+  color: var(--text);
+}
+.vnchat__details > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+.vnchat__details-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-3) 14px;
+}
+
+.vnchat__provider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.vnchat__provider strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.vnchat__manage-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Conversation ────────────────────────────────────────────────────────── */
+
+.vnchat__conversation {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.vnchat__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-5) var(--space-6);
+  scroll-padding-block: var(--space-5);
+}
+
+/* Shares the reading column with the thread and the composer. It used to sit at
+ * the scroll padding's left edge, so the welcome drifted left of the input it
+ * was inviting the user to type into. */
+.vnchat__empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 72ch;
+  margin-inline: auto;
+  padding-block: var(--space-4);
+}
+.vnchat__empty > svg {
+  color: var(--accent);
+}
+.vnchat__empty h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-l);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.vnchat__empty > p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.65;
+  font-size: var(--text-s);
+}
+.vnchat__prompts {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-2);
+}
+.vnchat__prompt {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-s);
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+.vnchat__prompt:hover {
+  background: var(--surface-2);
+  border-color: var(--text-faint);
+}
+.vnchat__prompt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Messages ────────────────────────────────────────────────────────────── */
+
+.vnchat__thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 72ch;
+  margin-inline: auto;
+}
+
+.vnchat__message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+.vnchat__message-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.vnchat__message-head strong {
+  font-size: var(--text-s);
+  font-weight: 600;
+  color: var(--text);
+}
+.vnchat__message--assistant .vnchat__message-head strong {
+  color: var(--accent);
+}
+.vnchat__message-head time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.vnchat__message--user {
+  align-self: flex-end;
+  max-width: 82%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-m) var(--radius-m) var(--radius-xs) var(--radius-m);
+  background: var(--surface-2);
+}
+/* Who wrote it is obvious from the bubble; only the time is worth keeping. */
+.vnchat__message--user .vnchat__message-head {
+  justify-content: flex-end;
+}
+.vnchat__message--user .vnchat__message-head strong {
+  display: none;
+}
+.vnchat__message--user .vnchat__answer {
+  white-space: pre-wrap;
+}
+
+.vnchat__answer {
+  font-size: var(--text-m);
+  line-height: 1.7;
+  color: var(--text);
+}
+.vnchat__message--assistant .vnchat__answer {
+  font-size: calc(var(--text-m) + 1px);
+  line-height: 1.75;
+}
+
+.vnchat__status-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.vnchat__status-note--warn {
+  color: var(--warning);
+}
+
+/* ── Tool activity ───────────────────────────────────────────────────────── */
+
+/* Tool runs are progress detail, not prose: they collapse into a single quiet
+ * strip above the answer and never compete with it for attention. */
+.vnchat__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: var(--space-2);
+}
+.vnchat__tool {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-1);
+  font-size: var(--text-xs);
+}
+.vnchat__tool > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding-inline: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-muted);
+}
+.vnchat__tool > summary::-webkit-details-marker {
+  display: none;
+}
+.vnchat__tool > summary:hover {
+  color: var(--text);
+}
+.vnchat__tool > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.vnchat__tool-status {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.vnchat__tool-status[data-status="error"] {
+  color: var(--danger);
+}
+.vnchat__tool-status[data-status="running"] {
+  color: var(--accent);
+}
+.vnchat__tool pre {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* ── Sources ─────────────────────────────────────────────────────────────── */
+
+.vnchat__sources {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.vnchat__sources > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.vnchat__sources > summary:hover {
+  color: var(--text);
+}
+.vnchat__sources ol {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.vnchat__sources li {
+  line-height: 1.5;
+}
+.vnchat a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.vnchat a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ── Composer ────────────────────────────────────────────────────────────── */
+
+.vnchat__composer {
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--background, var(--bg));
+  padding: var(--space-3) var(--space-4);
+}
+.vnchat__composer-inner {
+  max-width: 72ch;
+  width: 100%;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* One pill: text on the left, the action on the right, nothing else inside it.
+ * `align-items: flex-end` made the Send button hang off the bottom edge as the
+ * textarea grew, which is what read as "weird" — the two now share a centre. */
+.vnchat__field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.vnchat__field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+/* Single line when empty, grows while typing. `field-sizing` is not available in
+ * every WebView, so the height is set from the row count in the component. */
+.vnchat__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-m);
+  line-height: 1.5;
+  resize: none;
+  min-height: 24px;
+  max-height: 152px;
+  padding: var(--space-2) 0;
+  overflow-y: auto;
+}
+.vnchat__input:focus {
+  outline: none;
+}
+.vnchat__input::placeholder {
+  color: var(--text-faint);
+}
+.vnchat__input:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* The action is a circle while idle: it says "send" without a label competing
+ * with the placeholder. It gains text only when that label carries meaning. */
+.vnchat__send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 44px;
+  height: 44px;
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast, #08110f);
+  font: inherit;
+  font-size: var(--text-s);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+}
+.vnchat__send:hover:not(:disabled) {
+  background: var(--accent-strong, var(--accent));
+}
+.vnchat__send:disabled {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+.vnchat__send:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.vnchat__send--stop {
+  background: var(--surface-2);
+  color: var(--text);
+  padding-inline: var(--space-4);
+}
+.vnchat__send--stop:hover:not(:disabled) {
+  background: var(--surface-1);
+}
+
+/* Caveats are revealed on demand. They used to occupy three wrapped lines above
+ * nothing, which is most of what made the composer look heavy. */
+.vnchat__footnote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+.vnchat__footnote > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-faint);
+}
+.vnchat__footnote > summary::-webkit-details-marker {
+  display: none;
+}
+.vnchat__footnote > summary:hover {
+  color: var(--text-muted);
+}
+.vnchat__footnote > p {
+  margin: var(--space-1) 0 0;
+  line-height: 1.5;
+  max-width: 70ch;
+}
+.vnchat__footnote[open] {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0;
+}
+
+.vnchat__disclaimer {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+/* ── Markdown output ─────────────────────────────────────────────────────── */
+
+.md-p {
+  margin: 0 0 var(--space-3);
+}
+.md-p:last-child {
+  margin-bottom: 0;
+}
+.md-p + .md-p {
+  margin-top: 0;
+}
+.md-h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-m);
+  font-weight: 600;
+  color: var(--text);
+}
+.md-h4,
+.md-h5,
+.md-h6 {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-m);
+  font-weight: 600;
+  color: var(--text);
+}
+.md-list {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.md-list li {
+  padding-left: var(--space-1);
+}
+.md-list li::marker {
+  color: var(--text-faint);
+}
+.md-quote {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border);
+  color: var(--text-muted);
+}
+.md-quote .md-p {
+  margin-bottom: var(--space-2);
+}
+.md-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.md-hr {
+  margin: var(--space-4) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.vnchat__answer strong {
+  font-weight: 650;
+  color: var(--text);
+}
+.vnchat__answer em {
+  font-style: italic;
+}
+
+/* ── Narrow screens ──────────────────────────────────────────────────────── */
+
+/* Narrow layout.
+ *
+ * Desktop can afford a fixed sidebar and a thread that fills the window. Below
+ * 900px the sidebar turns into a compact context bar and the thread keeps the
+ * remaining height; the composer never scrolls out of reach. */
+@media (max-width: 900px) {
+  /* The shell pads `.app__main` and scrolls it. Cap the workspace to the content
+   * box so the composer stays on screen and only the thread scrolls. */
+  .vnchat {
+    height: auto;
+    max-height: 100%;
+  }
+  .vnchat__layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: var(--space-2);
+  }
+  .vnchat__sidebar {
+    flex: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: var(--space-2);
+    overflow: visible;
+    padding-right: 0;
+  }
+  .vnchat__sidebar > label.field {
+    grid-column: 1 / -1;
+  }
+  .vnchat__sidebar > .vnchat__manage,
+  .vnchat__sidebar > .vnchat__provider,
+  .vnchat__label {
+    display: none;
+  }
+  .vnchat__group {
+    border-top: 0;
+    padding-block: 0;
+  }
+  .vnchat__group--scope {
+    grid-column: 1;
+  }
+  /* Spoiler and online rules share one row: the labels and long hints repeat
+   * what the controls already say, and they cost a third of the screen. */
+  .vnchat__group--rules {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .vnchat__group--rules .vnchat__label,
+  .vnchat__group--rules .vnchat__hint {
+    display: none;
+  }
+  .vnchat__group--rules .vnchat__segments {
+    flex: 0 1 auto;
+    min-width: 220px;
+  }
+  /* 36 px with 11 px text was a squeeze to keep three labels on one row, and it
+   * did not even achieve that: "Up to my reading boundary" still took two lines
+   * and the row became a 36 px strip under the 44 px minimum the rest of the app
+   * holds. The labels get their 44 px and their normal size back, and the strip
+   * is allowed to be two rows tall if the longest label needs it — a legible,
+   * tappable control is worth more than one saved line. */
+  .vnchat__group--rules .vnchat__segment {
+    min-height: var(--touch-target);
+  }
+  .vnchat__group--rules .vnchat__check {
+    flex: 1 1 auto;
+    min-height: var(--touch-target);
+  }
+  .vnchat__conversation {
+    flex: 1 1 auto;
+    min-height: 240px;
+  }
+  .vnchat__scroll {
+    padding: var(--space-4);
+  }
+}
+
+@media (max-width: 760px) {
+  .vnchat {
+    gap: var(--space-2);
+    /* Chat manages its own inner scroll, so it does not need the shell's
+     * trailing page padding, which otherwise pushes the composer off-screen. */
+    margin-bottom: calc(var(--space-3) * -1);
+  }
+  /* Chrome yields height to the conversation on a phone. */
+  .vnchat__header {
+    gap: var(--space-2);
+  }
+  .vnchat__header .page-sub,
+  .vnchat__disclaimer,
+  .vnchat__meta {
+    display: none;
+  }
+  .vnchat__group--rules {
+    gap: var(--space-2);
+  }
+  .vnchat__group--rules .vnchat__segments {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+  .vnchat__scroll {
+    padding: var(--space-3);
+  }
+  .vnchat__thread {
+    gap: var(--space-4);
+  }
+  .vnchat__message--user {
+    max-width: 92%;
+  }
+  .vnchat__composer {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+  }
+  .vnchat__field {
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  }
+  /* Two lines fit, the third scrolls: the placeholder is long enough to wrap
+   * at phone width, so a one-line box clipped its own hint text. */
+  /* 14px * 1.4 * 2 lines + padding: enough for the wrapped placeholder, and the
+   * box grows to max-height while typing. */
+  .vnchat__input {
+    min-height: calc(14px * 1.4 * 2 + 8px);
+    max-height: 96px;
+    font-size: var(--text-s);
+    line-height: 1.4;
+    padding: var(--space-1) 0;
+  }
+  .vnchat__field {
+    align-items: center;
+  }
+  .vnchat__composer-inner {
+    gap: var(--space-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vnchat__prompt,
+  .vnchat__details > summary::before {
+    transition: none;
+  }
+}

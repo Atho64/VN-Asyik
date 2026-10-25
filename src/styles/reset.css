@@ -1,0 +1,134 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Stop the WebView from resizing text on its own. */
+  text-size-adjust: 100%;
+}
+
+/* The app is a native-feeling surface, not a document.
+ *
+ * Android's WebView honours pinch and double-tap zoom on any page that does not
+ * say otherwise, so a double-tap on a screenshot tile or a two-finger touch while
+ * scrolling zoomed the whole UI — header, tab bar and all — and the only way back
+ * was a reload. There is no third-party document here whose text a reader might
+ * need to enlarge (the accessibility path for that is the OS font scale, which
+ * still works), so the viewport is fixed and the gesture layer is ours.
+ *
+ * `touch-action: manipulation` keeps panning and tapping but removes the
+ * double-tap-to-zoom delay, which also removes the ~300 ms click lag each tile
+ * used to pay before its handler ran. */
+html,
+body {
+  touch-action: manipulation;
+}
+
+/* A WebView tap normally paints a translucent blue box over the element it hit.
+ * Every control in this app draws its own pressed state, so the default flash
+ * only made a tap look like a mis-render. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-s);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+a {
+  color: var(--accent-strong);
+  text-decoration-color: color-mix(in srgb, var(--accent-strong) 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-xs);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* Scrollbars: present but quiet. The scroll position is the user's, not decoration. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

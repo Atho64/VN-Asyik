@@ -1,0 +1,6 @@
+# sqlx records a checksum of each migration's bytes and refuses to start when a
+# previously applied one changes. With core.autocrlf=true a checkout rewrites
+# these files to CRLF, which changes the checksum and breaks every existing
+# database with "migration N was previously applied but has been modified".
+# Migrations are therefore stored and checked out byte-for-byte.
+src-tauri/src/db/migrations/*.sql -text

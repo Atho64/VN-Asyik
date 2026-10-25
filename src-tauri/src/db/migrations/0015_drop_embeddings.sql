@@ -1,0 +1,21 @@
+-- 0015_drop_embeddings.sql
+--
+-- The local embedding index was removed, so nothing reads these vectors.
+--
+-- 0009 created this table, 0010 dropped it, and 0012 created it again when the
+-- feature was restored. Deleting either file is not an option: sqlx records a
+-- checksum for every applied migration and refuses to start when a previously
+-- applied one disappears or changes. So the honest retirement is a new
+-- migration that drops the table, which is exactly what 0010 did before.
+--
+-- Both install shapes converge here:
+--
+--   * A database that ran 0009, 0010 and 0012 holds the table and loses it here.
+--   * A database that ran only 0009 and 0010 (or neither) has nothing to drop,
+--     and `IF EXISTS` makes that a no-op rather than an error.
+--
+-- Rows are not preserved. The feature that would need them no longer exists in
+-- this build; if it comes back, `docs/archive/local-embeddings/RESTORE.md`
+-- describes rebuilding the index from the library, which is seconds of work.
+DROP INDEX IF EXISTS embeddings_model;
+DROP TABLE IF EXISTS embeddings;

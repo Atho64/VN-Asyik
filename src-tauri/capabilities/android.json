@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "android-main",
+  "description": "Core events for the Android main WebView. dialog:allow-open only lets the user open the system picker; picked content:// documents are read through Rust commands and the content resolver, never as frontend paths.",
+  "windows": ["main"],
+  "platforms": ["android"],
+  "permissions": ["core:default", "dialog:allow-open"]
+}

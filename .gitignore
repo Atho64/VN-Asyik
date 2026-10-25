@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+target/
+src-tauri/target/
+crates/*/target/
+
+# Tauri regenerates the permission schemas on every build
+src-tauri/gen/schemas/
+
+# Local user data. Never commit a library, a token, or a game path.
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db
+backups/
+logs/
+scratch/
+
+# Release artifacts
+dist-installer/
+*.apk
+*.aab
+*.msi
+*.exe
+*.dmg
+*.AppImage
+
+# Android build and signing. A keystore must never be tracked.
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/build/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/local.properties
+*.jks
+*.keystore
+*.p12
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Ide and OS noise
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log

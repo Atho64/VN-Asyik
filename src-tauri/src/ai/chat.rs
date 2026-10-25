@@ -1,0 +1,264 @@
+//! Shared OpenAI-compatible request shape for the AI features.
+//!
+//! One request/response pair with the error mapping every caller wants: an
+//! auth failure, throttling, network trouble and unusable responses are
+//! distinct, because the UI says different things for each. The streaming
+//! companion chat has its own transport; this module serves the one-shot
+//! callers (recommendations, script compaction).
+//!
+//! Nothing here runs on startup; it only runs when a feature asks.
+
+use serde::{Deserialize, Serialize};
+
+use crate::secrets::ChatApiKey;
+
+/// Why a request failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatError {
+    /// No key configured.
+    NoKey,
+    /// The configured endpoint or key was rejected.
+    Unauthorized,
+    /// Rate limited or throttled by the provider.
+    Throttled,
+    /// Network trouble.
+    Offline(String),
+    /// The provider answered with something unusable.
+    BadResponse(String),
+}
+
+impl std::fmt::Display for ChatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoKey => write!(f, "no API key is configured"),
+            Self::Unauthorized => write!(f, "the API key was rejected"),
+            Self::Throttled => write!(f, "the provider is rate limiting requests"),
+            Self::Offline(reason) => write!(f, "could not reach the provider: {reason}"),
+            Self::BadResponse(reason) => write!(f, "unusable response: {reason}"),
+        }
+    }
+}
+
+impl std::error::Error for ChatError {}
+
+/// Where the chat provider lives.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatConfig {
+    /// Base URL, without the trailing `/chat/completions`.
+    pub base_url: String,
+    /// Model name as the provider spells it.
+    pub model: String,
+}
+
+impl Default for ChatConfig {
+    fn default() -> Self {
+        // Any OpenAI-compatible endpoint works, which includes several
+        // self-hosted and local runtimes. Defaulting to an OpenAI URL would push
+        // users toward the one option that is not offline.
+        Self {
+            base_url: "https://api.openai.com/v1".to_owned(),
+            model: "gpt-4o-mini".to_owned(),
+        }
+    }
+}
+
+/// One message in the request.
+#[derive(Debug, Serialize)]
+struct Message<'a> {
+    role: &'a str,
+    content: &'a str,
+}
+
+/// Request body for `/chat/completions`.
+#[derive(Debug, Serialize)]
+struct ChatRequest<'a> {
+    model: &'a str,
+    messages: Vec<Message<'a>>,
+    /// Low temperature: this is a restatement task, not a creative one.
+    temperature: f32,
+    max_tokens: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct Choice {
+    message: ResponseMessage,
+    /// Why generation stopped: "stop", "length", and so on.
+    #[serde(default)]
+    finish_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ResponseMessage {
+    /// Null when the model spent its whole budget thinking and never emitted an
+    /// answer; reasoning models do this.
+    #[serde(default)]
+    content: Option<String>,
+    /// Reasoning models (Gemma, DeepSeek-R1 and others) may put text here. It is
+    /// parsed so it can be reported, never used as an answer.
+    #[serde(default)]
+    reasoning_content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatResponse {
+    choices: Vec<Choice>,
+}
+
+/// One system/user exchange with the configured provider.
+///
+/// Added so the recommendation pipeline can reuse the request shape and error
+/// mapping without duplicating them. Unlike [`comment`], the reply is returned
+/// unvalidated: there is no deterministic profile behind a web-search
+/// recommendation to check it against, so grounding is enforced by
+/// `recommend::unsupported_candidates` instead. The key is optional so local
+/// OpenAI-compatible servers (Ollama and friends) work keyless, exactly like
+/// the streaming chat transport.
+///
+/// # Errors
+/// [`ChatError`] for a missing key, auth failure, throttling, network trouble, or
+/// an unusable response.
+pub async fn complete(
+    client: &reqwest::Client,
+    config: &ChatConfig,
+    key: Option<&ChatApiKey>,
+    system: &str,
+    user: &str,
+) -> Result<String, ChatError> {
+    // Generous: reasoning models (Gemma, DeepSeek-R1) spend tokens thinking
+    // before emitting anything, and a truncated reply has no answer at all.
+    request(client, config, key, system, user, 2400).await
+}
+
+async fn request(
+    client: &reqwest::Client,
+    config: &ChatConfig,
+    key: Option<&ChatApiKey>,
+    system: &str,
+    user: &str,
+    max_tokens: u32,
+) -> Result<String, ChatError> {
+    let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
+    let body = ChatRequest {
+        model: &config.model,
+        messages: vec![
+            Message {
+                role: "system",
+                content: system,
+            },
+            Message {
+                role: "user",
+                content: user,
+            },
+        ],
+        // Low temperature: recommendations should not be creative with facts.
+        temperature: 0.3,
+        max_tokens,
+    };
+
+    let mut request = client.post(&url).json(&body);
+    if let Some(key) = key {
+        request = request.bearer_auth(key.expose());
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|err| ChatError::Offline(err.to_string()))?;
+
+    match response.status().as_u16() {
+        200..=299 => {}
+        401 | 403 => return Err(ChatError::Unauthorized),
+        429 => return Err(ChatError::Throttled),
+        other => {
+            return Err(ChatError::BadResponse(format!("HTTP {other}")));
+        }
+    }
+
+    let parsed: ChatResponse = response
+        .json()
+        .await
+        .map_err(|err| ChatError::BadResponse(err.to_string()))?;
+    let choice = parsed
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| ChatError::BadResponse("no choices returned".to_owned()))?;
+
+    match choice.message.content {
+        Some(text) if !text.trim().is_empty() => Ok(text),
+        // A reasoning model can spend the whole budget thinking and emit nothing.
+        // Saying so is far more useful than "empty response", because the fix is
+        // to raise the limit or pick a non-reasoning model.
+        _ if choice.message.reasoning_content.is_some() => Err(ChatError::BadResponse(
+            "the model used its whole reply budget on reasoning and produced no answer;              raise the token limit, or use a model that does not reason first"
+                .to_owned(),
+        )),
+        _ if choice.finish_reason.as_deref() == Some("length") => Err(ChatError::BadResponse(
+            "the reply hit the token limit before finishing".to_owned(),
+        )),
+        _ => Err(ChatError::BadResponse("empty response".to_owned())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_default_config_points_at_a_configurable_endpoint() {
+        // Not hardcoded to one vendor: several OpenAI-compatible runtimes are
+        // local, and local is what keeps this offline-capable.
+        let config = ChatConfig::default();
+        assert!(config.base_url.starts_with("https://"));
+        assert!(!config.model.is_empty());
+    }
+
+    #[test]
+    fn no_key_is_a_distinct_error_not_a_generic_failure() {
+        // The UI shows different guidance for "configure a key" and "the provider
+        // is down", so they must not collapse into one message.
+        assert_ne!(
+            ChatError::NoKey.to_string(),
+            ChatError::Throttled.to_string()
+        );
+        assert!(ChatError::NoKey.to_string().contains("key"));
+    }
+
+    #[test]
+    fn a_null_content_with_reasoning_explains_the_budget_problem() {
+        // Observed live from llama.cpp running a reasoning model: at a low token
+        // limit the model thinks, hits the cap, and emits no answer at all.
+        let parsed: ChatResponse = serde_json::from_str(
+            r#"{"choices":[{"message":{"content":null,"reasoning_content":"Thinking..."},
+                            "finish_reason":"length"}]}"#,
+        )
+        .unwrap();
+        let choice = &parsed.choices[0];
+        assert!(choice.message.content.is_none());
+        assert!(choice.message.reasoning_content.is_some());
+    }
+
+    #[test]
+    fn a_reply_with_content_and_reasoning_uses_only_the_content() {
+        // The reasoning must never be mistaken for the answer.
+        let parsed: ChatResponse = serde_json::from_str(
+            r#"{"choices":[{"message":{"content":"{\"games\":[]}","reasoning_content":"steps"},
+                            "finish_reason":"stop"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.choices[0].message.content.as_deref(),
+            Some("{\"games\":[]}")
+        );
+    }
+
+    #[test]
+    fn a_plain_provider_response_without_reasoning_still_parses() {
+        let parsed: ChatResponse = serde_json::from_str(
+            r#"{"choices":[{"message":{"content":"hello"},"finish_reason":"stop"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.choices[0].message.content.as_deref(), Some("hello"));
+        assert!(parsed.choices[0].message.reasoning_content.is_none());
+    }
+}
