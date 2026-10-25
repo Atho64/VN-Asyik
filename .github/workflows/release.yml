@@ -78,9 +78,9 @@ jobs:
             Installers are **unsigned**, so Windows SmartScreen will warn and
             Android will ask you to allow installation from an unknown source.
 
-            Known limitations: chapter detection is window-title only, no in-app
-            game hooking, and the Android APK is debug-signed unless the
-            `ANDROID_KEY_*` secrets are configured.
+            Known limitations: chapter detection is window-title only, and there
+            is no in-app game hooking. The Android APK is debug-signed unless
+            the release keystore secrets are configured.
           files: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*.exe
@@ -131,37 +131,40 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Release keystore. `secrets` cannot appear in a job-level `if:` (GitHub
-      # rejects the whole workflow with zero jobs), so the emptiness check runs
-      # in a step that always executes. Without the secret the APK is built but
-      # unsigned: it installs, yet cannot replace a properly signed install.
-      - name: decode keystore
-        env:
-          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
-        run: |
-          if [ -n "$ANDROID_KEY_BASE64" ]; then
-            echo "$ANDROID_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-            echo "keystore decoded"
-          else
-            echo "::warning::ANDROID_KEY_BASE64 is not set; the APK will be unsigned"
-          fi
-
-      - name: build apk
+      # Release keystore. Tauri v2 does not read signing values from the
+      # environment; the documented path is a keystore.properties file that
+      # app/build.gradle.kts loads. Without ANDROID_KEY_BASE64 the build still
+      # succeeds, signed with the debug key, so a fork can build without secrets.
+      - name: write keystore.properties
         env:
           ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEY_BASE64" ]; then
+            echo "::warning::ANDROID_KEY_BASE64 is not set; the APK will be debug-signed"
+            exit 0
+          fi
+          KS="$RUNNER_TEMP/release.keystore"
+          echo "$ANDROID_KEY_BASE64" | base64 -d > "$KS"
+          # Gradle resolves storeFile against src-tauri/gen/android, so an
+          # absolute path is the only form that is correct from here.
+          cat > src-tauri/gen/android/keystore.properties <<EOF
+          storeFile=$KS
+          password=${ANDROID_KEY_STORE_PASSWORD:-$ANDROID_KEY_PASSWORD}
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+          echo "keystore.properties written for alias $ANDROID_KEY_ALIAS"
+
+      - name: build apk
+        env:
           NDK_BIN: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin
           CC_aarch64_linux_android: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
           AR_aarch64_linux_android: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
         run: |
-          if [ -n "$ANDROID_KEY_BASE64" ]; then
-            export ANDROID_KEY_STORE_PATH="$RUNNER_TEMP/release.keystore"
-            export ANDROID_KEY_STORE_PASSWORD="$ANDROID_KEY_PASSWORD"
-            export ANDROID_KEY_ALIAS="$ANDROID_KEY_ALIAS"
-            export ANDROID_KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
-          fi
           # No --split-per-abi: one universal APK that installs on any ABI.
           pnpm tauri android build --apk --target aarch64
 
