@@ -71,6 +71,7 @@ jobs:
       # the notes; this job waits for it and only attaches files.
       - name: wait for the release to exist
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         run: |
           for attempt in $(seq 1 60); do
             if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
