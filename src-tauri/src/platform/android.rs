@@ -251,10 +251,14 @@ impl AndroidUsage {
     }
 }
 
+// The call shapes must match the Android implementation exactly, or every call
+// site would need a `#[cfg]`. The bodies here are immediate, so newer clippy
+// flags the `async` as unused; the allow is what keeps the two halves the same
+// shape, which is the whole point of the stub.
 #[cfg(not(target_os = "android"))]
 #[allow(
     clippy::unused_async,
-    reason = "same async interface as the Android implementation"
+    reason = "same async interface as the Android impl"
 )]
 impl AndroidUsage {
     pub async fn installed_apps() -> Result<Vec<AndroidApp>, AndroidUsageError> {

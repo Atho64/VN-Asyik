@@ -550,7 +550,7 @@ pub async fn game_routes(
                     chapter
                         .route_id
                         .as_deref()
-                        .and_then(&survivor)
+                        .and_then(survivor)
                         .is_some_and(|target| target == key)
                 })
                 .cloned()
@@ -562,7 +562,7 @@ pub async fn game_routes(
                         .route_id
                         .map(|rid| rid.to_string())
                         .as_deref()
-                        .and_then(&survivor)
+                        .and_then(survivor)
                         .is_some_and(|target| target == key)
                 })
                 .cloned()
