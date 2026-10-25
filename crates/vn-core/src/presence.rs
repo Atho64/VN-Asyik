@@ -260,6 +260,16 @@ pub struct PresenceContext {
     pub vndb_length: Option<String>,
     pub vndb_year: Option<String>,
     pub vndb_released: Option<String>,
+    /// The game's original-script title, when it differs from the shown one.
+    /// A local game can carry this too, so it is not a VNDB fact.
+    pub title_original: Option<String>,
+    /// The user's own library status ("Reading", "Completed", ...). Works for
+    /// imports and hand-added games alike, unlike `vndb_status`, which is what
+    /// the VNDB list says and is empty when the list is not linked.
+    pub status: Option<String>,
+    /// Total time recorded for this game across every session, formatted like
+    /// `{elapsed_time}` ("12:34"). Empty until something has been played.
+    pub playtime: Option<String>,
     pub elapsed_time: String,
     pub date: String,
     pub time: String,
@@ -384,6 +394,19 @@ pub fn sanitize_discord_string(input: &str) -> Option<String> {
     (capped.chars().count() >= DISCORD_TEXT_MIN_CHARS).then(|| capped.to_string())
 }
 
+/// Total playtime as `H:MM`, or minutes under an hour ("42 min").
+///
+/// Hours are not capped: a 300-hour library reads as `300:15`, which is more
+/// useful on a presence card than wrapping at 24.
+#[must_use]
+pub fn playtime_label(ms: i64) -> String {
+    let minutes = ms.max(0) / 60_000;
+    if minutes < 60 {
+        return format!("{minutes} min");
+    }
+    format!("{}:{:02}", minutes / 60, minutes % 60)
+}
+
 /// Extracts tokens map from a `PresenceContext`.
 ///
 /// Every known token is inserted, using `""` when the context has no value for
@@ -413,6 +436,12 @@ pub fn build_tokens(ctx: &PresenceContext) -> HashMap<&str, &str> {
     map.insert("vndb_length", ctx.vndb_length.as_deref().unwrap_or(""));
     map.insert("vndb_year", ctx.vndb_year.as_deref().unwrap_or(""));
     map.insert("vndb_released", ctx.vndb_released.as_deref().unwrap_or(""));
+    map.insert(
+        "title_original",
+        ctx.title_original.as_deref().unwrap_or(""),
+    );
+    map.insert("status", ctx.status.as_deref().unwrap_or(""));
+    map.insert("playtime", ctx.playtime.as_deref().unwrap_or(""));
     map.insert("elapsed_time", ctx.elapsed_time.as_str());
     map.insert("date", ctx.date.as_str());
     map.insert("time", ctx.time.as_str());
@@ -959,6 +988,62 @@ mod tests {
         };
         let act = build_activity(&settings, &ctx);
         assert_eq!(act.details.as_deref(), Some("5pb. / Nitroplus"));
+    }
+
+    #[test]
+    fn the_three_library_tags_render_from_the_context() {
+        let ctx = PresenceContext {
+            title_original: Some("CLANNAD".to_string()),
+            status: Some("Completed".to_string()),
+            playtime: Some("61:20".to_string()),
+            ..Default::default()
+        };
+        let tokens = build_tokens(&ctx);
+        assert_eq!(tokens["title_original"], "CLANNAD");
+        assert_eq!(tokens["status"], "Completed");
+        assert_eq!(tokens["playtime"], "61:20");
+    }
+
+    #[test]
+    fn a_local_game_without_vndb_still_gets_the_library_tags() {
+        // The point of `{status}` and `{playtime}` having no `vndb_` prefix: a
+        // hand-added game has both, and must not render two blank lines because
+        // it has no VNDB link.
+        let ctx = PresenceContext {
+            vn_name: "My Local VN".to_string(),
+            status: Some("Reading".to_string()),
+            playtime: Some("3 min".to_string()),
+            vndb_loaded: false,
+            ..Default::default()
+        };
+        let tokens = build_tokens(&ctx);
+        assert_eq!(tokens["vn_name"], "My Local VN");
+        assert_eq!(tokens["status"], "Reading");
+        assert_eq!(tokens["playtime"], "3 min");
+        // VNDB facts are empty, not literal braces.
+        assert_eq!(tokens["vndb_rating"], "");
+        assert_eq!(tokens["title_original"], "");
+    }
+
+    #[test]
+    fn playtime_formats_minutes_below_an_hour_and_hours_above() {
+        let settings = PresenceSettings {
+            details_mode: PresenceDetailsMode::Custom,
+            custom_details: "{playtime}".to_string(),
+            ..Default::default()
+        };
+        let at = |ms: i64| {
+            let ctx = PresenceContext {
+                playtime: Some(playtime_label(ms)),
+                ..Default::default()
+            };
+            build_activity(&settings, &ctx).details
+        };
+        assert_eq!(at(0).as_deref(), Some("0 min"));
+        assert_eq!(at(59 * 60_000).as_deref(), Some("59 min"));
+        assert_eq!(at(60 * 60_000).as_deref(), Some("1:00"));
+        assert_eq!(at(61 * 60_000 + 30_000).as_deref(), Some("1:01"));
+        assert_eq!(at(300 * 3_600_000).as_deref(), Some("300:00"));
     }
 
     #[test]

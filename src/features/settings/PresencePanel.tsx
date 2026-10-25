@@ -19,6 +19,9 @@ import type {
 /** Every token the renderer understands, in the order the hint lists them. */
 const TEMPLATE_TOKENS = [
   "{vn_name}",
+  "{title_original}",
+  "{status}",
+  "{playtime}",
   "{chapter}",
   "{route}",
   "{vndb_rating}",

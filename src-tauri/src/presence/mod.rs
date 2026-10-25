@@ -124,7 +124,12 @@ pub fn base_context(game: &Game) -> PresenceContext {
         // which made `{vndb_rating}` show the user's own number whenever they
         // had rated the game.
         my_rating: game.rating.map(|r| format!("{:.1}", f64::from(r) / 10.0)),
+        // `{status}` is this same library label; `{vndb_status}` is what the VNDB
+        // list says, which starts here as the local label and is overwritten by
+        // `context_for_game` when a linked list says otherwise.
+        status: Some(status_label(game.status).to_string()),
         vndb_status: Some(status_label(game.status).to_string()),
+        title_original: game.title_original.clone(),
         vndb_length: game
             .length_minutes
             .map(length_label)
@@ -144,6 +149,22 @@ pub fn base_context(game: &Game) -> PresenceContext {
 /// rating for `{vndb_rating}`) when the game is linked to VNDB.
 pub async fn context_for_game(pool: &sqlx::SqlitePool, game: &Game) -> PresenceContext {
     let mut ctx = base_context(game);
+    // Read for every game, VNDB-linked or not: `{playtime}` is the user's own
+    // time, which a hand-added local game has just as much of.
+    //
+    // Joins `games` and excludes deleted rows (AGENTS.md §5): a session whose
+    // game is gone must not leak into another card's total.
+    let counted: Option<i64> = sqlx::query_scalar(
+        "SELECT SUM(ps.counted_ms) FROM play_sessions ps          JOIN games g ON g.id = ps.game_id AND g.deleted = 0          WHERE ps.game_id = ? AND ps.deleted = 0",
+    )
+    .bind(game.meta.id.to_string())
+    .fetch_one(pool)
+    .await
+    .ok()
+    .flatten();
+    if let Some(ms) = counted.filter(|ms| *ms > 0) {
+        ctx.playtime = Some(vn_core::presence::playtime_label(ms));
+    }
     let Some(ref vn_id) = game.vndb_id else {
         return ctx;
     };
