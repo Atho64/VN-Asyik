@@ -35,16 +35,23 @@ jobs:
       - name: create the pre-release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release already exists"
             exit 0
           fi
+          # The heading is filled from the tag, never typed by hand: the v0.1.2
+          # release shipped with "v0.1.0" in its body because the template
+          # carried a literal version.
+          sed "s/\$TAG/${TAG}/g" .github/release-notes/body.md > "$RUNNER_TEMP/notes.md"
+          head -1 "$RUNNER_TEMP/notes.md"
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "VN Asyik $GITHUB_REF_NAME" \
             --prerelease \
-            --notes-file .github/release-notes/body.md
+            --notes-file "${{ runner.temp }}/notes.md"
+
 
   windows:
     needs: create-release

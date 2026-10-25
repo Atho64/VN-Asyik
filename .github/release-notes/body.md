@@ -1,4 +1,4 @@
-VN Asyik v0.1.0 — pre-release.
+VN Asyik $TAG — pre-release.
 
 ## Android
 
@@ -20,6 +20,7 @@ certificate. Windows SmartScreen will warn, and you will have to click
   there are manual.
 - No in-app game hooking. Live text comes from LunaTranslator's own network
   service.
+- Character traits are hidden above spoiler level 0 until you ask for them.
 - Upgrading from a build made before the rename to `com.atho.vnasyik`:
   Android treats it as a different app, so export with
   *Settings → Backup & transfer* in the old build and import here. On Windows,
