@@ -17,6 +17,12 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+# softprops/action-gh-release creates a release, which needs write access. The
+# default token is read-only, and without this the job dies with
+# "Resource not accessible by integration".
+permissions:
+  contents: write
+
 jobs:
   windows:
     name: windows (msi + nsis)
@@ -55,8 +61,8 @@ jobs:
           name: windows-installers
           if-no-files-found: error
           path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
 
       # Attach to the GitHub release, creating it as a pre-release when the tag
       # has no release yet. Unsigned, and the notes say so.
@@ -76,8 +82,8 @@ jobs:
             game hooking, and the Android APK is debug-signed unless the
             `ANDROID_KEY_*` secrets are configured.
           files: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
 
   android:
     name: android (apk)
