@@ -348,7 +348,10 @@ pub async fn commit_events(
             let started_at = interval.start_ms.max(selection.cursor_ms);
             let ended_at = interval.end_ms.min(until_ms);
             let counted_ms = ended_at - started_at;
-            if counted_ms <= 0 {
+            // A glance is not a session. `UsageStats` reports every foreground
+            // switch, so without this floor the list fills with `0:00` rows for
+            // games that were never played (see `MIN_SESSION_MS`).
+            if !vn_core::usage::is_session_worth_recording(counted_ms) {
                 continue;
             }
             insert_android_session(
@@ -550,6 +553,59 @@ mod tests {
         .fetch_one(pool)
         .await
         .expect("total")
+    }
+
+    #[tokio::test]
+    async fn a_two_second_foreground_stretch_writes_no_session_row() {
+        // The reported bug: a game flicked to for a moment left a `0:00` row,
+        // and doing that repeatedly filled the session list with entries for
+        // games that were never read. The interval is real; the row is not.
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Glanced").await;
+        let selected = selection(game);
+
+        let events = vec![
+            event(Some("org.example.runner"), 1, 2_000),
+            event(None, 2, 4_000),
+        ];
+        apply_query_result(db.pool(), &device, selected, 5_000, true, Ok(events))
+            .await
+            .expect("replay");
+
+        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM play_sessions")
+            .fetch_one(db.pool())
+            .await
+            .expect("count");
+        assert_eq!(rows, 0, "a 2 s glance must not create a session");
+        assert_eq!(total(db.pool(), game).await, 0);
+    }
+
+    #[tokio::test]
+    async fn a_minute_of_reading_is_still_recorded() {
+        // The other side of the floor: the fix must not swallow real time.
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Read").await;
+        let selected = selection(game);
+
+        let events = vec![
+            event(Some("org.example.runner"), 1, 2_000),
+            event(None, 2, 62_000),
+        ];
+        apply_query_result(db.pool(), &device, selected, 63_000, true, Ok(events))
+            .await
+            .expect("replay");
+
+        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM play_sessions")
+            .fetch_one(db.pool())
+            .await
+            .expect("count");
+        assert_eq!(rows, 1, "60 s of reading is a session");
+        // 2_000 -> 62_000 is sixty seconds of foreground, plus the row starts at
+        // the selection cursor, so the exact figure is pinned rather than
+        // approximated.
+        assert_eq!(total(db.pool(), game).await, 61_000);
     }
 
     #[tokio::test]

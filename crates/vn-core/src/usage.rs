@@ -97,6 +97,31 @@ impl UsageInterval {
     }
 }
 
+/// Shortest foreground stretch worth a session row.
+///
+/// `UsageStats` reports every foreground switch, so glancing at a game for two
+/// seconds between two other apps produces a real interval, and writing a row
+/// for it made the session list read as a wall of `0:00` entries for games the
+/// user had not played.
+///
+/// Five seconds, not a minute. A per-interval floor at a minute was tried first
+/// and it deleted real reading: a reader who alt-tabs between VN and chat
+/// produces many legitimate short stretches whose *sum* is meaningful, and seven
+/// existing replay tests measured exactly that. Five seconds discards only the
+/// accidental switch — long enough to rule out a stray tap, short enough that no
+/// plausible reading habit is lost. The list can still show a `0:00` row for a
+/// 30-second glance, which is honest: it happened.
+pub const MIN_SESSION_MS: i64 = 5_000;
+
+/// Whether a foreground interval deserves a `play_sessions` row.
+///
+/// Pure so the threshold is testable without Android, and so the native path and
+/// the tests cannot disagree about what "long enough" means.
+#[must_use]
+pub fn is_session_worth_recording(duration_ms: i64) -> bool {
+    duration_ms >= MIN_SESSION_MS
+}
+
 /// Build intervals for events belonging to `packages` only.
 ///
 /// `end_cap_ms` is the exclusive end of the queried window. An interval still
@@ -462,5 +487,38 @@ mod tests {
             0,
             "intervals_for(&pkg(), &events, 20_000) should be empty"
         );
+    }
+
+    #[test]
+    fn a_glance_between_two_other_apps_is_not_a_session() {
+        // UsageStats reports every foreground switch. A two-second look at a
+        // game used to become a play_sessions row reading 0:00, which is what
+        // filled the Android list with entries for games nobody played.
+        assert!(!is_session_worth_recording(2_000));
+        assert!(!is_session_worth_recording(0));
+        assert!(!is_session_worth_recording(-5));
+    }
+
+    #[test]
+    fn the_threshold_is_inclusive_on_both_sides() {
+        // Pinned either side of the boundary: one millisecond must not flip the
+        // decision, or a real stretch of reading could vanish.
+        assert!(!is_session_worth_recording(MIN_SESSION_MS - 1));
+        assert!(is_session_worth_recording(MIN_SESSION_MS));
+        assert!(is_session_worth_recording(MIN_SESSION_MS + 1));
+    }
+
+    #[test]
+    fn the_floor_rejects_a_stray_tap_but_keeps_short_reading() {
+        // The balance this constant strikes: two seconds is a mis-tap, fifteen
+        // is somebody reading and alt-tabbing.
+        assert!(!is_session_worth_recording(2_000));
+        assert!(is_session_worth_recording(15_000));
+    }
+
+    #[test]
+    fn a_real_reading_stretch_is_always_kept() {
+        assert!(is_session_worth_recording(5 * 60_000));
+        assert!(is_session_worth_recording(2 * 3_600_000));
     }
 }
