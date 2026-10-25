@@ -4,6 +4,8 @@ A visual novel library and playtime tracker for Windows and Android. It reads
 from VNDB, keeps everything in a local SQLite database, and works with no
 network. Rust and Tauri on the backend, React on the front.
 
+**English** · [Bahasa Indonesia](README.id.md)
+
 ![The library grid, showing imported games with their covers and playtime](docs/screenshot-library.jpg)
 
 ## What it does
