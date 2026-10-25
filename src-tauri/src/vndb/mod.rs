@@ -180,6 +180,104 @@ impl VndbClient {
         Ok(result.results.into_iter().next())
     }
 
+    /// The cast for a VN, with the role each character plays in *this* VN.
+    ///
+    /// **One request.** `POST /character` accepts a `vn` filter and returns the
+    /// whole cast with `vns.role` included, which is the only way to get a role:
+    /// `POST /vn` reaches characters through `va` (one row per voice actor) and
+    /// omits the role entirely.
+    ///
+    /// An earlier version asked for one character at a time, having found that the
+    /// documented `id` filter rejects an array. That worked but cost a request per
+    /// character — 23 for CLANNAD — and at the 1.5 s documented spacing it made a
+    /// metadata refresh take minutes per game. The `vn` filter does the same job in
+    /// one call.
+    ///
+    /// `va` is still used as the fallback: it carries a portrait, and the character
+    /// endpoint is asked for one too, but a VN whose `va` is present while the cast
+    /// query fails should still show something.
+    ///
+    /// # Errors
+    /// Propagates network, throttling and decoding failures.
+    pub async fn get_vn_cast(
+        &self,
+        vn_id: &str,
+        va: &[dto::VoiceActor],
+    ) -> Result<Vec<dto::Character>, VndbError> {
+        let mut cast: Vec<dto::Character> = Vec::new();
+        let mut page = 1_u32;
+        loop {
+            let query = dto::CharacterQuery {
+                filters: serde_json::json!(["vn", "=", ["id", "=", vn_id]]),
+                // Traits and measurements come from this same endpoint; asking
+                // for them here is what keeps the cast to one request per VN.
+                fields: "id,name,original,image.url,vns.id,vns.role,traits.id,traits.name,traits.group_name,traits.spoiler,traits.sexual,traits.lie,birthday,sex,gender,height,weight,blood_type"
+                    .to_owned(),
+                results: 100,
+                page,
+            };
+            let result: dto::CharacterQueryResult = self.post_json("character", &query).await?;
+            for entry in &result.results {
+                let role = entry
+                    .vns
+                    .iter()
+                    .find(|v| v.id.as_deref() == Some(vn_id))
+                    .and_then(|v| v.role.clone());
+                cast.push(dto::Character {
+                    id: entry.id.clone(),
+                    name: entry.name.clone(),
+                    original: entry.original.clone(),
+                    role,
+                    image: entry.image.clone(),
+                    traits: entry.traits.clone(),
+                    birthday: entry.birthday.clone(),
+                    height: entry.height,
+                    weight: entry.weight,
+                    blood_type: entry.blood_type.clone(),
+                    voiced_by: None,
+                });
+            }
+            if !result.more || page >= 10 {
+                break;
+            }
+            page += 1;
+        }
+
+        // Fall back to the `va` list when the cast query came back empty but the VN
+        // did report voice actors: a blank card is worse than a partial one.
+        if cast.is_empty() {
+            let mut seen = std::collections::HashSet::new();
+            for entry in va {
+                if let Some(character) = entry.character.clone()
+                    && let Some(id) = character.id.clone()
+                    && seen.insert(id)
+                {
+                    cast.push(character);
+                }
+            }
+        }
+
+        // Voice actors live on the VN's `va` relation, not on the character, so
+        // they are joined here rather than costing another request per person.
+        for character in &mut cast {
+            let Some(id) = character.id.as_deref() else {
+                continue;
+            };
+            character.voiced_by = va
+                .iter()
+                .find(|entry| {
+                    entry
+                        .character
+                        .as_ref()
+                        .and_then(|c| c.id.as_deref())
+                        .is_some_and(|cid| cid == id)
+                })
+                .and_then(|entry| entry.staff.as_ref())
+                .and_then(|staff| staff.name.clone().or_else(|| staff.original.clone()));
+        }
+        Ok(cast)
+    }
+
     /// Validate a token and return the account it belongs to.
     ///
     /// # Errors

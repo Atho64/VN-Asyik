@@ -228,6 +228,18 @@ export const vndbExtLinkSchema = z.object({
 });
 export type VndbExtLink = z.infer<typeof vndbExtLinkSchema>;
 
+/** One trait on a character, grouped by `group_name` (Hair, Eyes, ...). */
+export const characterTraitSchema = z.object({
+  id: z.string().nullable().default(null),
+  name: z.string().nullable().default(null),
+  group_name: z.string().nullable().default(null),
+  /** 0 safe, 1 mild, 2 major. Absent means 0. */
+  spoiler: z.number().nullable().default(null),
+  sexual: z.boolean().nullable().default(null),
+  lie: z.boolean().nullable().default(null),
+});
+export type CharacterTrait = z.infer<typeof characterTraitSchema>;
+
 /** One character on a VN's cast list. */
 export const vndbCharacterSchema = z.object({
   id: z.string().nullable().default(null),
@@ -236,6 +248,13 @@ export const vndbCharacterSchema = z.object({
   /** `main`, `primary`, `side` or `appears`. */
   role: z.string().nullable().default(null),
   image: vndbImageSchema.nullable().default(null),
+  traits: characterTraitSchema.array().default([]),
+  /** `[month, day]`, when known. */
+  birthday: z.number().array().nullable().default(null),
+  height: z.number().nullable().default(null),
+  weight: z.number().nullable().default(null),
+  blood_type: z.string().nullable().default(null),
+  voiced_by: z.string().nullable().default(null),
 });
 export type VndbCharacter = z.infer<typeof vndbCharacterSchema>;
 

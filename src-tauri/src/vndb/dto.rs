@@ -303,6 +303,135 @@ pub struct Character {
     pub role: Option<String>,
     /// Portrait image.
     pub image: Option<Image>,
+    /// Traits, filtered for spoilers at display time.
+    #[serde(default)]
+    pub traits: Vec<CharacterTrait>,
+    /// Birthday as `[month, day]`, when known.
+    #[serde(default)]
+    pub birthday: Option<Vec<i64>>,
+    /// Height in centimetres.
+    #[serde(default)]
+    pub height: Option<i64>,
+    /// Weight in kilograms.
+    #[serde(default)]
+    pub weight: Option<i64>,
+    /// Blood type, e.g. `a`.
+    #[serde(default)]
+    pub blood_type: Option<String>,
+    /// Voice actor's name, joined from the VN's `va` relation.
+    #[serde(default)]
+    pub voiced_by: Option<String>,
+}
+
+/// One trait applied to a character.
+///
+/// A character carries dozens — CLANNAD's cast totals 1 138 rows — so they are
+/// stored whole and filtered at display time rather than pruned here. `spoiler`
+/// is the field that matters: level 0 is safe, 1 and 2 reveal plot.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CharacterTrait {
+    /// Trait id, e.g. `i5`.
+    pub id: Option<String>,
+    /// Trait name, e.g. `Blue`.
+    pub name: Option<String>,
+    /// Parent group, e.g. `Hair`, `Eyes`, `Subject of`.
+    pub group_name: Option<String>,
+    /// 0 safe, 1 mild, 2 major. Absent means 0.
+    pub spoiler: Option<i64>,
+    /// Whether the trait is itself sexual content.
+    pub sexual: Option<bool>,
+    /// Whether the trait is a lie the character tells about themselves.
+    pub lie: Option<bool>,
+}
+
+/// One VN's role for a character, as returned from `POST /character`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CharacterVnRole {
+    /// VN id, e.g. `v17`.
+    pub id: Option<String>,
+    /// `main`, `primary`, `side` or `appears`, for this VN.
+    pub role: Option<String>,
+}
+
+/// A character entry from `POST /character`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CharacterEntry {
+    /// Character id.
+    pub id: Option<String>,
+    /// Name as displayed.
+    pub name: Option<String>,
+    /// Original-script name.
+    pub original: Option<String>,
+    /// Portrait, when requested.
+    pub image: Option<Image>,
+    /// Traits, when requested.
+    #[serde(default)]
+    pub traits: Vec<CharacterTrait>,
+    /// Birthday as `[month, day]`, when known.
+    pub birthday: Option<Vec<i64>>,
+    /// Biological sex, as `[real, displayed]`. The two differ for spoiler
+    /// reasons, which is why this is not a single value.
+    pub sex: Option<Vec<String>>,
+    /// Gender identity, same `[real, displayed]` shape as `sex`.
+    pub gender: Option<Vec<String>>,
+    /// Height in centimetres.
+    pub height: Option<i64>,
+    /// Weight in kilograms.
+    pub weight: Option<i64>,
+    /// Blood type, e.g. `a`.
+    pub blood_type: Option<String>,
+    /// Which VNs this character appears in, with the role in each.
+    #[serde(default)]
+    pub vns: Vec<CharacterVnRole>,
+}
+
+/// Query body for `POST /character`.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct CharacterQuery {
+    /// Filter predicates, in the documented array form.
+    pub filters: serde_json::Value,
+    /// Comma-separated field list.
+    pub fields: String,
+    /// How many results to return.
+    pub results: u32,
+    /// Page number, starting at 1.
+    pub page: u32,
+}
+
+/// Result envelope for `POST /character`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CharacterQueryResult {
+    /// The matched characters.
+    #[serde(default)]
+    pub results: Vec<CharacterEntry>,
+    /// Whether another page exists.
+    #[serde(default)]
+    pub more: bool,
+}
+
+/// One voice-actor relation on a VN.
+///
+/// `POST /vn` has no top-level `characters` field — verified against the live
+/// API, which rejects it with "Field 'characters' not found". Characters are only
+/// reachable through `va`, one entry per voice actor, so the *same* character
+/// appears several times when it was voiced by several people.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct VoiceActor {
+    /// The character being voiced.
+    pub character: Option<Character>,
+    /// Who voiced them. Absent for unvoiced characters.
+    pub staff: Option<StaffCredit>,
+}
+
+/// A minimal staff entry, as it appears on a voice-actor relation.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct StaffCredit {
+    /// Staff id, e.g. `s123`.
+    pub id: Option<String>,
+    /// Romanised name.
+    pub name: Option<String>,
+    /// Original-script name.
+    pub original: Option<String>,
 }
 
 /// A visual novel entry.
@@ -357,7 +486,13 @@ pub struct Vn {
     /// Releases, only when the field was requested.
     #[serde(default)]
     pub releases: Vec<Release>,
-    /// Characters, only when the field was requested.
+    /// Voice-actor relations, the only route to a VN's characters.
+    ///
+    /// The same character appears once per voice actor, so callers deduplicate by
+    /// id before treating this as a cast.
+    #[serde(default)]
+    pub va: Vec<VoiceActor>,
+    /// The cast, filled by the client after a second query for roles.
     #[serde(default)]
     pub characters: Vec<Character>,
     /// Developers, only when the field was requested.
@@ -431,7 +566,7 @@ pub const SEARCH_FIELDS: &str = "title,alttitle,titles.title,titles.lang,titles.
 /// flagging votes. Thumbnails are deliberately *not* requested for screenshots:
 /// the app caches one downscaled copy locally and serves it from disk, so a
 /// second remote variant would be a wasted download and a second failure path.
-pub const DETAIL_FIELDS: &str = "title,alttitle,titles.title,titles.lang,titles.latin,titles.official,titles.main,aliases,olang,devstatus,released,languages,platforms,image.id,image.url,image.sexual,image.violence,image.dims,image.thumbnail,image.thumbnail_dims,image.votecount,length,length_minutes,length_votes,description,rating,average,votecount,developers.id,developers.name,developers.original,developers.type,extlinks.url,extlinks.label,extlinks.name,relations.id,relations.relation,relations.relation_official,relations.title,tags.id,tags.name,tags.category,tags.rating,tags.spoiler,tags.lie,screenshots.id,screenshots.url,screenshots.sexual,screenshots.violence,screenshots.dims";
+pub const DETAIL_FIELDS: &str = "title,alttitle,titles.title,titles.lang,titles.latin,titles.official,titles.main,aliases,olang,devstatus,released,languages,platforms,image.id,image.url,image.sexual,image.violence,image.dims,image.thumbnail,image.thumbnail_dims,image.votecount,length,length_minutes,length_votes,description,rating,average,votecount,developers.id,developers.name,developers.original,developers.type,extlinks.url,extlinks.label,extlinks.name,relations.id,relations.relation,relations.relation_official,relations.title,tags.id,tags.name,tags.category,tags.rating,tags.spoiler,tags.lie,screenshots.id,screenshots.url,screenshots.sexual,screenshots.violence,screenshots.dims,va.character.id,va.character.name,va.character.original,va.character.image.url,va.character.image.sexual,va.character.image.violence,va.staff.id,va.staff.name,va.staff.original";
 
 #[cfg(test)]
 mod tests {
@@ -597,6 +732,12 @@ mod tests {
             "devstatus",
             "image.thumbnail",
             "titles.latin",
+            // The cast card needs these, and a field dropped from the list is a
+            // silently blank row rather than a compile error -- which is exactly
+            // how `characters_json` sat empty for every imported game.
+            "va.character.id",
+            "va.character.name",
+            "va.character.image.url",
         ] {
             assert!(DETAIL_FIELDS.contains(field), "{field} is not requested");
         }

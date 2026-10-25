@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { AppContext } from "@/app/AppProvider";
 import { createTranslator } from "@/i18n";
 import { CastCard } from "./CastCard";
@@ -21,6 +22,12 @@ function character(overrides: Partial<VndbCharacter>): VndbCharacter {
       thumbnail: null,
       thumbnail_dims: null,
     },
+    traits: [],
+    birthday: null,
+    height: null,
+    weight: null,
+    blood_type: null,
+    voiced_by: null,
     ...overrides,
   };
 }
@@ -74,14 +81,40 @@ describe("CastCard", () => {
     );
     renderCast(many);
     expect(screen.getByText("Character 0")).toBeInTheDocument();
+    // The tail is not rendered at all now: a button reveals it, rather than a
+    // <details> that keeps its content in the DOM while collapsed.
+    expect(screen.queryByText("Character 19")).not.toBeInTheDocument();
     expect(screen.getByText("8 more")).toBeInTheDocument();
-    // The tail is inside the collapsed <details>, so it is in the document but
-    // not rendered. Asserting absence would be wrong: jsdom keeps collapsed
-    // disclosure content in the DOM.
-    const tail = screen.getByText("Character 19");
-    const disclosure = tail.closest("details");
-    expect(disclosure).not.toBeNull();
-    expect(disclosure?.open).toBe(false);
+  });
+
+  it("opens a sheet with the details when a character is clicked", async () => {
+    // The page used to expand each entry inline, which buried the rest of the
+    // screen under one character's 90 traits. The sheet keeps the list scannable.
+    const user = userEvent.setup();
+    renderCast([
+      character({
+        birthday: [5, 13],
+        height: 160,
+        blood_type: "a",
+        voiced_by: "Nakahara Mai",
+        traits: [
+          { id: "i1", name: "Blue", group_name: "Hair", spoiler: 0, sexual: false, lie: false },
+          { id: "i2", name: "Murder", group_name: "Subject of", spoiler: 2, sexual: false, lie: false },
+        ],
+      }),
+    ]);
+
+    await user.click(screen.getByRole("button", { name: /Okabe Rintarou/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText("May 13")).toBeInTheDocument();
+    });
+    expect(screen.getByText("160 cm")).toBeInTheDocument();
+    expect(screen.getByText("Nakahara Mai")).toBeInTheDocument();
+    expect(screen.getByText("Blue")).toBeInTheDocument();
+    // The spoiler trait is withheld until the reveal is used.
+    expect(screen.queryByText("Murder")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 spoiler trait/)).toBeInTheDocument();
   });
 
   it("skips an entry that has no name at all", () => {

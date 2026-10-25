@@ -138,7 +138,18 @@ async fn fetch_detail(state: &State<'_, AppState>, vn_id: &str) -> CommandResult
     }
 
     match client(state).get_vn(vn_id, DETAIL_FIELDS).await {
-        Ok(Some(vn)) => {
+        Ok(Some(mut vn)) => {
+            // The cast needs a second request: `/vn` only reaches characters
+            // through `va` and omits their role. Cached with the rest, so a
+            // refresh is what repopulates a row stored as `[]`.
+            // The cast needs a second request: `/vn` reaches characters only
+            // through `va`, and `va` omits the role. Failures are logged rather
+            // than swallowed: `unwrap_or_default()` here once stored `[]` for
+            // every game and the only symptom was a card that never appeared.
+            match client(state).get_vn_cast(vn_id, &vn.va).await {
+                Ok(cast) => vn.characters = cast,
+                Err(err) => eprintln!("vndb cast for {vn_id} failed: {err}"),
+            }
             if let Ok(serialised) = serde_json::to_string(&vn) {
                 cache::put(pool, &cache_key, &serialised, DETAIL_TTL_MS, timestamp).await?;
             }
@@ -194,7 +205,18 @@ async fn fetch_detail_fresh(state: &State<'_, AppState>, vn_id: &str) -> Command
     let timestamp = now()?;
 
     match client(state).get_vn(vn_id, DETAIL_FIELDS).await {
-        Ok(Some(vn)) => {
+        Ok(Some(mut vn)) => {
+            // The cast needs a second request: `/vn` only reaches characters
+            // through `va` and omits their role. Cached with the rest, so a
+            // refresh is what repopulates a row stored as `[]`.
+            // The cast needs a second request: `/vn` reaches characters only
+            // through `va`, and `va` omits the role. Failures are logged rather
+            // than swallowed: `unwrap_or_default()` here once stored `[]` for
+            // every game and the only symptom was a card that never appeared.
+            match client(state).get_vn_cast(vn_id, &vn.va).await {
+                Ok(cast) => vn.characters = cast,
+                Err(err) => eprintln!("vndb cast for {vn_id} failed: {err}"),
+            }
             if let Ok(serialised) = serde_json::to_string(&vn) {
                 cache::put(pool, &cache_key, &serialised, DETAIL_TTL_MS, timestamp).await?;
             }
@@ -507,8 +529,13 @@ pub(crate) async fn store_detail(
     .bind(json(&|| encode_list(&payload.languages)))
     .bind(json(&|| encode_list(&payload.platforms)))
     .bind(json(&|| encode_list(&payload.tags)))
+    // `releases_json` stays empty on purpose: nothing renders releases, and
+    // `DetailPayload` has no field for them. `characters_json` was hardcoded to
+    // `"[]"` the same way while the data *was* being fetched, which is why the
+    // cast card never appeared for any game. A value bound to a literal cannot
+    // fail to compile and cannot fail at runtime.
     .bind("[]")
-    .bind("[]")
+    .bind(json(&|| encode_list(&payload.characters)))
     .bind(json(&|| encode_list(&payload.screenshots)))
     .bind(json(&|| encode_list(&payload.developers)))
     .bind(json(&|| encode_list(&payload.extlinks)))
@@ -1297,6 +1324,30 @@ mod detail_storage_tests {
                 violence: Some(0.0),
                 ..Image::default()
             }],
+            characters: vec![crate::vndb::dto::Character {
+                id: Some("c31".to_owned()),
+                name: Some("Matsunaga Sara".to_owned()),
+                original: Some("松永 沙羅".to_owned()),
+                role: Some("primary".to_owned()),
+                image: Some(Image {
+                    url: Some("https://t.vndb.org/ch/90/119990.jpg".to_owned()),
+                    ..Image::default()
+                }),
+                // Detail fields the panel renders; the test asserts they survive
+                // the write, which is the class of bug that kept the cast empty.
+                traits: vec![crate::vndb::dto::CharacterTrait {
+                    id: Some("i5".to_owned()),
+                    name: Some("Blue".to_owned()),
+                    group_name: Some("Hair".to_owned()),
+                    spoiler: Some(0),
+                    ..Default::default()
+                }],
+                birthday: Some(vec![5, 13]),
+                height: Some(160),
+                weight: Some(48),
+                blood_type: Some("a".to_owned()),
+                voiced_by: Some("Nakahara Mai".to_owned()),
+            }],
             ..Vn::default()
         }
     }
@@ -1347,6 +1398,36 @@ mod detail_storage_tests {
             "the link the UI opens comes from here"
         );
         assert_eq!(payload.screenshots[0].id.as_deref(), Some("sf190"));
+        // The cast is fetched by a second request and stored in its own column.
+        // It sat as a hardcoded `"[]"` literal for every import ever made: the
+        // column existed, the struct carried the data, and the card never
+        // appeared. Asserting the payload alone would not have caught it, because
+        // `from_vn` reads the struct, not the row -- so the column is read too.
+        assert_eq!(payload.characters.len(), 1);
+        assert_eq!(
+            payload.characters[0].name.as_deref(),
+            Some("Matsunaga Sara")
+        );
+        assert_eq!(payload.characters[0].role.as_deref(), Some("primary"));
+        assert_eq!(payload.characters[0].height, Some(160));
+        assert_eq!(payload.characters[0].blood_type.as_deref(), Some("a"));
+        assert_eq!(
+            payload.characters[0].voiced_by.as_deref(),
+            Some("Nakahara Mai")
+        );
+        assert_eq!(payload.characters[0].traits.len(), 1);
+        assert_eq!(
+            payload.characters[0].traits[0].group_name.as_deref(),
+            Some("Hair")
+        );
+
+        let stored: (String,) =
+            sqlx::query_as("SELECT characters_json FROM vndb_details WHERE vn_id = 'v17'")
+                .fetch_one(db.pool())
+                .await
+                .expect("characters column");
+        assert!(stored.0.contains("Matsunaga Sara"), "got {}", stored.0);
+        assert_ne!(stored.0, "[]", "the cast column must not be a literal");
     }
 
     #[tokio::test]
