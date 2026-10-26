@@ -99,6 +99,7 @@ jobs:
         run: |
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.3.13750724"
           echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.3.13750724" >> "$GITHUB_ENV"
+          echo "$ANDROID_SDK_ROOT/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -113,9 +114,14 @@ jobs:
       # Compiling the Rust crate for the Android target is the part CI can prove
       # without signing keys or an emulator. A full APK build runs on release.
       - name: cargo check for android target
-        run: cargo check --target aarch64-linux-android -p vn-tracker
+        run: |
+          cargo check --target aarch64-linux-android -p vn-tracker
+          cargo check --target armv7-linux-androideabi -p vn-tracker
         env:
           NDK_BIN: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin
           CC_aarch64_linux_android: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
           AR_aarch64_linux_android: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CC_armv7_linux_androideabi: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang
+          AR_armv7_linux_androideabi: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang
