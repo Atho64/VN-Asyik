@@ -282,10 +282,15 @@ pub struct PresenceContext {
     /// When present it wins over [`Self::cover_url`], which only ever carries a
     /// public URL Discord can fetch as-is.
     pub rpc_image: Option<String>,
-    /// Whether the game has VNDB facts loaded yet. `EwE` shows "Reading" /
-    /// "Loading VNDB data..." until they arrive, instead of a generic placeholder
-    /// that looks like a rendering failure.
-    pub vndb_loaded: bool,
+    /// Whether this game is linked to a VNDB entry at all.
+    ///
+    /// Two different situations must not collapse into one flag, and they did
+    /// under the old name `vndb_loaded`: a *linked* game whose cached details have
+    /// not arrived yet is genuinely loading, while an *unlinked* game will never
+    /// load anything. The card promises "Loading VNDB data..." only for the first;
+    /// a hand-added or since-unlinked game falls back to the local facts it has,
+    /// instead of a placeholder it can never clear.
+    pub vndb_linked: bool,
     /// The game is running but another window has focus.
     ///
     /// The card is still shown when the settings allow it; this only lets a
@@ -303,6 +308,21 @@ pub struct PresenceContext {
     /// not march in lockstep (`EwE` keeps one cursor per field for the same
     /// reason).
     pub state_cycle_index: u32,
+}
+
+impl PresenceContext {
+    /// Whether any VNDB-sourced fact is actually present.
+    ///
+    /// `vndb_length` is deliberately excluded: it is filled from the game's own
+    /// `length_minutes` for linked and unlinked games alike, so it says nothing
+    /// about whether VNDB answered.
+    #[must_use]
+    pub fn has_vndb_facts(&self) -> bool {
+        self.vndb_developer.is_some()
+            || self.vndb_rating.is_some()
+            || self.vndb_year.is_some()
+            || self.vndb_released.is_some()
+    }
 }
 
 /// A per-game override of [`PresenceSettings`].
@@ -559,11 +579,23 @@ pub const VNDB_FACT_COUNT: u32 = 4;
 /// This is the built-in list used when [`PresenceSettings::vndb_details_items`]
 /// is empty. A user list is rendered through [`render_rotating`] instead.
 fn vndb_fact(index: u32, ctx: &PresenceContext) -> Option<String> {
-    let text = match index % VNDB_FACT_COUNT {
-        0 => ctx.vndb_developer.clone(),
-        1 => ctx.vndb_rating.clone().map(|r| format!("{r} / 10")),
-        2 => ctx.vndb_length.clone(),
-        _ => ctx.vndb_year.clone(),
+    let text = if ctx.vndb_linked {
+        match index % VNDB_FACT_COUNT {
+            0 => ctx.vndb_developer.clone(),
+            1 => ctx.vndb_rating.clone().map(|r| format!("{r} / 10")),
+            2 => ctx.vndb_length.clone(),
+            _ => ctx.vndb_year.clone(),
+        }
+    } else {
+        // No VNDB entry behind this game, so the automatic line draws on the
+        // facts the library does have. Without this the details line fell back to
+        // the generic noun, which reads as a rendering failure.
+        match index % VNDB_FACT_COUNT {
+            0 => ctx.playtime.clone(),
+            1 => ctx.status.clone(),
+            2 => ctx.vndb_length.clone(),
+            _ => None,
+        }
     };
     text.filter(|t| !t.trim().is_empty())
 }
@@ -690,7 +722,10 @@ fn builtin_vndb_state(ctx: &PresenceContext) -> Option<String> {
         parts.push(chapter.clone());
     }
     if parts.is_empty() {
-        return ctx.vndb_status.clone();
+        // `vndb_status` carries the VNDB list label for a linked game and the
+        // library label for an unlinked one, so it comes first; `status` is the
+        // same local label and is the fallback for a context built without it.
+        return ctx.vndb_status.clone().or_else(|| ctx.status.clone());
     }
     Some(parts.join(" - "))
 }
@@ -725,10 +760,12 @@ fn render_lines(
             ),
         ),
         PresenceDetailsMode::Vndb => {
-            // No VNDB link means no facts to draw on. `EwE` shows placeholders
-            // here rather than an empty card, and the card must not fall back to
-            // the game title, which the title line already carries.
-            if !ctx.vndb_loaded {
+            // The placeholders exist for one situation: a game that *is* linked to
+            // VNDB but whose details have not been cached yet, where "Loading VNDB
+            // data..." is true and will resolve itself. A game with no link is not
+            // waiting for anything, so it falls through to the local facts below
+            // instead of promising a load that will never finish.
+            if ctx.vndb_linked && !ctx.has_vndb_facts() {
                 let (details, state) = (
                     sanitize_discord_string(&settings.vndb_loading_details),
                     sanitize_discord_string(&settings.vndb_loading_state),
@@ -822,14 +859,21 @@ pub fn build_activity(settings: &PresenceSettings, ctx: &PresenceContext) -> Pre
     // as `rpc_image`, which the Tauri layer already ran through that same policy
     // (explicit art only ever arrives there as a blurred upload, never the
     // original bytes).
-    let large_image = if let Some(ref rpc_img) = ctx.rpc_image {
-        Some(rpc_img.clone()).filter(|u| u.starts_with("https://") || u.starts_with("http://"))
-    } else if settings.show_cover && !ctx.is_cover_explicit {
-        ctx.cover_url
-            .as_ref()
-            .filter(|u| u.starts_with("https://") || u.starts_with("http://"))
-            .cloned()
+    let large_image = if settings.show_cover {
+        if let Some(ref rpc_img) = ctx.rpc_image {
+            Some(rpc_img.clone()).filter(|u| u.starts_with("https://") || u.starts_with("http://"))
+        } else if !ctx.is_cover_explicit {
+            ctx.cover_url
+                .as_ref()
+                .filter(|u| u.starts_with("https://") || u.starts_with("http://"))
+                .cloned()
+        } else {
+            None
+        }
     } else {
+        // The switch is the last word. A hosted upload skips the concealment
+        // check below by design (it already went through it), but it used to skip
+        // this toggle too, so turning cover art off left the card image in place.
         None
     };
 
@@ -1003,7 +1047,7 @@ mod tests {
         let ctx = PresenceContext {
             vn_name: "Steins;Gate".to_string(),
             vndb_developer: Some("5pb. / Nitroplus".to_string()),
-            vndb_loaded: true,
+            vndb_linked: true,
             ..Default::default()
         };
         let act = build_activity(&PresenceSettings::default(), &ctx);
@@ -1018,7 +1062,7 @@ mod tests {
     fn cycling_context() -> PresenceContext {
         PresenceContext {
             vn_name: "Steins;Gate".to_string(),
-            vndb_loaded: true,
+            vndb_linked: true,
             vndb_developer: Some("5pb. / Nitroplus".to_string()),
             vndb_rating: Some("8.86".to_string()),
             my_rating: None,
@@ -1056,19 +1100,6 @@ mod tests {
         ctx.cycle_index = 1;
         let act = build_activity(&PresenceSettings::default(), &ctx);
         assert_eq!(act.details.as_deref(), Some("Very long"));
-    }
-
-    #[test]
-    fn a_game_with_no_vndb_facts_still_gets_a_details_line() {
-        let ctx = PresenceContext {
-            vn_name: "X".to_string(),
-            ..Default::default()
-        };
-        let act = build_activity(&PresenceSettings::default(), &ctx);
-        // No VNDB link: EwE shows a status phrase, not a generic placeholder that
-        // reads like a rendering failure.
-        assert_eq!(act.details.as_deref(), Some("Reading"));
-        assert_eq!(act.state.as_deref(), Some("Loading VNDB data..."));
     }
 
     #[test]
@@ -1176,7 +1207,7 @@ mod tests {
             vn_name: "My Local VN".to_string(),
             status: Some("Reading".to_string()),
             playtime: Some("3 min".to_string()),
-            vndb_loaded: false,
+            vndb_linked: false,
             ..Default::default()
         };
         let tokens = build_tokens(&ctx);
@@ -1411,7 +1442,7 @@ mod tests {
             vndb_status: Some("Playing".to_string()),
             vndb_length: Some("Long (30-50h)".to_string()),
             vndb_year: Some("2015".to_string()),
-            vndb_loaded: true,
+            vndb_linked: true,
             ..Default::default()
         }
     }
@@ -1707,14 +1738,49 @@ mod tests {
     }
 
     #[test]
-    fn an_unlinked_game_shows_the_reading_placeholders_not_a_generic_word() {
+    fn a_linked_game_waits_with_the_loading_placeholders() {
+        // Linked but nothing cached yet: "Loading VNDB data..." is true and will
+        // resolve itself once the metadata arrives.
         let ctx = PresenceContext {
             vn_name: "Unknown VN".to_string(),
+            vndb_linked: true,
             ..Default::default()
         };
         let act = build_activity(&PresenceSettings::default(), &ctx);
         assert_eq!(act.details.as_deref(), Some("Reading"));
         assert_eq!(act.state.as_deref(), Some("Loading VNDB data..."));
+    }
+
+    #[test]
+    fn an_unlinked_game_never_promises_a_vndb_load() {
+        // The card used to say "Loading VNDB data..." forever on a hand-added or
+        // since-unlinked game: nothing was loading, and there was no way to clear
+        // it. It now shows the facts the library actually has.
+        let ctx = PresenceContext {
+            vn_name: "My Local VN".to_string(),
+            status: Some("Reading".to_string()),
+            playtime: Some("12:34".to_string()),
+            ..Default::default()
+        };
+        let act = build_activity(&PresenceSettings::default(), &ctx);
+        assert_ne!(act.state.as_deref(), Some("Loading VNDB data..."));
+        assert_eq!(act.details.as_deref(), Some("12:34"), "local playtime");
+        assert_eq!(act.state.as_deref(), Some("Reading"), "local status");
+    }
+
+    #[test]
+    fn an_empty_unlinked_game_shows_a_generic_word_rather_than_a_false_load() {
+        // Nothing local to show either: a plain noun is honest, a load promise is
+        // not.
+        let act = build_activity(
+            &PresenceSettings::default(),
+            &PresenceContext {
+                vn_name: "Unknown VN".to_string(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(act.details.as_deref(), Some("Visual Novel"));
+        assert_eq!(act.state, None);
     }
 
     #[test]
@@ -1724,7 +1790,11 @@ mod tests {
             vndb_loading_state: String::new(),
             ..Default::default()
         };
-        let act = build_activity(&settings, &PresenceContext::default());
+        let ctx = PresenceContext {
+            vndb_linked: true,
+            ..Default::default()
+        };
+        let act = build_activity(&settings, &ctx);
         assert_eq!(act.details.as_deref(), Some("Indexing"));
         assert_eq!(act.state, None);
     }
@@ -1835,6 +1905,33 @@ mod tests {
             build_activity(&settings, &ctx).large_image,
             Some("https://catbox.moe/blurred.jpg".to_string())
         );
+    }
+
+    #[test]
+    fn turning_cover_art_off_also_hides_a_hosted_upload() {
+        // The upload already passed the concealment policy, which made it look
+        // pre-approved and let it skip the switch: turning cover art off left the
+        // card image on. The switch is the last word.
+        let ctx = PresenceContext {
+            vn_name: "Test VN".to_string(),
+            is_cover_explicit: true,
+            rpc_image: Some("https://catbox.moe/blurred.jpg".to_string()),
+            ..Default::default()
+        };
+        let on = PresenceSettings {
+            show_cover: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            build_activity(&on, &ctx).large_image.as_deref(),
+            Some("https://catbox.moe/blurred.jpg")
+        );
+        let off = PresenceSettings {
+            show_cover: false,
+            ..Default::default()
+        };
+        assert_eq!(build_activity(&off, &ctx).large_image, None);
+        assert_eq!(build_activity(&off, &ctx).large_text, None);
     }
 
     #[test]

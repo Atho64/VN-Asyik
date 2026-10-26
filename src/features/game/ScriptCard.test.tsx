@@ -100,6 +100,9 @@ describe("ScriptCard", () => {
           chunkCount: 3,
           doneChunks: 3,
           agentCount: 1,
+          compactorVersion: 2,
+          currentVersion: 2,
+          digestOutdated: false,
           digest: "The story…",
         },
       }),
@@ -113,10 +116,50 @@ describe("ScriptCard", () => {
     expect(screen.queryByRole("button", { name: "Summarize" })).not.toBeInTheDocument();
   });
 
+  it("offers a rebuild for a digest written by an older summarizer", async () => {
+    vi.mocked(scriptApi.list).mockResolvedValue([
+      doc({
+        compaction: {
+          modelId: "qwen",
+          chunkCount: 3,
+          doneChunks: 3,
+          agentCount: 1,
+          compactorVersion: 1,
+          currentVersion: 2,
+          digestOutdated: true,
+          digest: "A short old summary.",
+        },
+      }),
+    ]);
+    vi.mocked(scriptApi.compact).mockResolvedValue({
+      modelId: "qwen",
+      chunkCount: 3,
+      doneChunks: 3,
+      agentCount: 1,
+      compactorVersion: 2,
+      currentVersion: 2,
+      digestOutdated: false,
+      digest: "CHARACTERS: ...\nCHRONOLOGY: ...",
+    });
+
+    renderCard();
+    // The stale state is said out loud instead of passing as current.
+    expect(await screen.findByText("Older digest")).toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Rebuild digest" }));
+
+    await waitFor(() => {
+      // Stored progress must be discarded, not resumed against the old prompts.
+      expect(scriptApi.compact).toHaveBeenCalledWith("d1", undefined, true);
+    });
+    expect(await screen.findByText("Digest ready")).toBeInTheDocument();
+  });
+
   it("summarizes in batches until the digest exists, showing progress", async () => {
     vi.mocked(scriptApi.list).mockResolvedValue([
       doc({
-        compaction: { modelId: "qwen", chunkCount: 2, doneChunks: 0, agentCount: 1, digest: null },
+        compaction: { modelId: "qwen", chunkCount: 2, doneChunks: 0, agentCount: 1, compactorVersion: 2, currentVersion: 2, digestOutdated: false, digest: null },
       }),
     ]);
     vi.mocked(scriptApi.compact)
@@ -125,6 +168,9 @@ describe("ScriptCard", () => {
         chunkCount: 2,
         doneChunks: 1,
         agentCount: 1,
+        compactorVersion: 2,
+        currentVersion: 2,
+        digestOutdated: false,
         digest: null,
       })
       .mockResolvedValueOnce({
@@ -132,6 +178,9 @@ describe("ScriptCard", () => {
         chunkCount: 2,
         doneChunks: 2,
         agentCount: 1,
+        compactorVersion: 2,
+        currentVersion: 2,
+        digestOutdated: false,
         digest: "A one-page outline.",
       });
 
@@ -248,10 +297,21 @@ describe("ScriptCard", () => {
     // for exactly as long as the loop owns the document.
     vi.mocked(scriptApi.list).mockResolvedValue([
       doc({
-        compaction: { modelId: "qwen", chunkCount: 1, doneChunks: 0, agentCount: 1, digest: null },
+        compaction: { modelId: "qwen", chunkCount: 1, doneChunks: 0, agentCount: 1, compactorVersion: 2, currentVersion: 2, digestOutdated: false, digest: null },
       }),
     ]);
-    let finish: ((value: { modelId: string; chunkCount: number; doneChunks: number; agentCount: number; digest: string }) => void) | undefined;
+    let finish:
+      | ((value: {
+          modelId: string;
+          chunkCount: number;
+          doneChunks: number;
+          agentCount: number;
+          compactorVersion: number;
+          currentVersion: number;
+          digestOutdated: boolean;
+          digest: string;
+        }) => void)
+      | undefined;
     vi.mocked(scriptApi.compact).mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -271,6 +331,9 @@ describe("ScriptCard", () => {
       chunkCount: 1,
       doneChunks: 1,
       agentCount: 1,
+      compactorVersion: 2,
+      currentVersion: 2,
+      digestOutdated: false,
       digest: "Done.",
     });
     await waitFor(() => {
@@ -282,7 +345,7 @@ describe("ScriptCard", () => {
   it("counts the agents in the progress line", async () => {
     vi.mocked(scriptApi.list).mockResolvedValue([
       doc({
-        compaction: { modelId: "qwen", chunkCount: 40, doneChunks: 12, agentCount: 3, digest: null },
+        compaction: { modelId: "qwen", chunkCount: 40, doneChunks: 12, agentCount: 3, compactorVersion: 2, currentVersion: 2, digestOutdated: false, digest: null },
       }),
     ]);
     renderCard();

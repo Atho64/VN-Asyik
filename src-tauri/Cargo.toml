@@ -42,6 +42,7 @@ url = "2"
 # the same game must return the stored row, not fork compaction progress.
 # RustCrypto, actively maintained.
 sha2 = "0.10"
+encoding_rs.workspace = true
 # WebSocket client for LunaTranslator's network service (loopback ws:// only,
 # so no TLS feature). tokio-tungstenite is the standard maintained choice;
 # reqwest 0.13 has no websocket feature (verified 2026-10-24).

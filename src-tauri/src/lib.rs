@@ -14,6 +14,7 @@ pub mod state;
 pub mod sync;
 pub mod tracking;
 pub mod vndb;
+pub mod walkthrough;
 
 use tauri::Manager;
 
@@ -54,6 +55,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::library::delete_game,
         commands::library::list_chapters,
         commands::library::list_sessions,
+        commands::library::list_game_sessions,
         commands::library::list_endings,
         commands::library::game_routes,
         commands::library::create_route,
@@ -197,6 +199,13 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::presence::presence_image_key_save,
         commands::presence::presence_image_key_clear,
         commands::presence::presence_image_key_preview,
+        commands::walkthrough::walkthrough_get,
+        commands::walkthrough::walkthrough_search_candidate,
+        commands::walkthrough::walkthrough_search,
+        commands::walkthrough::walkthrough_fetch,
+        commands::walkthrough::walkthrough_translate,
+        commands::walkthrough::walkthrough_toggle_item,
+        commands::walkthrough::walkthrough_clear_progress,
     ]
 }
 

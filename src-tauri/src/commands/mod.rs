@@ -16,6 +16,7 @@ pub mod system;
 pub mod tracking;
 pub mod vndb;
 pub mod vndb_sync;
+pub mod walkthrough;
 
 use serde::Serialize;
 

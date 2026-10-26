@@ -55,3 +55,7 @@ src-tauri/gen/android/local.properties
 Thumbs.db
 desktop.ini
 *.log
+
+# gemini
+.gemini
+.agents

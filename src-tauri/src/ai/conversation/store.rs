@@ -71,12 +71,18 @@ pub async fn create(pool: &SqlitePool, options: ChatOptions) -> Result<ChatThrea
 }
 
 pub async fn messages(pool: &SqlitePool, id: &str) -> Result<Vec<ChatMessage>, String> {
-    let rows =
-        sqlx::query("SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY position LIMIT 200")
-            .bind(id)
-            .fetch_all(pool)
-            .await
-            .map_err(|_| "db_error")?;
+    // Newest window, returned oldest first. Ordering by position descending and
+    // reversing means the cap keeps the *latest* rows; ascending with LIMIT kept
+    // the first 200 and silently hid everything written after that.
+    let rows = sqlx::query(
+        "SELECT * FROM (SELECT * FROM chat_messages WHERE thread_id = ? \
+         ORDER BY position DESC LIMIT ?) ORDER BY position ASC",
+    )
+    .bind(id)
+    .bind(i64::try_from(vn_core::chat::MAX_MESSAGES).unwrap_or(200))
+    .fetch_all(pool)
+    .await
+    .map_err(|_| "db_error")?;
     rows.iter()
         .map(|row| {
             Ok(ChatMessage {
@@ -107,10 +113,12 @@ pub async fn begin(
     text: &str,
     retry: bool,
 ) -> Result<String, String> {
+    // A thread may hold more rows than the window; the newest window is all the
+    // retry check needs, so this does not decode a long history to learn its size.
     let history = messages(pool, &thread.id).await?;
     let mut tx = pool.begin().await.map_err(|_| "db_error")?;
     let assistant_id = uuid::Uuid::new_v4().to_string();
-    let position = if retry {
+    let (position, room) = if retry {
         let last = history.last().ok_or("nothing_to_retry")?;
         if last.role != "assistant" || !matches!(last.status.as_str(), "error" | "cancelled") {
             return Err("nothing_to_retry".into());
@@ -120,19 +128,20 @@ pub async fn begin(
             .execute(&mut *tx)
             .await
             .map_err(|_| "db_error")?;
-        history.len() - 1
+        (last_position(&mut tx, &thread.id).await?, 2)
     } else {
         vn_core::chat::validate_message(text)?;
-        if history.len() + 2 > vn_core::chat::MAX_MESSAGES {
-            return Err("message_limit".into());
-        }
+        let position = last_position(&mut tx, &thread.id).await? + 1;
         sqlx::query("INSERT INTO chat_messages(id,thread_id,position,role,content,status,created_at) VALUES(?,?,?,'user',?,'complete',?)")
-            .bind(uuid::Uuid::new_v4().to_string()).bind(&thread.id).bind(i64::try_from(history.len()).unwrap_or(0)).bind(text.trim()).bind(now())
+            .bind(uuid::Uuid::new_v4().to_string()).bind(&thread.id).bind(position).bind(text.trim()).bind(now())
             .execute(&mut *tx).await.map_err(|_| "db_error")?;
-        history.len() + 1
+        (position + 1, 2)
     };
+    // Roll the window before inserting: the oldest exchange goes, so the newest
+    // exchange always fits and the thread never becomes permanently unusable.
+    trim_window(&mut tx, &thread.id, room).await?;
     sqlx::query("INSERT INTO chat_messages(id,thread_id,position,role,content,status,created_at) VALUES(?,?,?,'assistant','','running',?)")
-        .bind(&assistant_id).bind(&thread.id).bind(i64::try_from(position).unwrap_or(0)).bind(now())
+        .bind(&assistant_id).bind(&thread.id).bind(position).bind(now())
         .execute(&mut *tx).await.map_err(|_| "db_error")?;
     let title = if thread.title.is_empty() {
         text.trim().chars().take(64).collect::<String>()
@@ -163,6 +172,65 @@ pub async fn recover(pool: &SqlitePool) -> Result<(), String> {
         "UPDATE chat_messages SET status='error', error='interrupted' WHERE status='running'",
     )
     .execute(pool)
+    .await
+    .map_err(|_| "db_error")?;
+    Ok(())
+}
+
+/// Next free `position` in a thread, or 0 for an empty one.
+async fn last_position(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    thread_id: &str,
+) -> Result<i64, String> {
+    // Read through the open transaction. Asking the pool instead would need a
+    // second connection while this one holds SQLite's write lock, and the busy
+    // timeout would eventually fail the whole call.
+    let row: Option<(Option<i64>,)> =
+        sqlx::query_as("SELECT MAX(position) FROM chat_messages WHERE thread_id = ?")
+            .bind(thread_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|_| "db_error")?;
+    // An empty thread answers NULL, which is a free slot at 0.
+    Ok(row
+        .and_then(|(max,)| max)
+        .map_or(0, |max| max.saturating_add(1)))
+}
+
+/// Drop the oldest rows until `room` more fit inside the window.
+///
+/// Deletion is by `position`, oldest first, and every row is an exchange half:
+/// dropping one at a time would leave a user question with no answer or the
+/// reverse, so the rows that go are whole exchanges from the top. A thread that
+/// is short enough to fit is left untouched.
+async fn trim_window(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    thread_id: &str,
+    room: i64,
+) -> Result<(), String> {
+    let window = i64::try_from(vn_core::chat::MAX_MESSAGES).unwrap_or(200);
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM chat_messages WHERE thread_id = ?")
+        .bind(thread_id)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|_| "db_error")?;
+    let mut excess = count.0 + room - window;
+    if excess <= 0 {
+        return Ok(());
+    }
+    // Round the trim up to an even number so the surviving window starts on a
+    // user question, which `build_history` also expects. Two rows always fit,
+    // so a thread at the window boundary still accepts the next exchange.
+    if excess % 2 == 1 {
+        excess += 1;
+    }
+    sqlx::query(
+        "DELETE FROM chat_messages WHERE id IN (SELECT id FROM chat_messages \
+         WHERE thread_id = ? ORDER BY position ASC LIMIT ?)",
+    )
+    .bind(thread_id)
+    .bind(excess)
+    .execute(&mut **tx)
     .await
     .map_err(|_| "db_error")?;
     Ok(())

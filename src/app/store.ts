@@ -46,8 +46,10 @@ interface AppState {
    * The game page unmounts on navigation and its local copy dies with it, so
    * returning re-requested a row that had not changed. A metadata refresh is the
    * only thing that invalidates an entry, and it writes the new value here.
+   * `null` records "asked, nothing cached": without it, a game with no VNDB id
+   * detail asked again on every visit.
    */
-  vndbDetails: Record<string, DetailPayload>;
+  vndbDetails: Record<string, DetailPayload | null>;
 
   setPrefs: (prefs: Prefs) => void;
   setPlatform: (platform: PlatformInfo) => void;
@@ -111,15 +113,12 @@ export const useAppStore = create<AppState>((set) => ({
   dismissToast: (id) =>
     set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
-  cacheVndbDetail: (vnId, detail) =>
-    set((state) => {
-      if (detail === null) {
-        const next = { ...state.vndbDetails };
-        delete next[vnId];
-        return { vndbDetails: next };
-      }
-      return { vndbDetails: { ...state.vndbDetails, [vnId]: detail } };
-    }),
+  cacheVndbDetail: (vnId, detail) => {
+    // `null` is stored, not deleted: it means "asked, there is nothing cached",
+    // which stops a game without VNDB details from re-requesting on every visit.
+    // A metadata refresh writes the new payload over it.
+    set((state) => ({ vndbDetails: { ...state.vndbDetails, [vnId]: detail } }));
+  },
   setRefreshingVndb: (gameId, refreshing) =>
     set((state) => ({
       refreshingVndb: refreshing

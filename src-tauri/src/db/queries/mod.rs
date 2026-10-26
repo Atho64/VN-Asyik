@@ -670,6 +670,45 @@ pub async fn list_sessions(
 }
 
 /// Sessions for a game, tombstones included, for sync.
+/// The newest `limit` sessions of a game plus exact totals over all of them.
+///
+/// The game page used to load every session, which is unbounded for a
+/// long-lived visual novel. Totals are one aggregate, so the header still
+/// describes the whole history rather than only the visible page.
+///
+/// # Errors
+/// `db_error` when either query fails.
+pub async fn game_sessions_page(
+    pool: &SqlitePool,
+    game_id: EntityId,
+    limit: i64,
+) -> Result<crate::commands::library::GameSessionsPage, DbError> {
+    let game = game_id.to_string();
+    let rows: Vec<SessionRow> = sqlx::query_as(
+        "SELECT id, game_id, chapter_id, route_id, started_at, ended_at, counted_ms, afk_ms, \
+                source, updated_at, device_id, deleted \
+         FROM play_sessions WHERE game_id = ? AND deleted = 0 \
+         ORDER BY started_at DESC, id DESC LIMIT ?",
+    )
+    .bind(&game)
+    .bind(limit.max(1))
+    .fetch_all(pool)
+    .await?;
+    let (total_sessions, counted_ms, afk_ms): (i64, i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COALESCE(SUM(counted_ms),0), COALESCE(SUM(afk_ms),0) \
+         FROM play_sessions WHERE game_id = ? AND deleted = 0",
+    )
+    .bind(&game)
+    .fetch_one(pool)
+    .await?;
+    Ok(crate::commands::library::GameSessionsPage {
+        sessions: sessions_from(rows)?,
+        total_sessions,
+        counted_ms,
+        afk_ms,
+    })
+}
+
 pub async fn list_sessions_including_deleted<'e, E>(
     executor: E,
     game_id: EntityId,

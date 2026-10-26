@@ -136,10 +136,10 @@ pub fn base_context(game: &Game) -> PresenceContext {
             .filter(|label| !label.is_empty()),
         cover_url: game.cover_url.clone(),
         is_cover_explicit: cover_is_explicit(game),
-        // A linked VN has facts to show even before `vndb_details` is read; an
-        // unlinked one never will, so the card shows the "Reading" placeholders
-        // instead of a generic word that looks like a rendering failure.
-        vndb_loaded: game.vndb_id.is_some(),
+        // Whether anything will ever arrive from VNDB. A linked game with an empty
+        // cache is loading; an unlinked one falls back to the local facts, because
+        // nothing is on its way and "Loading VNDB data..." would never clear.
+        vndb_linked: game.vndb_id.is_some(),
         ..Default::default()
     }
 }
@@ -203,10 +203,16 @@ pub async fn context_for_game(pool: &sqlx::SqlitePool, game: &Game) -> PresenceC
 /// Which local file the card's image must come from, and whether only its blur
 /// may travel.
 ///
-/// Pure row/file logic so the concealment rule is testable without a network:
-/// a user-chosen custom cover always needs hosting, an explicit (or unrated —
-/// the rule fails closed) VNDB cover may only travel blurred from the cache,
-/// and a safe VNDB cover already has a public URL, so it hosts nothing.
+/// The two kinds of art are answered differently on purpose:
+///
+/// - A **cover the user picked** (`custom_cover_path`) has no rating of its own.
+///   `cover_sexual` / `cover_violence` describe the *VNDB* cover, a different
+///   image. So it follows the same visibility rule the library applies to it, and
+///   the card shows what the user already sees on their own screen. Treating it as
+///   "unrated, therefore concealed" is what made the feature look broken: the
+///   library painted the chosen cover sharp while Discord showed nothing.
+/// - **VNDB art** is not the user's image, and a cached row can predate the rating
+///   columns, so that path still fails closed ([`cover_is_explicit`]).
 #[must_use]
 pub fn rpc_image_source(
     data_dir: &std::path::Path,
@@ -217,16 +223,27 @@ pub fn rpc_image_source(
         .custom_cover_path
         .as_deref()
         .and_then(|stored| crate::vndb::images::ImageStore::resolve_custom(data_dir, stored));
-    let explicit = cover_is_explicit(game);
     if let Some(path) = custom {
-        return Some((path, explicit));
+        return Some((path, custom_cover_is_concealed(game)));
     }
-    if explicit {
+    if cover_is_explicit(game) {
         let vn_id = game.vndb_id.as_deref()?;
         let path = store.cover_path(vn_id);
         return path.is_file().then_some((path, true));
     }
     None
+}
+
+/// Whether the library conceals this game's chosen cover.
+///
+/// `Game::is_explicit` is the same comparison the library makes, and it is used
+/// here rather than a private copy: the two surfaces must agree on a user-picked
+/// image, whose rating necessarily belongs to the *VNDB* cover. The user's NSFW
+/// display mode is still ignored on purpose (`NsfwMode::Blur`), because this is a
+/// public broadcast and the card must not depend on a local viewing preference.
+#[must_use]
+pub fn custom_cover_is_concealed(game: &Game) -> bool {
+    game.is_explicit(vn_core::model::NsfwMode::Blur)
 }
 
 /// The image Discord cannot fetch on its own, hosted so the card can show it.
@@ -253,6 +270,14 @@ pub async fn ensure_rpc_image(
     }
     let (source, blurred) = rpc_image_source(data_dir, game)?;
 
+    // Answer from the cache before touching the file: this runs on every poll and
+    // on every settings keystroke the preview re-renders for, and a hit must not
+    // re-read (or re-blur) the image to discover a URL it already has.
+    let key = image_cache_key(settings, &source, blurred);
+    if let Some(url) = upload::shared_cache().get(&key) {
+        return Some(url);
+    }
+
     let raw = tokio::fs::read(&source).await.ok()?;
     if raw.is_empty() {
         return None;
@@ -267,15 +292,7 @@ pub async fn ensure_rpc_image(
     }
 
     // Session-stable key: a changed cover, blur flip or host is a new upload.
-    let meta = std::fs::metadata(&source).ok();
-    let key = format!(
-        "{:?}:{}:{}:{}:{}",
-        settings.rpc_image_host,
-        blurred,
-        source.display(),
-        meta.as_ref().map_or(0, std::fs::Metadata::len),
-        raw.len()
-    );
+    let key = image_cache_key(settings, &source, blurred);
     let host = settings.rpc_image_host;
     let filename = source.file_name().map_or_else(
         || "cover.jpg".to_owned(),
@@ -299,6 +316,30 @@ pub async fn ensure_rpc_image(
         eprintln!("presence image upload failed; continuing without the card image");
     }
     url
+}
+
+/// Cache key for one presence image.
+///
+/// Everything that decides the bytes or their destination is in the key: the
+/// host, the blur decision, the file path and its size on disk. A replaced cover,
+/// a blur flip or a host change is therefore a new upload, while the same image
+/// across polls is a map hit. Exposed so a test can address the same entry the
+/// poll loop uses.
+#[must_use]
+pub fn image_cache_key(
+    settings: &PresenceSettings,
+    source: &std::path::Path,
+    blurred: bool,
+) -> String {
+    // The file size is in the key so a replaced cover is a new entry; the path and
+    // the blur/host decisions cover the rest. Reading the size is a stat, not the
+    // image, which is what makes a cache hit cheap enough for the poll loop.
+    let len = std::fs::metadata(source).map_or(0, |meta| meta.len());
+    format!(
+        "{:?}:{blurred}:{}:{len}",
+        settings.rpc_image_host,
+        source.display()
+    )
 }
 
 /// Transport sink trait for dispatching rich presence updates.
@@ -763,28 +804,140 @@ mod tests {
     }
 
     #[test]
-    fn a_custom_cover_is_uploaded_blurred_unless_ratings_say_it_is_safe() {
+    fn a_custom_cover_travels_the_way_the_library_shows_it() {
         let dir = image_dir("custom");
         let store = crate::vndb::images::ImageStore::new(&dir);
+        let relative = crate::vndb::images::ImageStore::custom_relative("gamea");
 
-        // A game with no cover ratings fails closed: blur travels, not the file.
-        let unrated = image_game(
-            None,
-            Some(&crate::vndb::images::ImageStore::custom_relative("gamea")),
-        );
+        // A hand-added game has no cover ratings at all. The library paints the
+        // chosen cover sharp, so the card must publish that same image; blurring
+        // it here is what made a custom cover look broken on Discord while the
+        // library showed it normally.
+        let unrated = image_game(None, Some(&relative));
         let (path, blurred) = rpc_image_source(&dir, &unrated).expect("custom cover resolves");
         assert!(path.ends_with("custom/gamea.jpg"));
         assert!(path.starts_with(store.custom_dir()));
-        assert!(blurred);
-
-        let safe = image_game(
-            Some(0),
-            Some(&crate::vndb::images::ImageStore::custom_relative("gamea")),
+        assert!(
+            !blurred,
+            "the image the library shows is the one we publish"
         );
+
+        // Rated safe: the library shows it, so does the card.
+        let safe = image_game(Some(0), Some(&relative));
         let (_, blurred) = rpc_image_source(&dir, &safe).expect("safe custom cover");
-        assert!(!blurred, "a rated-safe custom cover may travel as-is");
+        assert!(!blurred);
+
+        // Rated explicit: the library conceals it, so only the blur travels.
+        let explicit = image_game(Some(2), Some(&relative));
+        let (_, blurred) = rpc_image_source(&dir, &explicit).expect("explicit custom cover");
+        assert!(blurred, "art the library conceals must not travel sharp");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A saved game row, the way the poll loop reads it.
+    async fn saved_game(pool: &sqlx::SqlitePool, title: &str, vndb_id: Option<&str>) -> Game {
+        let device = vn_core::ids::DeviceId::parse("test-device").expect("device id");
+        let mut game = Game::new(
+            &device,
+            vn_core::clock::Timestamp::from_millis(0),
+            title,
+            GameStatus::Playing,
+        )
+        .expect("game");
+        game.vndb_id = vndb_id.map(str::to_owned);
+        crate::db::queries::upsert_game(pool, &game)
+            .await
+            .expect("save game");
+        game
+    }
+
+    /// The reported bug: a game that is not, or is no longer, linked to VNDB sat
+    /// on "Loading VNDB data..." forever. Nothing was loading and the user had no
+    /// way to clear it. The card now draws the facts the library has.
+    #[tokio::test]
+    async fn an_unlinked_game_never_waits_for_vndb_data() {
+        let db = crate::db::Db::open_memory().await.expect("db");
+        // A leftover cache row for a VN this game is no longer linked to: it must
+        // not be read, and must not put the card back into a loading state.
+        sqlx::query(
+            "INSERT INTO vndb_details (vn_id, title, fetched_at, developers_json)              VALUES ('v11', 'CLANNAD', 1, '[{\"id\":\"p1\",\"name\":\"Key\"}]')",
+        )
+        .execute(db.pool())
+        .await
+        .expect("seed details");
+        let game = saved_game(db.pool(), "My Local VN", None).await;
+
+        let ctx = context_for_game(db.pool(), &game).await;
+        assert!(!ctx.vndb_linked);
+        assert!(!ctx.has_vndb_facts(), "an unlinked game has no VNDB facts");
+
+        let act = build_activity(&PresenceSettings::default(), &ctx);
+        assert_ne!(
+            act.state.as_deref(),
+            Some("Loading VNDB data..."),
+            "nothing is loading on a game with no VNDB entry"
+        );
+        assert_ne!(act.details.as_deref(), Some("Reading"));
+        // The local library label is a real, stable thing to show instead.
+        assert_eq!(act.state.as_deref(), Some("Playing"));
+    }
+
+    /// The other half: a game that *is* linked but whose details have not been
+    /// cached yet is genuinely waiting, so the placeholder stays honest.
+    #[tokio::test]
+    async fn a_linked_game_with_no_cached_facts_still_says_it_is_loading() {
+        let db = crate::db::Db::open_memory().await.expect("db");
+        let game = saved_game(db.pool(), "CLANNAD", Some("v11")).await;
+        let ctx = context_for_game(db.pool(), &game).await;
+        assert!(ctx.vndb_linked);
+        assert!(!ctx.has_vndb_facts());
+        let act = build_activity(&PresenceSettings::default(), &ctx);
+        assert_eq!(act.state.as_deref(), Some("Loading VNDB data..."));
+    }
+
+    /// And once the facts are cached, the card shows them and stops claiming to
+    /// load anything.
+    #[tokio::test]
+    async fn a_linked_game_with_cached_facts_leaves_the_placeholder_behind() {
+        let db = crate::db::Db::open_memory().await.expect("db");
+        sqlx::query(
+            "INSERT INTO vndb_details (vn_id, title, fetched_at, developers_json)              VALUES ('v11', 'CLANNAD', 1, '[{\"id\":\"p1\",\"name\":\"Key\"}]')",
+        )
+        .execute(db.pool())
+        .await
+        .expect("seed details");
+        let game = saved_game(db.pool(), "CLANNAD", Some("v11")).await;
+        let ctx = context_for_game(db.pool(), &game).await;
+        assert!(ctx.has_vndb_facts());
+        let act = build_activity(&PresenceSettings::default(), &ctx);
+        assert_eq!(act.details.as_deref(), Some("Key"));
+        assert_ne!(act.state.as_deref(), Some("Loading VNDB data..."));
+    }
+
+    #[test]
+    fn the_concealment_decision_matches_the_library_for_a_chosen_cover() {
+        // `custom_cover_source_vndb` is never set, so every custom cover is an
+        // image the app has no rating for. The decision must equal `isExplicit` in
+        // `src/lib/library.ts` — including the unrated case, where the library
+        // shows the art.
+        let relative = crate::vndb::images::ImageStore::custom_relative("gamea");
+        assert!(!custom_cover_is_concealed(&image_game(
+            None,
+            Some(&relative)
+        )));
+        assert!(!custom_cover_is_concealed(&image_game(
+            Some(0),
+            Some(&relative)
+        )));
+        assert!(custom_cover_is_concealed(&image_game(
+            Some(1),
+            Some(&relative)
+        )));
+        assert!(custom_cover_is_concealed(&image_game(
+            Some(2),
+            Some(&relative)
+        )));
     }
 
     #[test]
@@ -802,6 +955,40 @@ mod tests {
             rpc_image_source(&dir, &safe),
             None,
             "the public URL already works"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The poll loop runs every two seconds. Once a URL is known, resolving the
+    /// card image must not read, decode or blur the file again: the cached answer
+    /// is returned before the bytes are touched.
+    ///
+    /// The fixture holds undecodable bytes, so a hit that still tried to blur them
+    /// would answer `None` instead of the cached URL. That makes "did it read the
+    /// file?" observable without timing.
+    #[tokio::test]
+    async fn a_known_upload_is_answered_without_reading_the_file() {
+        let dir = image_dir("cached");
+        // Explicit ratings: this cover is one that must be blurred, so the very
+        // next step after a miss is a decode the fixture would fail.
+        let game = image_game(
+            Some(2),
+            Some(&crate::vndb::images::ImageStore::custom_relative("gamea")),
+        );
+        let settings = PresenceSettings {
+            show_cover: true,
+            rpc_image_host: vn_core::presence::RpcImageHost::Catbox,
+            ..Default::default()
+        };
+        let source = crate::vndb::images::ImageStore::new(&dir).custom_cover_path("gamea");
+        let key = image_cache_key(&settings, &source, true);
+        upload::shared_cache().seed(&key, "https://catbox.moe/cached.jpg");
+
+        assert_eq!(
+            ensure_rpc_image(&dir, &game, &settings).await.as_deref(),
+            Some("https://catbox.moe/cached.jpg"),
+            "a cached URL must not require reading or blurring the file"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -1210,7 +1397,7 @@ mod tests {
             // A linked VN: without this the card shows the "Reading" / "Loading
             // VNDB data..." placeholders, which is the correct behaviour for an
             // unlinked game and would mask what these tests are checking.
-            vndb_loaded: true,
+            vndb_linked: true,
             ..Default::default()
         }
     }

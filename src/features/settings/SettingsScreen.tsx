@@ -29,7 +29,7 @@ export type SettingsTab = "general" | "vndb" | "transfer";
  * Settings screen consolidating General preferences, VNDB Sync, and Device
  * Data Transfer & Backup into a single place.
  */
-export function SettingsScreen({ initialTab }: { initialTab?: SettingsTab } = {}) {
+export default function SettingsScreen({ initialTab }: { initialTab?: SettingsTab } = {}) {
   const { t } = useI18n();
   const prefs = useAppStore((state) => state.prefs);
   const setPrefs = useAppStore((state) => state.setPrefs);

@@ -15,10 +15,32 @@ pub const MS_PER_HOUR: i64 = 3_600_000;
 /// Milliseconds in one minute.
 pub const MS_PER_MINUTE: i64 = 60_000;
 
+/// Milliseconds in one second.
+pub const MS_PER_SECOND: i64 = 1_000;
+
 /// Whole minutes, floored, from a millisecond duration.
 #[must_use]
 pub const fn minutes_of(ms: i64) -> i64 {
     if ms <= 0 { 0 } else { ms / MS_PER_MINUTE }
+}
+
+/// Whole seconds, floored, from a millisecond duration.
+#[must_use]
+pub const fn seconds_of(ms: i64) -> i64 {
+    if ms <= 0 { 0 } else { ms / MS_PER_SECOND }
+}
+
+/// Whether a duration is shorter than one minute, and so has no whole minutes to
+/// report.
+///
+/// This is the case that made real sessions read as "0 min": the tracker records
+/// in short slices (about four seconds of counted time per poll), so a genuine
+/// two-minute reading produced rows whose displayed minute count floored to zero.
+/// A duration that is non-zero but under a minute must say how many seconds it
+/// was, not claim nothing happened.
+#[must_use]
+pub const fn is_sub_minute(ms: i64) -> bool {
+    ms > 0 && ms < MS_PER_MINUTE
 }
 
 /// Split a duration into hours and minutes, discarding seconds.
@@ -93,6 +115,19 @@ mod tests {
         assert_eq!(hours_minutes(0), (0, 0));
         assert_eq!(hours_minutes(90 * MS_PER_MINUTE), (1, 30));
         assert_eq!(hours_minutes(10 * MS_PER_HOUR), (10, 0));
+    }
+
+    #[test]
+    fn a_short_but_real_session_is_not_reported_as_zero() {
+        // The rows that read "0 min": counted time between one and 59 seconds.
+        assert!(is_sub_minute(4_000));
+        assert!(is_sub_minute(59_999));
+        assert!(!is_sub_minute(60_000));
+        // Zero and negative values are not "short", they are absent.
+        assert!(!is_sub_minute(0));
+        assert!(!is_sub_minute(-5_000));
+        assert_eq!(seconds_of(4_000), 4);
+        assert_eq!(seconds_of(-1), 0);
     }
 
     #[test]

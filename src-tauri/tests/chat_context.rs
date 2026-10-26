@@ -74,21 +74,28 @@ fn a_replayed_citation_never_keeps_the_id_it_was_quoted_under() {
 }
 
 #[test]
-fn cached_evidence_travels_with_the_turn_that_produced_it() {
+fn live_tool_results_are_not_replayed_as_current_evidence() {
     let mut answered = message("assistant", "You played 12 hours [S1].", "complete");
     answered.sources = vec![source("S1", "v11")];
-    let mut trace = vn_tracker_lib::ai::conversation::ChatTrace {
-        id: "call_1".into(),
-        name: "library_stats".into(),
+    let trace = |name: &str, data: serde_json::Value| vn_tracker_lib::ai::conversation::ChatTrace {
+        id: format!("call_{name}"),
+        name: name.into(),
         arguments: "{}".into(),
         status: "complete".into(),
-        result: Some(serde_json::json!({
-            "source": "S1",
-            "data": {"playtime_ms": 43_200_000_i64}
-        })),
+        result: Some(data),
     };
-    trace.status = "complete".into();
-    answered.tools = vec![trace];
+    answered.tools = vec![
+        // A stale playtime, a stale library count, and a captured line from a
+        // game the player has since closed: all three are live facts.
+        trace(
+            "library_stats",
+            serde_json::json!({"source": "S1", "data": {"playtime_ms": 43_200_000_i64}}),
+        ),
+        trace(
+            "recent_game_text",
+            serde_json::json!({"lines": [{"text": "a line from another session"}]}),
+        ),
+    ];
     let turns = vec![
         message("user", "How long have I played?", "complete"),
         answered,
@@ -96,15 +103,51 @@ fn cached_evidence_travels_with_the_turn_that_produced_it() {
 
     let mut sources = vec![];
     let history = build_history(&options(), &turns, &mut sources);
-    let assistant = history
+    let content = history
         .iter()
         .find(|m| m["role"] == "assistant")
+        .and_then(|m| m["content"].as_str())
         .expect("assistant turn");
-    let content = assistant["content"].as_str().unwrap();
-    assert!(content.contains("Previously retrieved evidence"));
-    assert!(content.contains("43200000"));
-    // The remapped evidence keeps its own citation id, so [S1] still resolves.
+    // The conversation remains, so the follow-up still has its referent. It is
+    // labelled as aging, because the number is no longer backed by a fresh tool
+    // result.
+    assert!(content.ends_with("You played 12 hours [S1]."));
+    assert!(content.starts_with("Earlier answer, figures may be out of date:"));
+    // But the answers cannot be read as the present state.
+    assert!(!content.contains("43200000"));
+    assert!(!content.contains("another session"));
+    // The citation list still resolves the turn's own [S1].
     assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0].id, "S1");
+}
+
+#[test]
+fn offline_evidence_travels_as_a_bounded_memo() {
+    let mut answered = message("assistant", "The synopsis says so [S1].", "complete");
+    answered.sources = vec![source("S1", "v11")];
+    answered.tools = vec![vn_tracker_lib::ai::conversation::ChatTrace {
+        id: "call_1".into(),
+        name: "search_vndb".into(),
+        arguments: "{}".into(),
+        status: "complete".into(),
+        result: Some(serde_json::json!({
+            "source": "S1",
+            "games": [{"synopsis": "x".repeat(20_000)}]
+        })),
+    }];
+    let turns = vec![message("user", "What is it about?", "complete"), answered];
+
+    let mut sources = vec![];
+    let history = build_history(&options(), &turns, &mut sources);
+    let content = history
+        .iter()
+        .find(|m| m["role"] == "assistant")
+        .and_then(|m| m["content"].as_str())
+        .expect("assistant turn");
+    assert!(content.contains("Cached VNDB metadata"));
+    assert!(content.contains("[truncated]"));
+    // A 20k synopsis must not become 20k of every later request.
+    assert!(content.chars().count() < 8_000, "{} chars", content.len());
     assert_eq!(sources[0].id, "S1");
 }
 
@@ -186,6 +229,96 @@ async fn a_stopped_answer_is_persisted_as_incomplete_not_complete() {
     let orphan = saved.iter().find(|m| m.id == second).unwrap();
     assert_eq!(orphan.status, "error");
     assert_eq!(orphan.error.as_deref(), Some("interrupted"));
+}
+
+#[test]
+fn an_earlier_answer_with_a_figure_is_labelled_as_aging() {
+    // The tool result behind the number is not replayed, so the answer text is the
+    // only place the figure survives. It has to say it may be out of date, or a
+    // follow-up repeats yesterday's playtime as today's.
+    let turns = vec![
+        message("user", "How long have I played?", "complete"),
+        message(
+            "assistant",
+            "You have played 12 hours across 8 games.",
+            "complete",
+        ),
+        message("user", "And in total?", "complete"),
+    ];
+    let mut sources = vec![];
+    let history = build_history(&options(), &turns, &mut sources);
+    let content = history
+        .iter()
+        .find(|m| m["role"] == "assistant")
+        .and_then(|m| m["content"].as_str())
+        .expect("assistant turn");
+    assert!(content.starts_with("Earlier answer, figures may be out of date:"));
+    assert!(content.contains("12 hours"));
+
+    // A prose answer with no figure is left alone: the marker would be noise.
+    let turns = vec![
+        message("user", "What is it about?", "complete"),
+        message("assistant", "A quiet story about a small town.", "complete"),
+    ];
+    let history = build_history(&options(), &turns, &mut sources);
+    let content = history
+        .iter()
+        .find(|m| m["role"] == "assistant")
+        .and_then(|m| m["content"].as_str())
+        .expect("assistant turn");
+    assert_eq!(content, "A quiet story about a small town.");
+}
+
+#[tokio::test]
+async fn a_long_thread_rolls_instead_of_refusing_new_messages() {
+    // The old cap rejected every message once a thread reached 200 rows, and the
+    // list query read the *oldest* 200, so the thread was unusable in both
+    // directions. The window now rolls: the newest exchange always lands and the
+    // oldest one is dropped.
+    let db = Db::open_memory().await.expect("in-memory db");
+    let thread = store::create(db.pool(), options()).await.expect("thread");
+
+    for index in 0..(vn_core::chat::MAX_MESSAGES / 2) {
+        let id = store::begin(db.pool(), &thread, &format!("question {index}"), false)
+            .await
+            .expect("begin");
+        let mut answer = message("assistant", &format!("answer {index}"), "complete");
+        answer.id = id;
+        store::save(db.pool(), &answer).await.expect("save");
+    }
+    // Trim runs before the insert, so a thread that just reached the cap is left
+    // alone; the window only starts rolling once the next exchange arrives.
+    let full = store::messages(db.pool(), &thread.id)
+        .await
+        .expect("history");
+    assert_eq!(full.len(), vn_core::chat::MAX_MESSAGES - 2);
+
+    let newest = store::begin(db.pool(), &thread, "one more question", false)
+        .await
+        .expect("a full thread still accepts a message");
+    let mut answer = message("assistant", "one more answer", "complete");
+    answer.id = newest;
+    store::save(db.pool(), &answer).await.expect("save");
+
+    let rolled = store::messages(db.pool(), &thread.id)
+        .await
+        .expect("history");
+    // The trim removes rows to make room, so the window lands at or just under
+    // the cap; what matters is that it stays bounded and keeps the newest rows.
+    assert!(
+        rolled.len() <= vn_core::chat::MAX_MESSAGES,
+        "the window stays bounded: {}",
+        rolled.len()
+    );
+    // The newest exchange is readable; the oldest one rolled out.
+    assert_eq!(
+        rolled.last().map(|m| m.content.as_str()),
+        Some("one more answer")
+    );
+    assert!(rolled.iter().any(|m| m.content == "one more question"));
+    assert!(!rolled.iter().any(|m| m.content == "question 0"));
+    // The window starts on a question, so a replayed context has no dangling answer.
+    assert_eq!(rolled[0].role, "user");
 }
 
 #[tokio::test]

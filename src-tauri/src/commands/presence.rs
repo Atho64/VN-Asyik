@@ -229,6 +229,31 @@ pub async fn presence_preview(
     cycle_index: Option<u32>,
     state_cycle_index: Option<u32>,
 ) -> CommandResult<PresenceActivity> {
+    let mut ctx = preview_context(
+        state.db().pool(),
+        state.data_dir(),
+        game_id.as_deref(),
+        &settings,
+    )
+    .await?;
+    ctx.cycle_index = cycle_index.unwrap_or(0);
+    ctx.state_cycle_index = state_cycle_index.unwrap_or(0);
+    Ok(build_activity(&settings, &ctx))
+}
+
+/// Build the context a preview renders, including the card image.
+///
+/// Split from the command so the preview can be tested against the same image
+/// resolution the poll loop uses. It used to be the one surface that never asked
+/// for an image, which is why a custom cover could not be previewed at all and the
+/// Image Host setting appeared to change nothing on the card. The upload cache is
+/// shared, so previewing an image the live card already hosts costs no network.
+async fn preview_context(
+    pool: &sqlx::SqlitePool,
+    data_dir: &std::path::Path,
+    game_id: Option<&str>,
+    settings: &PresenceSettings,
+) -> CommandResult<PresenceContext> {
     // The session is made up, but the clock is real: a hardcoded date would sit
     // still forever and read as a broken tag.
     let (date, time) = match vn_core::clock::Timestamp::now() {
@@ -236,31 +261,29 @@ pub async fn presence_preview(
         Err(_) => (String::new(), String::new()),
     };
     let mut ctx = if let Some(gid) = game_id {
-        let entity_id = vn_core::EntityId::parse(&gid)
+        let entity_id = vn_core::EntityId::parse(gid)
             .map_err(|e| CommandError::new("invalid_id", e.to_string()))?;
-        match queries::get_game(state.db().pool(), entity_id).await? {
+        match queries::get_game(pool, entity_id).await? {
             Some(game) => {
-                let base = presence::context_for_game(state.db().pool(), &game).await;
-                // `vndb_loaded` is forced on: it means "the facts below are what
-                // the card will draw on", and the preview exists to show the
-                // drawn card. A game with no VNDB link has an empty
-                // `vndb_details_items`, and with the real flag left off the
-                // preview rendered the "Reading / Loading VNDB data..." placeholder
-                // forever, which read as a broken preview rather than a game with
-                // no facts. Real games still show that placeholder while loading,
-                // because that is a fact about the moment, not the settings.
+                // The VNDB facts and the link flag come from the same context the
+                // poll builds, not from the preview. It used to force the loading
+                // flag on so an unlinked game would not preview as "Loading VNDB
+                // data..."; that masked the real bug, where the *card itself*
+                // showed that placeholder forever on a game with no VNDB entry.
+                // Unlinked games now fall back to their local facts everywhere.
+                let mut base = presence::context_for_game(pool, &game).await;
                 let chapter = if game.vndb_id.is_some() {
                     Some("Chapter 1".to_string())
                 } else {
                     None
                 };
+                base.rpc_image = presence::ensure_rpc_image(data_dir, &game, settings).await;
                 PresenceContext {
                     exe_name: "game.exe".to_string(),
                     elapsed_time: "01:23".to_string(),
                     chapter,
                     route: Some("Common Route".to_string()),
                     session_start_epoch: Some(1_700_000_000),
-                    vndb_loaded: true,
                     ..base
                 }
             }
@@ -273,10 +296,7 @@ pub async fn presence_preview(
     };
     ctx.date = date;
     ctx.time = time;
-    ctx.cycle_index = cycle_index.unwrap_or(0);
-    ctx.state_cycle_index = state_cycle_index.unwrap_or(0);
-
-    Ok(build_activity(&settings, &ctx))
+    Ok(ctx)
 }
 
 /// A made-up session for the settings preview.
@@ -314,7 +334,7 @@ fn sample_preview_context() -> PresenceContext {
         is_cover_explicit: false,
         rpc_image: None,
         session_start_epoch: Some(1_700_000_000),
-        vndb_loaded: true,
+        vndb_linked: true,
         is_unfocused: false,
         cycle_index: 0,
         state_cycle_index: 0,
@@ -389,6 +409,91 @@ mod tests {
                 "{bad:?} must be rejected"
             );
         }
+    }
+
+    /// A database holding one hand-added game with a custom cover on disk.
+    async fn custom_cover_fixture(tag: &str) -> (crate::db::Db, std::path::PathBuf, String) {
+        let db = crate::db::Db::open_memory().await.expect("db");
+        let root = std::env::temp_dir().join(format!("vnt-preview-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let store = crate::vndb::images::ImageStore::new(&root);
+        std::fs::create_dir_all(store.custom_dir()).expect("custom dir");
+
+        let id = "01a151db-7777-7000-8000-000000000001".to_string();
+        std::fs::write(store.custom_cover_path(&id), b"jpeg-bytes").expect("cover file");
+        sqlx::query(
+            "INSERT INTO games (id, title, status, custom_cover_path, updated_at, device_id)              VALUES (?, 'Saku Saku', 'playing', ?, 1, 'dev')",
+        )
+        .bind(&id)
+        .bind(crate::vndb::images::ImageStore::custom_relative(&id))
+        .execute(db.pool())
+        .await
+        .expect("insert game");
+        (db, root, id)
+    }
+
+    /// The bug this covers: the preview never asked for an image at all, so a game
+    /// whose card shows a custom cover previewed as a blank placeholder and the
+    /// Image Host setting looked like it did nothing.
+    #[tokio::test]
+    async fn the_preview_shows_the_hosted_custom_cover_the_live_card_publishes() {
+        let (db, root, game_id) = custom_cover_fixture("parity").await;
+        let settings = PresenceSettings {
+            enabled: true,
+            show_cover: true,
+            rpc_image_host: vn_core::presence::RpcImageHost::Catbox,
+            ..Default::default()
+        };
+
+        // Stand in for the upload the live poll would have made for this exact
+        // image, so the preview is exercised without reaching catbox.
+        let source = crate::vndb::images::ImageStore::new(&root).custom_cover_path(&game_id);
+        let key = crate::presence::image_cache_key(&settings, &source, false);
+        crate::presence::upload::shared_cache().seed(&key, "https://catbox.moe/custom.jpg");
+
+        let ctx = preview_context(db.pool(), &root, Some(&game_id), &settings)
+            .await
+            .expect("preview context");
+        assert_eq!(
+            ctx.rpc_image.as_deref(),
+            Some("https://catbox.moe/custom.jpg"),
+            "the preview resolves the same hosted image the card uses"
+        );
+        // And it reaches the rendered card, which is what the panel paints.
+        let activity = build_activity(&settings, &ctx);
+        assert_eq!(
+            activity.large_image.as_deref(),
+            Some("https://catbox.moe/custom.jpg")
+        );
+
+        // Turning cover art off removes it, from the same context.
+        let off = PresenceSettings {
+            show_cover: false,
+            ..settings
+        };
+        assert_eq!(build_activity(&off, &ctx).large_image, None);
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// With no image host configured nothing is uploaded and nothing is shown for
+    /// a custom cover, which is exactly what the live card does: the preview must
+    /// not invent an image Discord will never have.
+    #[tokio::test]
+    async fn a_preview_without_an_image_host_claims_no_cover_it_cannot_send() {
+        let (db, root, game_id) = custom_cover_fixture("nohost").await;
+        let settings = PresenceSettings {
+            enabled: true,
+            show_cover: true,
+            rpc_image_host: vn_core::presence::RpcImageHost::None,
+            ..Default::default()
+        };
+        let ctx = preview_context(db.pool(), &root, Some(&game_id), &settings)
+            .await
+            .expect("preview context");
+        assert!(ctx.rpc_image.is_none());
+        assert_eq!(build_activity(&settings, &ctx).large_image, None);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

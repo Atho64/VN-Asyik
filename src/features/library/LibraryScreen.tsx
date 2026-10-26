@@ -34,6 +34,11 @@ export function LibraryScreen() {
   const [view, setView] = useState<LibraryView>("grid");
   const [sort, setSort] = useState<SortKey>("recent");
   const [addOpen, setAddOpen] = useState(false);
+  // The collection remounts on a filter change (it resets scroll and remeasures).
+  // Its key was an object dumped to JSON, which is a different string for every
+  // status chip even when the selection is the same; a stable joined key means
+  // only a real change remounts the grid.
+  const collectionKey = `${view}|${query}|${statuses.join(",")}|${ratedOnly ? 1 : 0}|${sort}`;
 
   // The filter and sort live in `lib/library` next to their tests. A second copy
   // here had already drifted: it compared raw titles where the shared one folds
@@ -207,7 +212,7 @@ export function LibraryScreen() {
         />
       ) : (
         <VirtualLibrary
-          key={JSON.stringify([view, query, statuses, ratedOnly, sort])}
+          key={collectionKey}
           cards={filtered}
           view={view}
         />

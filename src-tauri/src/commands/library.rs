@@ -202,6 +202,38 @@ pub async fn list_sessions(
     Ok(queries::list_sessions(state.db().pool(), id).await?)
 }
 
+/// Rows returned by [`list_game_sessions`]. The card shows the newest sessions;
+/// the totals beside them cover every session, so the summary stays exact.
+pub const SESSION_PAGE: i64 = 50;
+
+/// The newest sessions of a game plus exact totals over all of them.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameSessionsPage {
+    /// Newest first.
+    pub sessions: Vec<PlaySession>,
+    /// Every live session, including the ones not in `sessions`.
+    pub total_sessions: i64,
+    /// Sum of counted time over every live session, ms.
+    pub counted_ms: i64,
+    /// Sum of away time over every live session, ms.
+    pub afk_ms: i64,
+}
+
+/// Newest sessions for the game page.
+///
+/// The page used to load every session a game had, which is unbounded for a
+/// long-lived visual novel. The list is bounded and the totals are computed in
+/// one aggregate, so "122 sessions, 3:41" still describes the whole history.
+#[tauri::command]
+pub async fn list_game_sessions(
+    state: State<'_, AppState>,
+    game_id: String,
+) -> CommandResult<GameSessionsPage> {
+    let id = EntityId::parse(&game_id)?;
+    Ok(queries::game_sessions_page(state.db().pool(), id, SESSION_PAGE).await?)
+}
+
 /// Endings belonging to a game.
 #[tauri::command]
 pub async fn list_endings(

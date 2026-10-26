@@ -52,6 +52,25 @@ vi.mock("@/lib/ipc/client", () => ({
     listGames: vi.fn().mockResolvedValue([]),
   },
   IpcError: class IpcError extends Error {},
+  // Mirrors the real delivery loop: the first tick waits for its own response,
+  // then schedules the next one, so fake timers behave as they do in the app.
+  startPolling: (run: () => Promise<void>, intervalMs: number) => {
+    let stopped = false;
+    let timer = 0;
+    const tick = async (): Promise<void> => {
+      if (stopped) return;
+      try {
+        await run();
+      } finally {
+        if (!stopped) timer = window.setTimeout(() => void tick(), intervalMs);
+      }
+    };
+    void tick();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  },
 }));
 
 const { TrackingScreen } = await import("./TrackingScreen");

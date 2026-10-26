@@ -46,6 +46,8 @@ pub async fn run(
         "taste_profile" => taste(ctx).await?,
         "recent_game_text" => recent_text(ctx).await?,
         "script_digest" => script_digest(ctx).await?,
+        // External evidence carries its own URL, so it is cited by URL, not by a
+        // library citation id that would point at the user's notes instead.
         "search_vndb" => return vndb(ctx, &args.query, sources).await,
         "search_web" => return web(ctx, &args.query, sources).await,
         _ => return Err("tool_not_allowed".into()),
@@ -71,14 +73,15 @@ fn add_source(
     id
 }
 
-const GAMES: &str = "SELECT g.id,g.title,g.title_original,g.vndb_id,g.status,g.rating,g.manual_playtime_ms, \
-    COALESCE(s.active,0)+g.manual_playtime_ms AS total_ms,COALESCE(s.afk,0) AS afk_ms,d.tags_json \
-    FROM games g LEFT JOIN (SELECT p.game_id,SUM(p.counted_ms) AS active,SUM(p.afk_ms) AS afk \
-    FROM play_sessions p JOIN games parent ON parent.id=p.game_id AND parent.deleted=0 WHERE p.deleted=0 GROUP BY p.game_id) s ON s.game_id=g.id \
-    LEFT JOIN vndb_details d ON d.vn_id=g.vndb_id WHERE g.deleted=0 AND (? IS NULL OR g.id=?)";
+/// One shared row source for the card-shaped tools. Totals are aggregated in
+/// the same statement, so a page never pays for a per-game subquery.
+const GAMES_FROM: &str = "FROM games g     LEFT JOIN (SELECT p.game_id,SUM(p.counted_ms) AS active,SUM(p.afk_ms) AS afk     FROM play_sessions p JOIN games parent ON parent.id=p.game_id AND parent.deleted=0     WHERE p.deleted=0 GROUP BY p.game_id) s ON s.game_id=g.id     LEFT JOIN vndb_details d ON d.vn_id=g.vndb_id WHERE g.deleted=0";
+
+const GAMES: &str = "SELECT g.id,g.title,g.title_original,g.vndb_id,g.status,g.rating,g.manual_playtime_ms,     COALESCE(s.active,0)+g.manual_playtime_ms AS total_ms,COALESCE(s.afk,0) AS afk_ms,d.tags_json ";
 
 async fn game_rows(ctx: &ToolContext<'_>) -> Result<Vec<sqlx::sqlite::SqliteRow>, String> {
-    sqlx::query(GAMES)
+    let sql = format!("{GAMES}{GAMES_FROM} AND (? IS NULL OR g.id=?)");
+    sqlx::query(sqlx::AssertSqlSafe(sql))
         .bind(&ctx.options.game_id)
         .bind(&ctx.options.game_id)
         .fetch_all(ctx.pool)
@@ -109,64 +112,93 @@ fn card(row: &sqlx::sqlite::SqliteRow, all: bool) -> Value {
         "tags":safe_tags(row.get("tags_json"),all)})
 }
 
+/// Page size for `search_library`.
+const PAGE: i64 = 20;
+
+/// Find owned games by title, original title, VNDB id or tag name.
+///
+/// Filtering, ordering, paging and the tie count all run in SQLite. The previous
+/// version loaded every live game, built a JSON card for each (parsing its tag
+/// blob), then filtered and sorted those values in Rust: on a large library that
+/// decoded thousands of tag arrays to answer a question about twenty titles.
 async fn search_library(ctx: &ToolContext<'_>, args: &ToolArgs) -> Result<Value, String> {
     let query = args.query.trim().to_lowercase();
-    let mut cards: Vec<Value> = game_rows(ctx)
-        .await?
-        .iter()
-        .map(|row| card(row, ctx.options.spoilers == Spoilers::All))
-        .filter(|card| {
-            args.status
-                .as_ref()
-                .is_none_or(|status| card["status"].as_str() == Some(status.as_str()))
-        })
-        .filter(|card| {
-            query.is_empty()
-                || ["title", "original_title", "vndb_id", "tags"]
-                    .iter()
-                    .any(|key| card[key].to_string().to_lowercase().contains(&query))
-        })
-        .collect();
-    cards.sort_by(|a, b| match args.sort.as_deref() {
-        Some("rating") => b["rating"]
-            .as_f64()
-            .unwrap_or(-1.0)
-            .total_cmp(&a["rating"].as_f64().unwrap_or(-1.0)),
-        Some("playtime") => b["playtime_ms"].as_i64().cmp(&a["playtime_ms"].as_i64()),
-        _ => a["title"].as_str().cmp(&b["title"].as_str()),
-    });
-    let total = cards.len();
-    let offset = args.offset.unwrap_or(0) as usize;
-    let page: Vec<Value> = cards.into_iter().skip(offset).take(20).collect();
+    let offset = i64::from(args.offset.unwrap_or(0));
+    // sqlx binds in call order and SQLite reads `?N` by number, so the numbering
+    // has to stay dense: a skipped `?2` makes an integer scope collide with a NULL
+    // literal and every row fails as a type mismatch. Scope is always `?1`, the
+    // optional filters take the next numbers, and paging stays inline integers so
+    // it cannot shift them.
+    let mut where_clause = String::from(" AND (?1 IS NULL OR g.id=?1)");
+    let mut next = 2;
+    if args.status.is_some() {
+        where_clause.push_str(&format!(" AND g.status=?{next}"));
+        next += 1;
+    }
+    let fuzzy = !query.is_empty();
+    if fuzzy {
+        where_clause.push_str(&format!(
+            " AND (INSTR(LOWER(g.title),?{next})>0              OR INSTR(LOWER(COALESCE(g.title_original,'')),?{next})>0              OR INSTR(LOWER(COALESCE(g.vndb_id,'')),?{next})>0              OR INSTR(LOWER(COALESCE(d.tags_json,'')),?{next})>0)"
+        ));
+    }
+    let order = match args.sort.as_deref() {
+        Some("rating") => " ORDER BY g.rating IS NULL, g.rating DESC, g.title",
+        Some("playtime") => " ORDER BY COALESCE(s.active,0)+g.manual_playtime_ms DESC, g.title",
+        _ => " ORDER BY g.title",
+    };
+    let sql = format!("{GAMES}{GAMES_FROM}{where_clause}{order} LIMIT {PAGE} OFFSET {offset}");
+    let count_sql = format!("SELECT COUNT(*) {GAMES_FROM}{where_clause}");
+
+    let mut page_query = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(&ctx.options.game_id);
+    let mut count_query =
+        sqlx::query_as::<_, (i64,)>(sqlx::AssertSqlSafe(count_sql)).bind(&ctx.options.game_id);
+    if let Some(status) = &args.status {
+        page_query = page_query.bind(status);
+        count_query = count_query.bind(status);
+    }
+    if fuzzy {
+        page_query = page_query.bind(&query);
+        count_query = count_query.bind(&query);
+    }
+    let rows = page_query
+        .fetch_all(ctx.pool)
+        .await
+        .map_err(|_| "db_error")?;
+    let total = count_query
+        .fetch_one(ctx.pool)
+        .await
+        .map_err(|_| "db_error")?
+        .0;
+    let all = ctx.options.spoilers == Spoilers::All;
+    let sorting = args.sort.as_deref();
     // A sort value shared by many games is not a ranking. Reporting the tie size
     // stops the model presenting seven equal ratings as a meaningful top-seven
     // list, and lets it say "seven are tied" instead. Only for value sorts.
-    let tie_size = match args.sort.as_deref() {
-        Some(key @ ("rating" | "playtime")) => {
-            let value_of = |card: &Value| {
-                if key == "rating" {
-                    card["rating"].as_f64()
-                } else {
-                    card["playtime_ms"].as_f64()
-                }
-            };
-            page.first().and_then(value_of).map_or(0, |leading| {
-                page.iter()
-                    .filter(|card| value_of(card) == Some(leading))
-                    .count()
-            })
-        }
+    let tie_size = match sorting {
+        // Ratings are decivotes, so integers preserve equality exactly.
+        Some("rating") => leading_tie(rows.iter().map(|row| row.get::<Option<i64>, _>("rating"))),
+        Some("playtime") => leading_tie(rows.iter().map(|row| Some(row.get::<i64, _>("total_ms")))),
         _ => 0,
     };
     Ok(json!({
         "total": total,
         "offset": offset,
-        "has_more": total > offset + 20,
-        "ranked_by": args.sort,
+        "has_more": total > offset + PAGE,
+        "ranked_by": sorting,
         // Null unless the sort key produces ties at the top.
         "tied_at_leading_value": if tie_size > 1 { json!(tie_size) } else { Value::Null },
-        "games": page,
+        "games": rows.iter().map(|row| card(row, all)).collect::<Vec<_>>(),
     }))
+}
+
+/// How many of `values` share the first non-null value, in order. Zero when the
+/// page is empty or the first row has no value to tie on.
+fn leading_tie(values: impl Iterator<Item = Option<i64>>) -> usize {
+    let mut values = values;
+    let Some(Some(leading)) = values.next() else {
+        return 0;
+    };
+    values.filter(|value| *value == Some(leading)).count() + 1
 }
 
 async fn game(ctx: &ToolContext<'_>, id: &str) -> Result<Value, String> {
@@ -297,9 +329,14 @@ async fn script_digest(ctx: &ToolContext<'_>) -> Result<Value, String> {
         Some(state) if state.digest.is_none() => Ok(
             json!({"digest":Value::Null,"done_chunks":state.done_chunks,"chunk_count":state.chunk_count,"coverage":"A script is imported but compaction has not finished, so there is no digest to cite yet."}),
         ),
-        Some(state) => Ok(
-            json!({"digest":state.digest,"coverage":"Compacted digest of the newest imported script for this game. Compaction is a lossy summary; treat exact wording as unverified and say when the digest is silent."}),
-        ),
+        Some(state) => {
+            let coverage = if state.outdated.is_some() {
+                "Compacted digest of the newest imported script for this game, built by an older summarizer. Compaction is lossy; treat wording as unverified and say when the digest is silent."
+            } else {
+                "Compacted story index of the newest imported script for this game: characters, chronology, player choices and branches, and explicitly unresolved questions. It is lossy, not the script itself; treat exact wording as unverified and say when the index is silent."
+            };
+            Ok(json!({"digest":state.digest,"outdated":state.outdated,"coverage":coverage}))
+        }
     }
 }
 

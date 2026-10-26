@@ -45,9 +45,10 @@ pub const DEFAULT_AGENTS: usize = 3;
 /// Version of the compaction pipeline (prompts, context strategy, agent
 /// layout). Stored with each run's progress: bumping it restarts in-flight
 /// compactions exactly like a model change does, so summaries from two
-/// pipelines never mix. 1 = the phase 19C multi-agent pipeline with rolling
-/// context; 0 marks phase 18/19B single-threaded rows, which restart once.
-pub const COMPACTOR_VERSION: u32 = 1;
+/// pipelines never mix. 2 = question-oriented story digests that preserve
+/// branches, chronology and uncertainty; 1 = the phase 19C multi-agent
+/// pipeline with rolling context; 0 marks phase 18/19B single-threaded rows.
+pub const COMPACTOR_VERSION: u32 = 2;
 /// Characters of the previous chunk's outline passed to the next map call as
 /// rolling context: enough to carry names and scene threads across a chunk
 /// boundary without re-feeding whole outlines.
@@ -371,6 +372,7 @@ pub fn plan_chunks(body: &str, budget: usize) -> Vec<(usize, usize)> {
     let mut chunks = Vec::new();
     let mut start = 0_usize;
     let mut total = 0_usize;
+    let mut count = 0_usize;
     for (index, line) in body.lines().enumerate() {
         let cost = line.len() + 1;
         if total > 0 && total + cost > budget {
@@ -379,9 +381,10 @@ pub fn plan_chunks(body: &str, budget: usize) -> Vec<(usize, usize)> {
             total = 0;
         }
         total += cost;
+        count = index + 1;
     }
-    if body.lines().next().is_some() {
-        chunks.push((start, body.lines().count()));
+    if count > 0 {
+        chunks.push((start, count));
     }
     chunks
 }
@@ -443,6 +446,26 @@ pub fn resume_decision(
     Resume::Continue(stored_done)
 }
 
+/// How a stored digest differs from a run of the current pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DigestFreshness {
+    /// Produced by this pipeline version and still complete.
+    Current,
+    /// Finished, but by an older pipeline: readable, and worth rebuilding.
+    Outdated,
+}
+
+/// Decision on a finished digest. A stored 0 for a row that somehow recorded no
+/// version is the phase 18/19B pipeline, not the pre-run sentinel.
+#[must_use]
+pub fn digest_freshness(stored_version: u32, planned_version: u32) -> DigestFreshness {
+    if stored_version == planned_version {
+        DigestFreshness::Current
+    } else {
+        DigestFreshness::Outdated
+    }
+}
+
 /// Split `chunk_count` chunks over `agents` summarizers: contiguous, balanced,
 /// end-exclusive chunk index ranges that cover every chunk exactly once, in
 /// order. Agents whose share would be empty (fewer chunks than agents) are
@@ -477,17 +500,17 @@ pub fn plan_agents(chunk_count: usize, agents: usize) -> Vec<(usize, usize)> {
 /// segment also receives the previous chunk's outline as rolling context; the
 /// prompt scopes it to resolving who is being discussed, never re-summarizing
 /// it, so an agent's memory cannot leak into another chunk's outline.
-pub const MAP_SYSTEM_PROMPT: &str = "You compress one chunk of a visual novel script into a dense factual outline. List only what the chunk shows, in order: which characters speak (use their exact name labels), key events, reveals, and scene changes. You may receive the outline of the preceding chunk as context for continuity: use it only to resolve who or what the current chunk refers to, and never summarize, repeat, or extend it. Do not interpret motives, do not predict what happens next, do not add outside knowledge, and do not invent anything. Plain text, no headers, at most 400 words.";
+pub const MAP_SYSTEM_PROMPT: &str = "You create a factual story index for one chunk of a visual novel script. A later assistant answers detailed questions using only your index, so preserve evidence instead of writing a polished summary. Record in story order: exact speaker labels, named characters present, setting and scene transitions, important actions and revelations, choices shown to the player, and route or branch labels only when the text supplies them. Preserve short distinctive details, named objects, promises, conflicts, and changes in stated relationships. Distinguish dialogue, narration, dreams, recollections, and hypotheses; never turn a character's belief into a fact, and do not invent anything. When the text does not establish a motive, identity, chronology or route, write that it is unknown instead of inferring it. You may receive the preceding chunk's index for continuity only: use it to resolve references, never repeat or extend it. Do not add outside knowledge, predictions, literary analysis or invented quotations. Use compact plain text, no headers, at most 400 words.";
 
 /// Segment-reduce prompt: one summarizer agent merges its own segment's
 /// outlines into that segment's digest.
-pub const SEGMENT_REDUCE_SYSTEM_PROMPT: &str = "You merge the chunk-by-chunk outlines you wrote for one segment of a visual novel script into a single chronological segment digest used for later question answering. Keep every named character and every event you can place in order; drop repetitions. Plain prose, no headers, at most 400 words. Do not add anything not present in the outlines.";
+pub const SEGMENT_REDUCE_SYSTEM_PROMPT: &str = "You merge chunk indexes from one contiguous segment of a visual novel into a factual story index for later question answering. Preserve exact character names, chronology, scene transitions, player choices, explicit route or branch labels, important revelations, and unresolved questions. Keep a relationship change only when the evidence states or demonstrates it. Distinguish observed events from dialogue, recollections, dreams and speculation. Remove repeated wording without erasing distinct events or branches. If two indexes conflict, retain the conflict as unresolved. Do not add facts, motives, interpretations or outside knowledge. Use compact plain text, no headers, at most 700 words.";
 
 /// Final-reduce prompt: the segment digests of several summarizer agents, who
 /// worked in parallel and cannot see each other's segments, become one story
 /// digest. Overlapping accounts of the same events are expected and must be
 /// resolved, not averaged.
-pub const REDUCE_SYSTEM_PROMPT: &str = "You merge the segment digests of one visual novel script, written in parallel by several summarizers who each saw only their own segment, into a single chronological story digest used for later question answering. The segments are given in story order; resolve overlapping accounts of the same events, keep every named character and every event you can place in order, and drop repetitions. Plain prose, no headers, at most 600 words. Do not add anything not present in the segment digests.";
+pub const REDUCE_SYSTEM_PROMPT: &str = "You merge ordered segment indexes from one visual novel into a factual story index for later question answering. The segment writers could not see each other's material. Preserve exact character names, chronology, scene transitions, player choices, explicit route or branch labels, revelations, and unresolved questions. Do not merge separate branches into one timeline, and do not call a branch canonical unless the source says so. Distinguish observed events from dialogue, recollections, dreams and speculation. Resolve only genuine overlaps; retain conflicts as unresolved instead of choosing a version. Remove repetition without erasing distinct events, relationships or consequences. Do not add facts, motives, interpretations or outside knowledge. Use compact plain text with these labels where evidence exists: CHARACTERS, CHRONOLOGY, CHOICES AND BRANCHES, UNRESOLVED. Omit empty labels. At most 1200 words.";
 
 /// Most name pairs one mapping block carries. A whole-game cast can be large,
 /// but the digest only needs the names the script actually uses, and the block
@@ -799,6 +822,44 @@ mod tests {
     }
 
     #[test]
+    fn digest_freshness_separates_old_pipelines() {
+        // A digest from the previous prompts is readable but stale; the caller
+        // offers a rebuild rather than silently serving it as current.
+        assert_eq!(
+            digest_freshness(COMPACTOR_VERSION, COMPACTOR_VERSION),
+            DigestFreshness::Current
+        );
+        assert_eq!(
+            digest_freshness(1, COMPACTOR_VERSION),
+            DigestFreshness::Outdated
+        );
+        assert_eq!(
+            digest_freshness(0, COMPACTOR_VERSION),
+            DigestFreshness::Outdated
+        );
+    }
+
+    #[test]
+    fn the_compaction_prompts_keep_branches_and_uncertainty() {
+        // A digest is the only story evidence the companion has. Shortening it
+        // into a clean narrative is what made answers generic, so the prompts
+        // must require branches, choices and explicit unknowns.
+        for prompt in [
+            MAP_SYSTEM_PROMPT,
+            SEGMENT_REDUCE_SYSTEM_PROMPT,
+            REDUCE_SYSTEM_PROMPT,
+        ] {
+            assert!(
+                prompt.contains("choice") || prompt.contains("branch"),
+                "{prompt}"
+            );
+            assert!(prompt.contains("Do not add"), "{prompt}");
+        }
+        assert!(REDUCE_SYSTEM_PROMPT.contains("UNRESOLVED"));
+        assert!(MAP_SYSTEM_PROMPT.contains("unknown"));
+    }
+
+    #[test]
     fn chunks_cover_every_line_exactly_once_within_budget() {
         let body: Vec<String> = (0..200)
             .map(|index| format!("line {index:03} with some bytes"))
@@ -850,18 +911,19 @@ mod tests {
         // the chat system prompt must reach every compaction call. The word cap
         // is pinned too: it scales with the chunk budget, and shrinking it
         // would silently thin every outline a digest is built from.
-        assert!(MAP_SYSTEM_PROMPT.contains("do not invent"));
-        assert!(MAP_SYSTEM_PROMPT.contains("in order"));
+        assert!(MAP_SYSTEM_PROMPT.contains("Do not add outside knowledge"));
         assert!(MAP_SYSTEM_PROMPT.contains("at most 400 words"));
         // The rolling context is scoped: an agent's memory of the previous
         // chunk must resolve references, never leak into the new outline.
         assert!(MAP_SYSTEM_PROMPT.contains("preceding chunk"));
-        assert!(MAP_SYSTEM_PROMPT.contains("never summarize, repeat, or extend"));
-        assert!(SEGMENT_REDUCE_SYSTEM_PROMPT.contains("Do not add anything not present"));
-        // The final reduce knows the segment digests came from parallel agents
-        // who could not see each other, so overlaps are resolved, not averaged.
-        assert!(REDUCE_SYSTEM_PROMPT.contains("in parallel"));
-        assert!(REDUCE_SYSTEM_PROMPT.contains("Do not add anything not present"));
+        assert!(MAP_SYSTEM_PROMPT.contains("never repeat or extend it"));
+        assert!(SEGMENT_REDUCE_SYSTEM_PROMPT.contains("Do not add facts"));
+        // The final reduce knows the segment indexes came from parallel agents
+        // who could not see each other, so overlaps are resolved and separate
+        // branches are not collapsed into one timeline.
+        assert!(REDUCE_SYSTEM_PROMPT.contains("could not see each other's"));
+        assert!(REDUCE_SYSTEM_PROMPT.contains("Do not add facts"));
+        assert!(REDUCE_SYSTEM_PROMPT.contains("CHOICES AND BRANCHES"));
     }
 
     #[test]

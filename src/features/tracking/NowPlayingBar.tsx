@@ -5,7 +5,7 @@ import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
 import { Icon } from "@/components/Icon";
-import { api, IpcError } from "@/lib/ipc/client";
+import { api, IpcError, startPolling } from "@/lib/ipc/client";
 import { formatDuration } from "@/lib/time";
 import type { AndroidSessionView, TrackingStatus } from "@/lib/ipc/types";
 
@@ -21,14 +21,17 @@ export function NowPlayingBar() {
   const cards = useAppStore((state) => state.cards);
   const setCards = useAppStore((state) => state.setCards);
   const isAndroid = useAppStore((state) => state.platform?.os === "android");
+  // The platform is only known after boot. Polling before that would ask the
+  // desktop command on Android (or the reverse) for as long as the bar is mounted.
+  const ready = useAppStore((state) => state.platform !== null);
   const [status, setStatus] = useState<TrackingStatus | null>(null);
   const [androidSession, setAndroidSession] = useState<AndroidSessionView | null>(null);
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    if (!ready) return undefined;
     let cancelled = false;
-    let timer = 0;
 
     const read = async (): Promise<void> => {
       try {
@@ -63,17 +66,18 @@ export function NowPlayingBar() {
       void reconcileOnReturn();
     };
 
-    void read();
-    timer = window.setInterval(() => void read(), 1_000);
+    // One request in flight at a time: a fixed interval queued a second status
+    // call behind a slow one and let an older answer land last.
+    const stopPolling = startPolling(read, 1_000);
     window.addEventListener("focus", onReturn);
     document.addEventListener("visibilitychange", onReturn);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
       window.removeEventListener("focus", onReturn);
       document.removeEventListener("visibilitychange", onReturn);
     };
-  }, [isAndroid, setCards]);
+  }, [isAndroid, ready, setCards]);
 
   if (dismissed) return null;
 

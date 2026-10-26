@@ -42,12 +42,15 @@ pub async fn script_delete(state: State<'_, AppState>, id: String) -> CommandRes
 /// Summarize up to `max_chunks` pending chunks **per agent** of one script and
 /// reduce them into a digest once all are done. Repeat until
 /// `doneChunks == chunkCount && digest !== null`; progress survives restarts.
+/// `rebuild` throws away stored progress, including a finished digest, so a
+/// digest written by an older pipeline can be replaced instead of resumed.
 /// Uses the shared chat provider settings; local endpoints work keyless.
 #[tauri::command]
 pub async fn script_compact(
     state: State<'_, AppState>,
     id: String,
     max_chunks: Option<u32>,
+    rebuild: Option<bool>,
 ) -> CommandResult<script::CompactionInfo> {
     let pool = state.db().pool().clone();
     let config = crate::commands::ai::read_settings(&pool).await;
@@ -70,8 +73,11 @@ pub async fn script_compact(
         &config,
         key.as_ref(),
         &id,
-        max_chunks.unwrap_or(script::MAX_CHUNKS_PER_CALL),
-        agents,
+        script::RunOptions {
+            step: max_chunks.unwrap_or(script::MAX_CHUNKS_PER_CALL),
+            agents,
+            rebuild: rebuild.unwrap_or(false),
+        },
     )
     .await
     .map_err(error)

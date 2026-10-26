@@ -6,12 +6,34 @@
  * people compare across games is whole minutes.
  */
 
+export const MS_PER_SECOND = 1_000;
 export const MS_PER_MINUTE = 60_000;
 export const MS_PER_HOUR = 3_600_000;
 export const MS_PER_DAY = 86_400_000;
 
+/**
+ * Whether a duration is real but shorter than one minute.
+ *
+ * The tracker records in short slices (roughly four seconds of counted time per
+ * poll), so a genuine session regularly lands between one and 59 seconds. Flooring
+ * that to whole minutes printed "0 min" for time the user actually spent reading,
+ * which reads as a tracking failure rather than a short session. Mirrors
+ * `vn_core::time_fmt::is_sub_minute`; the two must agree.
+ */
+export function isSubMinute(ms: number): boolean {
+  return Number.isFinite(ms) && ms > 0 && ms < MS_PER_MINUTE;
+}
+
+/** Whole seconds, floored, for the sub-minute case. */
+export function secondsOf(ms: number): number {
+  return Number.isFinite(ms) && ms > 0 ? Math.floor(ms / MS_PER_SECOND) : 0;
+}
+
 /** `h:mm`, the compact form for dense rows and cards. */
 export function formatDuration(ms: number): string {
+  // A sub-minute slice gets `0:04`, not a bare `0:00`: the compact form keeps the
+  // `m:ss` shape zero-padded so the column stays aligned either way.
+  if (isSubMinute(ms)) return `0:${String(secondsOf(ms)).padStart(2, "0")}`;
   if (!Number.isFinite(ms) || ms <= 0) return "0:00";
   const totalMinutes = Math.floor(ms / MS_PER_MINUTE);
   const hours = Math.floor(totalMinutes / 60);
@@ -22,6 +44,12 @@ export function formatDuration(ms: number): string {
 /** `12h 40m`, the readable form for detail headers and stats. */
 export function formatDurationLong(ms: number, locale = "en"): string {
   if (!Number.isFinite(ms) || ms <= 0) return locale === "id" ? "0 menit" : "0 min";
+  // Under a minute, report seconds. This is the fix for sessions shown as
+  // "0 menit" while carrying real counted time.
+  if (isSubMinute(ms)) {
+    const seconds = secondsOf(ms);
+    return locale === "id" ? `${seconds} detik` : `${seconds} s`;
+  }
   const totalMinutes = Math.floor(ms / MS_PER_MINUTE);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;

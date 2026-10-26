@@ -8,6 +8,10 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 pub const MAX_MESSAGE: usize = 16_000;
+/// Rows a thread keeps. It is a rolling window, not a ceiling: past this, the
+/// oldest exchange is dropped on write, so a long-lived chat stays usable instead
+/// of rejecting every new message (there is no chat paging UI to reach old rows
+/// anyway). Counting rows rather than exchanges keeps the trim exact.
 pub const MAX_MESSAGES: usize = 200;
 pub const MAX_CALLS: usize = 16;
 pub const MAX_ROUNDS: usize = 8;
@@ -304,7 +308,7 @@ pub fn tool_definitions(online: bool) -> Vec<Value> {
         ),
         (
             "script_digest",
-            "Read the compacted digest of this game's imported extracted script, when one has been imported and compacted. Covers the whole story from beginning to end and is withheld unless full spoilers are enabled.",
+            "Read the compacted story index of this game's imported extracted script, when one has been imported and compacted: named characters, chronology, player choices and branches, and explicit unknowns. Covers the whole story from beginning to end and is withheld unless full spoilers are enabled. It is lossy, so quote it only for what it states.",
             json!({}),
             vec![],
         ),

@@ -8,7 +8,13 @@ export const compactionInfoSchema = z.object({
   chunkCount: z.number(),
   doneChunks: z.number(),
   agentCount: z.number(),
+  /** Pipeline that produced the stored progress. */
+  compactorVersion: z.number(),
+  /** Pipeline this build would run now. */
+  currentVersion: z.number(),
   digest: z.string().nullable(),
+  /** Finished, but written by an older summarizer: offer a rebuild. */
+  digestOutdated: z.boolean(),
 });
 export type CompactionInfo = z.infer<typeof compactionInfoSchema>;
 
@@ -56,9 +62,14 @@ export const scriptApi = {
    * Summarize up to `maxChunks` pending chunks per agent (8 by default) and
    * reduce them into a digest once all are done. Repeat until
    * `doneChunks === chunkCount && digest !== null`; progress survives restarts.
+   * `rebuild` discards stored progress, including a finished digest.
    */
-  compact: (id: string, maxChunks?: number) =>
-    call("script_compact", compactionInfoSchema, { id, maxChunks: maxChunks ?? null }),
+  compact: (id: string, maxChunks?: number, rebuild = false) =>
+    call("script_compact", compactionInfoSchema, {
+      id,
+      maxChunks: maxChunks ?? null,
+      rebuild,
+    }),
   /** How many summarizer agents compaction runs in parallel. */
   agentSettings: () => call("script_agent_settings", agentSettingsSchema, {}),
   /** Persist the agent count; the backend clamps it into 1..=10. */

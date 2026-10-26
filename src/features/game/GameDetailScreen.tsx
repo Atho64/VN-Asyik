@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -16,6 +16,7 @@ import { vndbVnUrl } from "@/features/game/vndbMetadata";
 import { Card, CardHeader } from "@/components/Card";
 import { RoutesCard } from "@/features/game/RoutesCard";
 import { ScriptCard } from "@/features/game/ScriptCard";
+import { WalkthroughCard } from "@/features/game/WalkthroughCard";
 import { Chip, StatusChip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
@@ -122,12 +123,25 @@ export function GameDetailScreen() {
   );
   const setRefreshingVndb = useAppStore((state) => state.setRefreshingVndb);
   const cachedDetail = useAppStore((state) =>
-    cachedCard?.game.vndb_id ? state.vndbDetails[cachedCard.game.vndb_id] : undefined,
+    cachedCard?.game.vndb_id
+      ? (state.vndbDetails[cachedCard.game.vndb_id] ?? undefined)
+      : undefined,
+  );
+  // A cached `null` means "asked, and there are no VNDB details". Reading it
+  // inside the loader (not from this render's snapshot) keeps the answer valid
+  // for the whole page, so a detail row that does not exist is not requested
+  // again on every visit.
+  const vndbDetailKnown = useCallback(
+    (vnId: string) =>
+      useAppStore.getState().vndbDetails[vnId] !== undefined,
+    [],
   );
   const cacheVndbDetail = useAppStore((state) => state.cacheVndbDetail);
 
   const [card, setCard] = useState<GameCard | null>(cachedCard ?? null);
   const [sessions, setSessions] = useState<PlaySession[]>([]);
+  // Exact totals over every session, not just the visible page.
+  const [sessionTotals, setSessionTotals] = useState({ total: 0, countedMs: 0 });
   const [executables, setExecutables] = useState<GameExecutable[]>([]);
   // Seed from the store so a revisit shows the payload it already fetched
   // instead of re-requesting an unchanged row.
@@ -154,7 +168,7 @@ export function GameDetailScreen() {
       try {
         const [loaded, loadedSessions, loadedExes] = await Promise.all([
           api.getGame(id),
-          api.listSessions(id).catch(() => []),
+          api.listGameSessions(id).catch(() => null),
           api.trackingListExecutables().catch(() => []),
         ]);
         if (cancelled) return;
@@ -170,13 +184,19 @@ export function GameDetailScreen() {
           setCard(loaded);
           setNotes(loaded.game.notes ?? "");
         }
-        setSessions(loadedSessions);
+        setSessions(loadedSessions?.sessions ?? []);
+        setSessionTotals({
+          total: loadedSessions?.totalSessions ?? 0,
+          countedMs: loadedSessions?.countedMs ?? 0,
+        });
         setExecutables(loadedExes.filter((entry) => entry.game_id === id));
 
         // VNDB extras are strictly optional: a missing detail row just hides the
-        // section rather than blocking the page.
+        // section rather than blocking the page. A cached answer (including a
+        // cached "nothing here") is reused, so revisiting a page never repeats
+        // the request unless a metadata refresh replaced the payload.
         const vnId = loaded?.game.vndb_id;
-        if (vnId) {
+        if (vnId && !vndbDetailKnown(vnId)) {
           void api
             .vndbDetail(vnId)
             .then((detail) => {
@@ -202,7 +222,7 @@ export function GameDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, pushToast, t, cacheVndbDetail]);
+  }, [id, pushToast, t, cacheVndbDetail, vndbDetailKnown]);
 
   useEffect(() => {
     if (!isAndroid || !id) return;
@@ -213,14 +233,18 @@ export function GameDetailScreen() {
         await api.trackingAndroidSession();
         const [nextCard, nextSessions] = await Promise.all([
           api.getGame(id),
-          api.listSessions(id),
+          api.listGameSessions(id),
         ]);
         if (cancelled) return;
         if (nextCard) {
           setCard(nextCard);
           upsertCard(nextCard);
         }
-        setSessions(nextSessions);
+        setSessions(nextSessions.sessions);
+        setSessionTotals({
+          total: nextSessions.totalSessions,
+          countedMs: nextSessions.countedMs,
+        });
       } catch {
         // Preserve the last known game while the tracking screen reports errors.
       }
@@ -310,12 +334,23 @@ export function GameDetailScreen() {
     patch: Parameters<typeof api.updateGame>[0],
   ): Promise<boolean> => {
     try {
-      await api.updateGame(patch);
-      const refreshed = await api.getGame(game.meta.id);
-      if (refreshed) {
-        setCard(refreshed);
-        upsertCard(refreshed);
-      }
+      // `update_game` answers with the saved row itself. Re-reading the card cost
+      // a second round trip (which recomputes the session totals) for a value
+      // already in hand, on every status and rating change.
+      const saved = await api.updateGame(patch);
+      setCard((current) =>
+        current && current.game.meta.id === saved.meta.id
+          ? { ...current, game: saved }
+          : current,
+      );
+      const tracked = card?.tracked_ms ?? 0;
+      upsertCard({
+        game: saved,
+        tracked_ms: tracked,
+        afk_ms: card?.afk_ms ?? 0,
+        // Same rule as `Game::total_playtime_ms`: tracked plus adjustment, never negative.
+        total_ms: Math.max(0, tracked + saved.manual_playtime_ms),
+      });
       return true;
     } catch (caught) {
       pushToast("error", caught instanceof IpcError ? caught.message : t("common.error"));
@@ -738,6 +773,8 @@ export function GameDetailScreen() {
               for the companion chat, and neither is required to play. */}
           {id ? <ScriptCard gameId={id} /> : null}
 
+          {id ? <WalkthroughCard gameId={id} vnId={game.vndb_id} /> : null}
+
           <Card>
             <CardHeader
               title={t("detail.sessions")}
@@ -750,7 +787,7 @@ export function GameDetailScreen() {
             {sessions.length === 0 ? (
               <p className="body">{t("detail.sessionsEmpty")}</p>
             ) : (
-              <ul className="stats__rows">
+              <ul className="stats__rows" aria-describedby="detail-sessions-count">
                 {sessions.map((session) => (
                   <li
                     key={session.meta.id}
@@ -781,6 +818,16 @@ export function GameDetailScreen() {
                 ))}
               </ul>
             )}
+            {/* The list is capped, so it says how many sessions exist in total
+                instead of quietly looking complete. */}
+            {sessionTotals.total > sessions.length ? (
+              <p className="caption" id="detail-sessions-count">
+                {t("detail.sessionsOlder", {
+                  count: sessionTotals.total - sessions.length,
+                  total: sessionTotals.total,
+                })}
+              </p>
+            ) : null}
           </Card>
         </div>
 
@@ -801,7 +848,9 @@ export function GameDetailScreen() {
             setCard(refreshed);
             upsertCard(refreshed);
           }
-          setSessions(await api.listSessions(game.meta.id));
+          const page = await api.listGameSessions(game.meta.id);
+          setSessions(page.sessions);
+          setSessionTotals({ total: page.totalSessions, countedMs: page.countedMs });
         }}
       />
 

@@ -438,6 +438,8 @@ export const en = {
   "detail.notesEmpty": "No notes yet.",
   "detail.sessions": "Sessions",
   "detail.sessionsEmpty": "No sessions recorded. Time you add by hand appears here.",
+  "detail.sessionsOlder":
+    "Showing the newest 50. {{count}} older of {{total}} sessions are included in the total, not listed.",
   "detail.active": "Active",
   "detail.away": "Away",
   "detail.afkColumn": "Away",
@@ -806,7 +808,7 @@ export const en = {
   "settings.presenceState": "State line",
   "settings.presenceShowCover": "Show Cover Art",
   "settings.presenceShowCoverHint":
-    "Only non-explicit VNDB covers are sent. Custom local covers are never sent.",
+    "A VNDB cover is sent only when it is not explicit. A cover you picked yourself is sent the way your library shows it, blurred when the game's cover rating is explicit.",
   "settings.presenceImageHost": "Image Host",
   "settings.presenceImageHostNone": "None",
   "settings.presenceImageHostCatbox": "Catbox",
@@ -1164,8 +1166,6 @@ export const en = {
     "The model reached the tool-call limit. Ask a more specific question.",
   "vnchat.error.context_limit":
     "This request retrieved too much context. Narrow the question or start a new chat.",
-  "vnchat.error.message_limit":
-    "This chat has reached 100 exchanges. Start a new chat; this history is preserved.",
   "vnchat.error.chat_limit":
     "There are 100 saved chats. Delete an old chat before starting another.",
   "vnchat.error.chat_busy":
@@ -1250,12 +1250,56 @@ export const en = {
   "script.summarizeContinue": "Continue",
   "script.stop": "Stop",
   "script.digestReady": "Digest ready",
+  "script.digestOld": "Older digest",
+  "script.rebuild": "Rebuild digest",
+  "script.rebuildHint":
+    "This digest was written by an older summarizer. Rebuilding reads the stored script again and keeps character names, chronology, choices and branches.",
   "script.remove": "Remove",
   "script.deleted": "Script removed",
   "script.busy": "Another summary run is still finishing. Try again in a moment.",
   "script.localOnly": "Scripts stay on this device; they are never synced or exported.",
   "script.error.chatKeyMissing":
     "Set an AI provider (or a local endpoint) in Settings first.",
+  "walkthrough.title": "Walkthrough",
+  "walkthrough.intro":
+    "Visual novel route walkthroughs from Seiya-Saiga (seiya-saiga.com). Check off choices as you progress through each route.",
+  "walkthrough.fetch": "Fetch walkthrough",
+  "walkthrough.fetching": "Fetching...",
+  "walkthrough.searchSeiya": "Search Seiya-Saiga",
+  "walkthrough.customUrlPlaceholder": "https://galge.seiya-saiga.com/game/...",
+  "walkthrough.foundMatch": "Found on Seiya-Saiga: {{title}}",
+  "walkthrough.empty":
+    "No walkthrough loaded yet. Search automatically from Seiya-Saiga's directory or enter a guide URL directly.",
+  "walkthrough.routes": "Routes",
+  "walkthrough.allRoutes": "All Routes",
+  "walkthrough.progress": "{{checked}} of {{total}} choices completed",
+  "walkthrough.resetProgress": "Reset choices",
+  "walkthrough.resetConfirm": "Clear all checked choices for this walkthrough?",
+  "walkthrough.source": "Source: {{title}}",
+  "walkthrough.openSource": "Open guide in browser",
+  "walkthrough.translateAi": "AI Translate (VNDB Glossary)",
+  "walkthrough.translateGoogle": "Google Translate",
+  "walkthrough.translating": "Translating...",
+  "walkthrough.langOriginal": "Japanese (Original)",
+  "walkthrough.langAi": "AI Translated",
+  "walkthrough.langGoogle": "Google Translate",
+  "walkthrough.glossaryActive": "{{count}} characters from VNDB glossary",
+  "walkthrough.kind.choice": "Choice",
+  "walkthrough.kind.save": "Save",
+  "walkthrough.kind.date": "Date",
+  "walkthrough.kind.action": "Action",
+  "walkthrough.kind.ending": "Ending",
+  "walkthrough.kind.note": "Note",
+  "walkthrough.reload": "Re-scrape",
+  "walkthrough.searchPlaceholder": "Search game titles (Japanese / Romaji) on Seiya-Saiga...",
+  "walkthrough.searchBtn": "Search",
+  "walkthrough.searching": "Searching...",
+  "walkthrough.searchResults": "Search Results ({{count}})",
+  "walkthrough.candidatesFound": "Matching Candidates ({{count}})",
+  "walkthrough.noResults": "No matching titles found on Seiya-Saiga. Try another keyword or use a manual URL.",
+  "walkthrough.select": "Fetch",
+  "walkthrough.orManualUrl": "or enter a manual URL",
+  "walkthrough.autoSearchTip": "Covers 4,800+ visual novel titles from Seiya-Saiga (PC 18+, All-ages, Console).",
 } as const;
 
 export type MessageKey = keyof typeof en;

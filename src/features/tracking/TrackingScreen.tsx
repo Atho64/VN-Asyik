@@ -6,7 +6,7 @@ import { Button } from "@/components/Button";
 import { Card, CardHeader } from "@/components/Card";
 import { Chip } from "@/components/Chip";
 import { Icon } from "@/components/Icon";
-import { api, IpcError } from "@/lib/ipc/client";
+import { api, IpcError, startPolling } from "@/lib/ipc/client";
 import { formatDurationLong } from "@/lib/time";
 import type {
   ExecutableCandidate,
@@ -445,11 +445,12 @@ function AndroidSessionPanel() {
           setError(caught instanceof IpcError ? caught.message : t("common.error"));
       }
     };
-    void load();
-    const timer = window.setInterval(() => void load(), 2_000);
+    // Sequential ticks: a usage query can outlast the 2 s interval, and two in
+    // flight can answer out of order and show an older session.
+    const stopPolling = startPolling(load, 2_000);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [t]);
 

@@ -10,6 +10,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 
 import {
+  walkthroughViewSchema,
+  walkthroughIndexEntrySchema,
+  type WalkthroughView,
+  type WalkthroughIndexEntry,
   androidAppSchema,
   androidSessionViewSchema,
   type AndroidApp,
@@ -62,12 +66,14 @@ import {
   dataImportPreviewSchema,
   dataImportResultSchema,
   platformInfoSchema,
+  gameSessionsPageSchema,
   playSessionSchema,
   prefsSchema,
   statusBreakdownSchema,
   type AfkConfig,
   type Chapter,
   type ChapterCapabilityView,
+  type GameSessionsPage,
   type UsageAccessView,
   type SyncStatus,
   type SyncOutcome,
@@ -166,6 +172,25 @@ export async function call<T>(
   }
 }
 
+/** Requests already on the wire, keyed by command. */
+const inFlight = new Map<string, Promise<unknown>>();
+
+/**
+ * Share one in-flight request between callers of the same command.
+ *
+ * Only for calls whose answer does not depend on arguments: the library totals
+ * and the tracking status. A caller that starts while the previous answer is
+ * still travelling gets that answer instead of paying for a second aggregate.
+ * The entry is cleared as soon as it settles, so the next call is fresh.
+ */
+function shared<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const pending = inFlight.get(key);
+  if (pending) return pending as Promise<T>;
+  const request = run().finally(() => inFlight.delete(key));
+  inFlight.set(key, request);
+  return request;
+}
+
 /** Result of a filtered, sorted library query. */
 export interface LibraryPayload {
   games: GameCard[];
@@ -202,6 +227,8 @@ export interface Api {
   deleteGame(id: string): Promise<void>;
   listChapters(gameId: string): Promise<Chapter[]>;
   listSessions(gameId: string): Promise<PlaySession[]>;
+  /** Newest sessions plus exact totals over all of them. */
+  listGameSessions(gameId: string): Promise<GameSessionsPage>;
   listEndings(gameId: string): Promise<Ending[]>;
   gameRoutes(gameId: string): Promise<RouteView[]>;
   createRoute(gameId: string, name: string): Promise<string>;
@@ -375,19 +402,88 @@ export interface Api {
   presenceImageKeyPreview(): Promise<string | null>;
   /** Open a URL in the OS default browser. Validated on the Rust side. */
   openExternal(url: string): Promise<void>;
+  walkthroughGet(gameId: string, vnId?: string | null): Promise<WalkthroughView | null>;
+  walkthroughSearchCandidate(gameId: string, vnId?: string | null): Promise<WalkthroughIndexEntry[]>;
+  walkthroughSearch(query: string): Promise<WalkthroughIndexEntry[]>;
+  walkthroughFetch(gameId: string, vnId?: string | null, url?: string | null): Promise<WalkthroughView>;
+  walkthroughTranslate(
+    gameId: string,
+    provider: "ai" | "google",
+    targetLang: "en" | "id",
+    vnId?: string | null,
+  ): Promise<WalkthroughView>;
+  walkthroughToggleItem(gameId: string, itemId: string): Promise<string[]>;
+  walkthroughClearProgress(gameId: string): Promise<void>;
 }
 
 /** `void` commands still resolve to `null` over IPC. */
 const voidSchema = z.unknown().transform(() => undefined as void);
 
+/**
+ * Run `run` immediately, then every `intervalMs`, waiting for each call to settle.
+ *
+ * A fixed `setInterval` starts a new request whether or not the last one came
+ * back. A slow IPC round trip (an Android usage query, a cold database open) then
+ * stacks requests that are answered out of order, and the oldest answer can
+ * overwrite the newest state. This keeps exactly one request in flight.
+ */
+export function startPolling(
+  run: () => Promise<void>,
+  intervalMs: number,
+): () => void {
+  let stopped = false;
+  let timer = 0;
+  const tick = async (): Promise<void> => {
+    if (stopped) return;
+    try {
+      await run();
+    } catch {
+      // The caller decides how to report a failure; polling continues.
+    } finally {
+      if (!stopped) timer = window.setTimeout(() => void tick(), intervalMs);
+    }
+  };
+  void tick();
+  return () => {
+    stopped = true;
+    window.clearTimeout(timer);
+  };
+}
+
+/**
+ * Drop a response once its caller has gone away.
+ *
+ * Pollers answer every few seconds, and a slow round trip can outlive the
+ * screen that asked for it. This keeps scheduling the next tick only while a
+ * request is still in flight, so a stalled backend stops accumulating
+ * overlapping calls instead of piling one up per interval.
+ */
+export function polled<T>(
+  promise: Promise<T>,
+  apply: (value: T) => void,
+  isActive: () => boolean,
+): Promise<void> {
+  return promise.then(
+    (value) => {
+      if (isActive()) apply(value);
+    },
+    () => undefined,
+  );
+}
+
 export const api: Api = {
-  listGames: () => call("list_games", gameCardSchema.array()),
+  // The library totals are recomputed by `list_games` on every call, so a second
+  // concurrent request (boot, focus refresh, screen reload) would pay a full
+  // session aggregate again. Callers share one in-flight answer instead.
+  listGames: () => shared("list_games", () => call("list_games", gameCardSchema.array())),
   getGame: (id) => call("get_game", gameCardSchema.nullable(), { id }),
   createGame: (input) => call("create_game", gameSchema, { input }),
   updateGame: (input) => call("update_game", gameSchema, { input }),
   deleteGame: (id) => call("delete_game", voidSchema, { id }),
   listChapters: (gameId) => call("list_chapters", chapterSchema.array(), { gameId }),
   listSessions: (gameId) => call("list_sessions", playSessionSchema.array(), { gameId }),
+  listGameSessions: (gameId) =>
+    call("list_game_sessions", gameSessionsPageSchema, { gameId }),
   listEndings: (gameId) => call("list_endings", endingSchema.array(), { gameId }),
   gameRoutes: (gameId) => call("game_routes", routeViewSchema.array(), { gameId }),
   createRoute: (gameId, name) => call("create_route", z.string(), { gameId, name }),
@@ -470,7 +566,9 @@ export const api: Api = {
   vndbLog: () => call("vndb_log", logEntrySchema.array()),
   vndbLabels: () => call("vndb_labels", ulistLabelInfoSchema.array()),
   trackingCapability: () => call("tracking_capability", trackerCapabilitySchema),
-  trackingStatus: () => call("tracking_status", trackingStatusSchema),
+  // Polled every few seconds; coalesce so a slow tick cannot queue more work.
+  trackingStatus: () =>
+    shared("tracking_status", () => call("tracking_status", trackingStatusSchema)),
   trackingSetEnabled: (enabled) =>
     call("tracking_set_enabled", trackerCapabilitySchema, { enabled }),
   trackingMapExecutable: (gameId, exePath) =>
@@ -578,6 +676,30 @@ export const api: Api = {
   presenceImageKeySave: (key) => call("presence_image_key_save", voidSchema, { key }),
   presenceImageKeyClear: () => call("presence_image_key_clear", voidSchema),
   presenceImageKeyPreview: () => call("presence_image_key_preview", z.string().nullable()),
+  walkthroughGet: (gameId: string, vnId?: string | null) =>
+    call("walkthrough_get", walkthroughViewSchema.nullable(), { gameId, vnId: vnId ?? null }),
+  walkthroughSearchCandidate: (gameId: string, vnId?: string | null) =>
+    call("walkthrough_search_candidate", walkthroughIndexEntrySchema.array(), { gameId, vnId: vnId ?? null }),
+  walkthroughSearch: (query: string) =>
+    call("walkthrough_search", walkthroughIndexEntrySchema.array(), { query }),
+  walkthroughFetch: (gameId: string, vnId?: string | null, url?: string | null) =>
+    call("walkthrough_fetch", walkthroughViewSchema, { gameId, vnId: vnId ?? null, url: url ?? null }),
+  walkthroughTranslate: (
+    gameId: string,
+    provider: "ai" | "google",
+    targetLang: "en" | "id",
+    vnId?: string | null,
+  ) =>
+    call("walkthrough_translate", walkthroughViewSchema, {
+      gameId,
+      provider,
+      targetLang,
+      vnId: vnId ?? null,
+    }),
+  walkthroughToggleItem: (gameId: string, itemId: string) =>
+    call("walkthrough_toggle_item", z.string().array(), { gameId, itemId }),
+  walkthroughClearProgress: (gameId: string) =>
+    call("walkthrough_clear_progress", voidSchema, { gameId }),
   openExternal: (url) => call("open_external", voidSchema, { url }),
 };
 

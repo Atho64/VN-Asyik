@@ -4,16 +4,19 @@ import { createBrowserRouter, RouterProvider } from "react-router";
 
 import { AppProvider } from "@/app/AppProvider";
 import { AppShellWithMenu } from "@/app/AppShell";
-import { GameDetailScreen } from "@/features/game/GameDetailScreen";
 import { LibraryScreen } from "@/features/library/LibraryScreen";
-import { SettingsScreen } from "@/features/settings/SettingsScreen";
-import { StatsScreen } from "@/features/stats/StatsScreen";
-import { RecommendScreen } from "@/features/recommend/RecommendScreen";
-import { ChatScreen } from "@/features/chat/ChatScreen";
-import { TrackingScreen } from "@/features/tracking/TrackingScreen";
 import { RouteError } from "@/app/RouteError";
 import "@/styles/index.css";
 
+/**
+ * Screens are split by route rather than shipped as one bundle.
+ *
+ * The library is the only screen that runs at launch; chat, settings, stats,
+ * discover, tracking and the game page were all parsed on the first frame and
+ * kept resident for a visit that may never happen. Each lazy screen is fetched
+ * once, then cached by the router. `LibraryScreen` stays eager so the first paint
+ * is not a blank frame behind a network-shaped import.
+ */
 const router = createBrowserRouter([
   {
     path: "/",
@@ -21,17 +24,76 @@ const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <LibraryScreen /> },
-      { path: "game/:id", element: <GameDetailScreen /> },
-      { path: "stats", element: <StatsScreen /> },
-      { path: "settings", element: <SettingsScreen key="general" /> },
-      { path: "sync", element: <SettingsScreen key="vndb" initialTab="vndb" /> },
+      {
+        path: "game/:id",
+        lazy: async () => {
+          const { GameDetailScreen } = await import(
+            "@/features/game/GameDetailScreen"
+          );
+          return { Component: GameDetailScreen };
+        },
+      },
+      {
+        path: "stats",
+        lazy: async () => {
+          const { StatsScreen } = await import("@/features/stats/StatsScreen");
+          return { Component: StatsScreen };
+        },
+      },
+      {
+        path: "settings",
+        lazy: async () => {
+          const { default: SettingsScreen } = await import(
+            "@/features/settings/SettingsScreen"
+          );
+          return { Component: () => <SettingsScreen key="general" /> };
+        },
+      },
+      {
+        path: "sync",
+        lazy: async () => {
+          const { default: SettingsScreen } = await import(
+            "@/features/settings/SettingsScreen"
+          );
+          return { Component: () => <SettingsScreen key="vndb" initialTab="vndb" /> };
+        },
+      },
       {
         path: "devices",
-        element: <SettingsScreen key="transfer" initialTab="transfer" />,
+        lazy: async () => {
+          const { default: SettingsScreen } = await import(
+            "@/features/settings/SettingsScreen"
+          );
+          return {
+            Component: () => <SettingsScreen key="transfer" initialTab="transfer" />,
+          };
+        },
       },
-      { path: "tracking", element: <TrackingScreen /> },
-      { path: "recommend", element: <RecommendScreen /> },
-      { path: "chat", element: <ChatScreen /> },
+      {
+        path: "tracking",
+        lazy: async () => {
+          const { TrackingScreen } = await import(
+            "@/features/tracking/TrackingScreen"
+          );
+          return { Component: TrackingScreen };
+        },
+      },
+      {
+        path: "recommend",
+        lazy: async () => {
+          const { RecommendScreen } = await import(
+            "@/features/recommend/RecommendScreen"
+          );
+          return { Component: RecommendScreen };
+        },
+      },
+      {
+        path: "chat",
+        lazy: async () => {
+          const { ChatScreen } = await import("@/features/chat/ChatScreen");
+          return { Component: ChatScreen };
+        },
+      },
     ],
   },
 ]);

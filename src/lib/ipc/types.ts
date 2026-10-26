@@ -111,6 +111,20 @@ export const playSessionSchema = z.object({
 });
 export type PlaySession = z.infer<typeof playSessionSchema>;
 
+/**
+ * Newest sessions for the game page, with totals over the whole history.
+ *
+ * The list is bounded (50 rows); the totals are not, so the figure beside the
+ * heading still covers every session the game has.
+ */
+export const gameSessionsPageSchema = z.object({
+  sessions: playSessionSchema.array(),
+  totalSessions: z.number(),
+  countedMs: z.number(),
+  afkMs: z.number(),
+});
+export type GameSessionsPage = z.infer<typeof gameSessionsPageSchema>;
+
 export const endingSchema = z.object({
   meta: syncMetaSchema,
   game_id: z.string(),
@@ -1020,3 +1034,39 @@ export const presenceActivitySchema = z.object({
   buttons: presenceButtonSchema.array(),
 });
 export type PresenceActivity = z.infer<typeof presenceActivitySchema>;
+
+export const itemKindSchema = z.enum(["choice", "save", "date", "action", "ending", "note"]);
+export type ItemKind = z.infer<typeof itemKindSchema>;
+
+export const walkthroughItemSchema = z.object({
+  id: z.string(),
+  kind: itemKindSchema,
+  text: z.string(),
+  note: z.string().optional(),
+});
+export type WalkthroughItem = z.infer<typeof walkthroughItemSchema>;
+
+export const walkthroughRouteSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  items: walkthroughItemSchema.array(),
+});
+export type WalkthroughRoute = z.infer<typeof walkthroughRouteSchema>;
+
+export const walkthroughIndexEntrySchema = z.object({
+  title: z.string(),
+  url: z.string(),
+});
+export type WalkthroughIndexEntry = z.infer<typeof walkthroughIndexEntrySchema>;
+
+export const walkthroughViewSchema = z.object({
+  gameId: z.string(),
+  title: z.string(),
+  sourceUrl: z.string(),
+  notes: z.string().nullable().optional(),
+  routes: walkthroughRouteSchema.array(),
+  checkedItems: z.string().array(),
+  translations: z.record(z.string(), walkthroughRouteSchema.array()),
+  characterGlossary: z.record(z.string(), z.string()),
+});
+export type WalkthroughView = z.infer<typeof walkthroughViewSchema>;

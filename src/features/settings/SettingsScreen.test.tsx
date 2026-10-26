@@ -27,7 +27,7 @@ vi.mock("./LunaPanel", () => ({ LunaPanel: () => <p>Luna live text</p> }));
 vi.mock("./PresencePanel", () => ({ PresencePanel: () => <p>Discord Presence</p> }));
 vi.mock("./TitleParsingPanel", () => ({ TitleParsingPanel: () => <p>Window titles</p> }));
 
-const { SettingsScreen } = await import("./SettingsScreen");
+const { default: SettingsScreen } = await import("./SettingsScreen");
 
 beforeEach(() => {
   vi.clearAllMocks();

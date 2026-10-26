@@ -58,10 +58,38 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
         /** A failed external-asset lookup is retried only after this long, so a
          * flaky endpoint does not turn every presence poll into an HTTP attempt. */
         private const val ASSET_RETRY_MS = 5 * 60 * 1000L
+
+        /** Reconnect backoff: 2s, 4s, 8s ... capped, reset on a successful READY/RESUMED. */
+        private const val RECONNECT_BASE_MS = 2_000L
+        private const val RECONNECT_MAX_MS = 60_000L
+
+        /** A socket that never reaches READY/RESUMED must not hold `isConnecting` forever. */
+        private const val CONNECT_TIMEOUT_MS = 30_000L
+
+        /** After `clear`, the socket is kept warm this long so a quick app switch or a
+         * momentary "nothing running" poll does not force a full re-identify. */
+        private const val IDLE_DISCONNECT_MS = 10 * 60 * 1000L
+
+        private const val WAKE_LOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000L
+
+        /** Close codes after which the session can never be resumed. */
+        private val NON_RESUMABLE_CODES = setOf(4007, 4009)
+
+        /** Close codes where retrying cannot help (bad token, bad shard/intents...). */
+        private val FATAL_CODES = setOf(4004, 4010, 4011, 4012, 4013, 4014)
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val reconnectRunnable = Runnable { connectGateway() }
+    private val connectTimeoutRunnable = Runnable { onConnectTimeout() }
+    private val idleDisconnectRunnable = Runnable {
+        synchronized(this@DiscordGatewayPlugin) {
+            if (lastActivityJson == null) disconnectInternal()
+        }
+    }
+    private var reconnectAttempts = 0
+    private var heartbeatAcked = true
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
     private var okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -135,21 +163,28 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                 synchronized(this@DiscordGatewayPlugin) {
                     if (ws !== webSocket) return
-                    isConnected = false
-                    isConnecting = false
-                    stopHeartbeat()
-                    webSocket = null
+                    markSocketDown()
 
-                    if (code == 4004) {
-                        lastError = "Authentication failed (invalid Discord token)"
+                    if (code in FATAL_CODES) {
+                        lastError = if (code == 4004) {
+                            "Authentication failed (invalid Discord token)"
+                        } else {
+                            "Gateway closed the connection ($code)"
+                        }
                         shouldStayConnected = false
+                        reconnectAttempts = 0
                         sessionId = null
                         sequence = null
                         resumeGatewayUrl = null
+                        releaseWakeLock()
                         PresenceForegroundService.stop(activity)
-                    } else if (shouldStayConnected) {
-                        mainHandler.removeCallbacks(reconnectRunnable)
-                        mainHandler.postDelayed(reconnectRunnable, 5000)
+                    } else {
+                        if (code in NON_RESUMABLE_CODES) {
+                            sessionId = null
+                            sequence = null
+                            resumeGatewayUrl = null
+                        }
+                        scheduleReconnect()
                     }
                 }
             }
@@ -157,19 +192,75 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 synchronized(this@DiscordGatewayPlugin) {
                     if (ws !== webSocket) return
-                    isConnected = false
-                    isConnecting = false
-                    stopHeartbeat()
-                    webSocket = null
+                    markSocketDown()
                     lastError = t.message ?: "Connection failure"
-
-                    if (shouldStayConnected) {
-                        mainHandler.removeCallbacks(reconnectRunnable)
-                        mainHandler.postDelayed(reconnectRunnable, 5000)
-                    }
+                    scheduleReconnect()
                 }
             }
         })
+        mainHandler.removeCallbacks(connectTimeoutRunnable)
+        mainHandler.postDelayed(connectTimeoutRunnable, CONNECT_TIMEOUT_MS)
+    }
+
+    /** Resets per-socket state. Caller holds the plugin lock. */
+    private fun markSocketDown() {
+        isConnected = false
+        isConnecting = false
+        stopHeartbeat()
+        webSocket = null
+        mainHandler.removeCallbacks(connectTimeoutRunnable)
+    }
+
+    /** Queues a reconnect with exponential backoff while the user still wants presence. */
+    private fun scheduleReconnect() {
+        if (!shouldStayConnected) return
+        val delay = minOf(RECONNECT_BASE_MS shl minOf(reconnectAttempts, 5), RECONNECT_MAX_MS)
+        reconnectAttempts++
+        mainHandler.removeCallbacks(reconnectRunnable)
+        mainHandler.postDelayed(reconnectRunnable, delay)
+    }
+
+    /** Gives up on a socket that opened but never reached READY/RESUMED. */
+    private fun onConnectTimeout() {
+        synchronized(this) {
+            if (isConnected || !isConnecting) return
+            val ws = webSocket
+            markSocketDown()
+            lastError = "Gateway handshake timed out"
+            ws?.cancel()
+            scheduleReconnect()
+        }
+    }
+
+    private fun acquireWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) return
+            val pm = activity.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "vnasyik:discord-gateway").apply {
+                setReferenceCounted(false)
+                acquire(WAKE_LOCK_TIMEOUT_MS)
+            }
+        } catch (_: Exception) {
+            // The wake lock is best effort; the socket still works without it.
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.takeIf { it.isHeld }?.release()
+        } catch (_: Exception) {
+        }
+        wakeLock = null
+    }
+
+    /** Called once the gateway accepted the session (READY or RESUMED). */
+    private fun onSessionEstablished() {
+        isConnected = true
+        isConnecting = false
+        lastError = null
+        reconnectAttempts = 0
+        mainHandler.removeCallbacks(connectTimeoutRunnable)
+        acquireWakeLock()
     }
 
     @Synchronized
@@ -203,14 +294,10 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
                     } else {
                         null
                     }
-                    isConnected = true
-                    isConnecting = false
-                    lastError = null
+                    onSessionEstablished()
                     lastActivityJson?.let { sendPresence(ws, it) }
                 } else if (t == "RESUMED") {
-                    isConnected = true
-                    isConnecting = false
-                    lastError = null
+                    onSessionEstablished()
                     lastActivityJson?.let { sendPresence(ws, it) }
                 }
             }
@@ -218,6 +305,7 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
                 sendHeartbeat(ws)
             }
             OP_RECONNECT -> {
+                // Close with a non-1000 code so Discord keeps the session resumable.
                 ws.close(4000, "Discord requested reconnect")
             }
             OP_INVALID_SESSION -> {
@@ -235,19 +323,29 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
                 }, 500)
             }
             OP_HEARTBEAT_ACK -> {
-                // Heartbeat acknowledged
+                heartbeatAcked = true
             }
         }
     }
 
     private fun startHeartbeat(ws: WebSocket, intervalMs: Long) {
         stopHeartbeat()
+        heartbeatAcked = true
         heartbeatExecutor = Executors.newSingleThreadScheduledExecutor()
         heartbeatFuture = heartbeatExecutor?.scheduleAtFixedRate({
             synchronized(this@DiscordGatewayPlugin) {
-                if (ws === webSocket) {
-                    sendHeartbeat(ws)
+                if (ws !== webSocket) return@synchronized
+                if (!heartbeatAcked) {
+                    // Zombied connection (common on mobile networks): the previous
+                    // heartbeat was never acknowledged. Drop the socket without a
+                    // 1000 close so the session stays resumable; `cancel` fires
+                    // onFailure, which schedules the reconnect.
+                    lastError = "Gateway heartbeat timed out"
+                    ws.cancel()
+                    return@synchronized
                 }
+                heartbeatAcked = false
+                sendHeartbeat(ws)
             }
         }, intervalMs, intervalMs, TimeUnit.MILLISECONDS)
     }
@@ -447,12 +545,16 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
     private fun disconnectInternal() {
         shouldStayConnected = false
         mainHandler.removeCallbacks(reconnectRunnable)
+        mainHandler.removeCallbacks(connectTimeoutRunnable)
+        mainHandler.removeCallbacks(idleDisconnectRunnable)
         stopHeartbeat()
         webSocket?.close(1000, "Normal closure")
         webSocket = null
         isConnected = false
         isConnecting = false
+        reconnectAttempts = 0
         lastActivityJson = null
+        releaseWakeLock()
         PresenceForegroundService.stop(activity)
     }
 
@@ -475,6 +577,7 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
             token = t
             clientId = args.clientId?.trim()
             shouldStayConnected = true
+            mainHandler.removeCallbacks(idleDisconnectRunnable)
 
             val actObj = JSONObject().apply {
                 put("name", args.name?.takeIf { it.isNotBlank() } ?: "VN Asyik")
@@ -505,7 +608,9 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
             if (isConnected && ws != null) {
                 sendPresence(ws, actObj)
             } else {
-                connectGateway()
+                // Respect a pending backoff so a failing network is not hammered at
+                // the poll rate; otherwise connect right away.
+                if (reconnectAttempts == 0) connectGateway()
             }
         }
         invoke.resolve()
@@ -518,7 +623,18 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
             if (isConnected && ws != null) {
                 sendPresence(ws, null)
             }
-            disconnectInternal()
+            lastActivityJson = null
+            if (shouldStayConnected && token != null) {
+                // Keep the gateway session warm instead of tearing it down: a clear is
+                // sent whenever tracking sees "nothing running", including brief gaps
+                // while the user switches apps, and a full reconnect each time looked
+                // like the RPC dropping by itself. Disconnect only after a real idle.
+                PresenceForegroundService.start(activity, "VN Asyik", "Discord Rich Presence idle")
+                mainHandler.removeCallbacks(idleDisconnectRunnable)
+                mainHandler.postDelayed(idleDisconnectRunnable, IDLE_DISCONNECT_MS)
+            } else {
+                disconnectInternal()
+            }
         }
         invoke.resolve()
     }
@@ -539,7 +655,7 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
                 isConnected -> {
                     result.put("status", "connected")
                 }
-                isConnecting -> {
+                isConnecting || (shouldStayConnected && token != null && webSocket == null) -> {
                     result.put("status", "connecting")
                 }
                 lastError != null -> {

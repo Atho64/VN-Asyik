@@ -31,3 +31,4 @@ pub mod window_title;
 pub use clock::Timestamp;
 pub use ids::{DeviceId, EntityId};
 pub mod chat;
+pub mod walkthrough;

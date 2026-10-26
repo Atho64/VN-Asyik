@@ -439,6 +439,8 @@ export const id: Messages = {
   "detail.sessions": "Sesi",
   "detail.sessionsEmpty":
     "Belum ada sesi. Waktu yang kamu isi manual akan muncul di sini.",
+  "detail.sessionsOlder":
+    "Menampilkan 50 sesi terbaru. {{count}} sesi lebih lama dari total {{total}} tetap dihitung, hanya tidak didaftar.",
   "detail.active": "Aktif",
   "detail.away": "Meninggalkan",
   "detail.afkColumn": "Meninggalkan",
@@ -807,7 +809,7 @@ export const id: Messages = {
   "settings.presenceState": "Baris State",
   "settings.presenceShowCover": "Tampilkan Sampul",
   "settings.presenceShowCoverHint":
-    "Hanya sampul VNDB non-eksplisit yang dikirim. Sampul lokal tidak pernah dikirim.",
+    "Sampul VNDB hanya dikirim kalau tidak eksplisit. Sampul yang kamu pilih sendiri dikirim seperti yang tampil di koleksimu, diburamkan bila rating sampul gim itu eksplisit.",
   "settings.presenceImageHost": "Host Gambar",
   "settings.presenceImageHostNone": "Tidak ada",
   "settings.presenceImageHostCatbox": "Catbox",
@@ -1165,8 +1167,6 @@ export const id: Messages = {
     "Model mencapai batas pemanggilan tool. Ajukan pertanyaan yang lebih spesifik.",
   "vnchat.error.context_limit":
     "Permintaan mengambil terlalu banyak konteks. Persempit pertanyaan atau buat chat baru.",
-  "vnchat.error.message_limit":
-    "Chat ini mencapai 100 pertukaran pesan. Buat chat baru; riwayat ini tetap tersimpan.",
   "vnchat.error.chat_limit":
     "Ada 100 chat tersimpan. Hapus chat lama sebelum membuat yang baru.",
   "vnchat.error.chat_busy":
@@ -1251,10 +1251,54 @@ export const id: Messages = {
   "script.summarizeContinue": "Lanjutkan",
   "script.stop": "Hentikan",
   "script.digestReady": "Ringkasan siap",
+  "script.digestOld": "Ringkasan lama",
+  "script.rebuild": "Bangun ulang ringkasan",
+  "script.rebuildHint":
+    "Ringkasan ini dibuat oleh peringkas versi lama. Membangunnya ulang membaca skrip tersimpan sekali lagi dan mempertahankan nama tokoh, urutan cerita, pilihan, dan cabang.",
   "script.remove": "Hapus",
   "script.deleted": "Skrip dihapus",
   "script.busy": "Ringkasan lain masih berjalan. Coba lagi sebentar.",
   "script.localOnly": "Skrip tetap di perangkat ini; tidak pernah disinkronkan atau diekspor.",
   "script.error.chatKeyMissing":
     "Atur dulu penyedia AI (atau endpoint lokal) di Pengaturan.",
+  "walkthrough.title": "Walkthrough",
+  "walkthrough.intro":
+    "Panduan rute visual novel dari Seiya-Saiga (seiya-saiga.com). Centang pilihan yang sudah kamu lewati seiring berjalannya cerita.",
+  "walkthrough.fetch": "Ambil walkthrough",
+  "walkthrough.fetching": "Mengambil...",
+  "walkthrough.searchSeiya": "Cari di Seiya-Saiga",
+  "walkthrough.customUrlPlaceholder": "https://galge.seiya-saiga.com/game/...",
+  "walkthrough.foundMatch": "Ditemukan di Seiya-Saiga: {{title}}",
+  "walkthrough.empty":
+    "Belum ada panduan yang dimuat. Cari otomatis dari direktori Seiya-Saiga atau masukkan URL panduan secara langsung.",
+  "walkthrough.routes": "Rute",
+  "walkthrough.allRoutes": "Semua Rute",
+  "walkthrough.progress": "{{checked}} dari {{total}} pilihan selesai",
+  "walkthrough.resetProgress": "Atur ulang pilihan",
+  "walkthrough.resetConfirm": "Hapus semua tanda centang pilihan pada panduan ini?",
+  "walkthrough.source": "Sumber: {{title}}",
+  "walkthrough.openSource": "Buka panduan di peramban",
+  "walkthrough.translateAi": "Terjemahan AI (Kamus VNDB)",
+  "walkthrough.translateGoogle": "Google Translate",
+  "walkthrough.translating": "Menerjemahkan...",
+  "walkthrough.langOriginal": "Bahasa Jepang (Asli)",
+  "walkthrough.langAi": "Terjemahan AI",
+  "walkthrough.langGoogle": "Google Translate",
+  "walkthrough.glossaryActive": "{{count}} karakter dari kamus VNDB",
+  "walkthrough.kind.choice": "Pilihan",
+  "walkthrough.kind.save": "Simpan",
+  "walkthrough.kind.date": "Tanggal",
+  "walkthrough.kind.action": "Aksi",
+  "walkthrough.kind.ending": "Ending",
+  "walkthrough.kind.note": "Catatan",
+  "walkthrough.reload": "Ambil Ulang",
+  "walkthrough.searchPlaceholder": "Ketik judul game (Jepang / Romaji) untuk mencari...",
+  "walkthrough.searchBtn": "Cari",
+  "walkthrough.searching": "Mencari...",
+  "walkthrough.searchResults": "Hasil Pencarian ({{count}})",
+  "walkthrough.candidatesFound": "Kandidat Cocok ({{count}})",
+  "walkthrough.noResults": "Tidak ada judul yang cocok di Seiya-Saiga. Coba kata kunci lain atau gunakan URL manual.",
+  "walkthrough.select": "Ambil",
+  "walkthrough.orManualUrl": "atau masukkan URL manual",
+  "walkthrough.autoSearchTip": "Mencakup 4.800+ judul visual novel dari Seiya-Saiga (PC 18+, All-ages, Konsol).",
 };

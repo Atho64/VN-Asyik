@@ -15,9 +15,10 @@ use tokio::sync::Mutex;
 
 use crate::platform::storage::ResolvedDocument;
 use vn_core::script::{
-    COMPACTOR_VERSION, CompactionKey, DEFAULT_AGENTS, DEFAULT_CHUNK_BYTES, MAP_SYSTEM_PROMPT,
-    MAX_AGENTS, REDUCE_SYSTEM_PROMPT, ROLLING_CONTEXT_CHARS, Resume, SEGMENT_REDUCE_SYSTEM_PROMPT,
-    merge, natural_cmp, parse, plan_agents, plan_chunks, render_body, resume_decision,
+    COMPACTOR_VERSION, CompactionKey, DEFAULT_AGENTS, DEFAULT_CHUNK_BYTES, DigestFreshness,
+    MAP_SYSTEM_PROMPT, MAX_AGENTS, REDUCE_SYSTEM_PROMPT, ROLLING_CONTEXT_CHARS, Resume,
+    SEGMENT_REDUCE_SYSTEM_PROMPT, digest_freshness, merge, natural_cmp, parse, plan_agents,
+    plan_chunks, render_body, resume_decision,
 };
 
 /// Largest accepted import file, per file. A whole-game script is a few MB of
@@ -35,8 +36,9 @@ pub const MAX_CHUNKS: usize = 4_096;
 pub const MAX_CHUNKS_PER_CALL: u32 = 8;
 /// Cap on one stored chunk summary, in characters.
 const MAX_SUMMARY_CHARS: usize = 4_000;
-/// Cap on the stored digest, in characters.
-const MAX_DIGEST_CHARS: usize = 20_000;
+/// Cap on the stored digest, in characters. The v2 reduce writes at most 1200
+/// words of labelled sections, so this is a safety net, not the length target.
+const MAX_DIGEST_CHARS: usize = 40_000;
 /// Cap on the text sent to the reduce step, in characters.
 const MAX_REDUCE_INPUT_CHARS: usize = 200_000;
 
@@ -51,6 +53,8 @@ pub struct ScriptDocumentInfo {
     pub source_sha256: String,
     pub line_count: i64,
     pub byte_size: i64,
+    /// Chunks this document splits into, known from import.
+    pub chunk_count: i64,
     pub created_at: i64,
     pub compaction: Option<CompactionInfo>,
 }
@@ -62,7 +66,14 @@ pub struct CompactionInfo {
     pub chunk_count: usize,
     pub done_chunks: usize,
     pub agent_count: usize,
+    /// Pipeline that produced the stored progress.
+    pub compactor_version: u32,
+    /// Pipeline this build would run now.
+    pub current_version: u32,
     pub digest: Option<String>,
+    /// True for a finished digest from an older pipeline. The companion still
+    /// reads it; the UI offers a rebuild instead of hiding that it is stale.
+    pub digest_outdated: bool,
 }
 
 /// `sync_state` key holding the agent settings JSON blob.
@@ -264,9 +275,20 @@ pub async fn import(
 
     let id = uuid::Uuid::new_v4().to_string();
     let line_count = i64::try_from(parsed.lines.len()).map_err(|_| "too_many_lines")?;
+    // The chunk plan is derived from the body, which never changes after import,
+    // so it is computed once here. Re-planning it on every compaction call meant
+    // walking the whole script to answer a question about the next eight chunks.
+    let plan = plan_chunks(&body, DEFAULT_CHUNK_BYTES);
+    if plan.len() > MAX_CHUNKS {
+        return Err("script_too_large".into());
+    }
+    let chunk_count = i64::try_from(plan.len()).map_err(|_| "script_too_large")?;
+    // A JSON array of [start, end) line ranges: hundreds of numbers for a whole
+    // game, and nothing joins on an individual chunk.
+    let chunks_json = serde_json::to_string(&plan).map_err(|_| "db_error")?;
     sqlx::query(
-        "INSERT INTO script_documents(id,game_id,engine,source_kind,source_path,source_sha256,line_count,body,created_at,updated_at) \
-         VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO script_documents(id,game_id,engine,source_kind,source_path,source_sha256,line_count,body,chunk_plan_json,chunk_count,created_at,updated_at) \
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind(&id)
     .bind(game_id)
@@ -281,6 +303,8 @@ pub async fn import(
     .bind(&source_sha256)
     .bind(line_count)
     .bind(&body)
+    .bind(&chunks_json)
+    .bind(chunk_count)
     .bind(now())
     .bind(now())
     .execute(pool)
@@ -313,9 +337,9 @@ pub async fn list(
     }
     let rows = sqlx::query(
         "SELECT d.id,d.game_id,d.engine,d.source_kind,d.source_path,d.source_sha256,d.line_count, \
-         LENGTH(d.body) AS byte_size,d.created_at, \
+         LENGTH(d.body) AS byte_size,d.chunk_count AS d_chunks,d.created_at, \
          c.model_id AS c_model, c.chunk_count AS c_chunks, c.done_chunks AS c_done, \
-         c.agent_count AS c_agents, c.digest AS c_digest \
+         c.agent_count AS c_agents, c.compactor_version AS c_version, c.digest AS c_digest \
          FROM script_documents d \
          LEFT JOIN script_compaction c ON c.document_id = d.id \
          WHERE (? IS NULL OR d.game_id=?) ORDER BY d.created_at DESC, d.id LIMIT 100",
@@ -335,9 +359,9 @@ pub async fn list(
 pub async fn get(pool: &SqlitePool, id: &str) -> Result<ScriptDocumentInfo, String> {
     let row = sqlx::query(
         "SELECT d.id,d.game_id,d.engine,d.source_kind,d.source_path,d.source_sha256,d.line_count, \
-         LENGTH(d.body) AS byte_size,d.created_at, \
+         LENGTH(d.body) AS byte_size,d.chunk_count AS d_chunks,d.created_at, \
          c.model_id AS c_model, c.chunk_count AS c_chunks, c.done_chunks AS c_done, \
-         c.agent_count AS c_agents, c.digest AS c_digest \
+         c.agent_count AS c_agents, c.compactor_version AS c_version, c.digest AS c_digest \
          FROM script_documents d \
          LEFT JOIN script_compaction c ON c.document_id = d.id WHERE d.id=?",
     )
@@ -350,15 +374,27 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ScriptDocumentInfo, Stri
 }
 
 fn info_row(row: &sqlx::sqlite::SqliteRow) -> ScriptDocumentInfo {
-    let compaction = row
-        .get::<Option<String>, _>("c_model")
-        .map(|model_id| CompactionInfo {
+    // Chunk total exists from import, so progress is known before the first
+    // compaction call; the compaction row takes over once it exists.
+    let imported_chunks = row.get::<Option<i64>, _>("d_chunks").unwrap_or(0);
+    let compaction = row.get::<Option<String>, _>("c_model").map(|model_id| {
+        let compactor_version = u32::try_from(row.get::<i64, _>("c_version")).unwrap_or(u32::MAX);
+        let digest: Option<String> = row.get("c_digest");
+        let digest_outdated = digest.as_ref().is_some_and(|_| {
+            digest_freshness(compactor_version, COMPACTOR_VERSION) == DigestFreshness::Outdated
+        });
+        CompactionInfo {
             model_id,
-            chunk_count: usize::try_from(row.get::<i64, _>("c_chunks")).unwrap_or(0),
+            chunk_count: usize::try_from(row.get::<i64, _>("c_chunks"))
+                .unwrap_or(usize::try_from(imported_chunks).unwrap_or(0)),
             done_chunks: usize::try_from(row.get::<i64, _>("c_done")).unwrap_or(0),
             agent_count: usize::try_from(row.get::<i64, _>("c_agents").max(1)).unwrap_or(1),
-            digest: row.get("c_digest"),
-        });
+            compactor_version,
+            current_version: COMPACTOR_VERSION,
+            digest,
+            digest_outdated,
+        }
+    });
     ScriptDocumentInfo {
         id: row.get("id"),
         game_id: row.get("game_id"),
@@ -368,6 +404,7 @@ fn info_row(row: &sqlx::sqlite::SqliteRow) -> ScriptDocumentInfo {
         source_sha256: row.get("source_sha256"),
         line_count: row.get("line_count"),
         byte_size: row.get("byte_size"),
+        chunk_count: imported_chunks,
         created_at: row.get("created_at"),
         compaction,
     }
@@ -399,7 +436,8 @@ pub async fn digest_for_game(
     game_id: &str,
 ) -> Result<Option<DigestState>, String> {
     let row = sqlx::query(
-        "SELECT c.chunk_count AS c_chunks, c.done_chunks AS c_done, c.digest AS c_digest \
+        "SELECT c.chunk_count AS c_chunks, c.done_chunks AS c_done, c.compactor_version AS c_version, \
+         c.digest AS c_digest \
          FROM script_documents d LEFT JOIN script_compaction c ON c.document_id = d.id \
          WHERE d.game_id=? ORDER BY d.created_at DESC, d.id LIMIT 1",
     )
@@ -410,10 +448,21 @@ pub async fn digest_for_game(
     let Some(row) = row else {
         return Ok(None);
     };
+    let digest: Option<String> = row.get("c_digest");
+    let stored_version = row
+        .get::<Option<i64>, _>("c_version")
+        .and_then(|version| u32::try_from(version).ok())
+        .unwrap_or(COMPACTOR_VERSION);
+    let outdated = digest.as_ref().and_then(|_| {
+        (digest_freshness(stored_version, COMPACTOR_VERSION) == DigestFreshness::Outdated)
+            .then_some("built by an older summarizer, so it may be shorter and less specific than the script supports; rebuild it from the script card")
+    });
     Ok(Some(DigestState {
         chunk_count: usize::try_from(row.get::<i64, _>("c_chunks")).unwrap_or(0),
         done_chunks: usize::try_from(row.get::<i64, _>("c_done")).unwrap_or(0),
-        digest: row.get("c_digest"),
+        compactor_version: stored_version,
+        digest,
+        outdated,
     }))
 }
 
@@ -422,7 +471,10 @@ pub async fn digest_for_game(
 pub struct DigestState {
     pub chunk_count: usize,
     pub done_chunks: usize,
+    pub compactor_version: u32,
     pub digest: Option<String>,
+    /// Set when the finished digest came from an older pipeline.
+    pub outdated: Option<&'static str>,
 }
 
 /// A stored run as loaded, before any resume decision.
@@ -796,11 +848,39 @@ fn try_acquire_lease(id: &str) -> Result<CompactLease, String> {
     Ok(CompactLease(id.to_owned()))
 }
 
+/// What one compaction call may do. Grouped rather than passed as loose
+/// arguments: `rebuild` is destructive, and a bare `true` at a call site is the
+/// kind of flag that gets passed to the wrong function.
+#[derive(Debug, Clone, Copy)]
+pub struct RunOptions {
+    /// Chunks summarized per agent in this call.
+    pub step: u32,
+    /// Summarizer agents (parallel provider calls).
+    pub agents: usize,
+    /// Discard stored progress first, including a finished digest.
+    pub rebuild: bool,
+}
+
+impl Default for RunOptions {
+    fn default() -> Self {
+        Self {
+            step: MAX_CHUNKS_PER_CALL,
+            agents: DEFAULT_AGENTS,
+            rebuild: false,
+        }
+    }
+}
+
 /// Advance compaction of one document by up to `step` chunks **per agent**,
 /// then reduce when every chunk has a summary. Safe to call repeatedly;
 /// progress persists after each chunk so an interrupted run resumes where it
 /// stopped. One call per document at a time: a second concurrent call fails
 /// with `compaction_busy` rather than racing the same progress row.
+///
+/// `rebuild` discards this document's stored run first, including a finished
+/// digest. That is how a digest produced by an older pipeline is replaced: its
+/// summaries must not be reused, because the prompts that produced them are
+/// gone and their output reads differently from the current map step.
 ///
 /// The story is split into `agents` contiguous segments. The agents summarize
 /// their segments concurrently, each carrying the tail of its previous outline
@@ -822,24 +902,21 @@ pub async fn compact(
     config: &crate::ai::chat::ChatConfig,
     key: Option<&crate::secrets::ChatApiKey>,
     id: &str,
-    step: u32,
-    agents: usize,
+    run: RunOptions,
 ) -> Result<CompactionInfo, String> {
-    let step = step.clamp(1, MAX_CHUNKS_PER_CALL) as usize;
-    let agents = agents.clamp(1, MAX_AGENTS);
+    let step = run.step.clamp(1, MAX_CHUNKS_PER_CALL) as usize;
+    let agents = run.agents.clamp(1, MAX_AGENTS);
     // Held for the whole call: a second call on this document waits for the
     // caller to repeat, by which time the stored progress has advanced.
     let _lease = try_acquire_lease(id)?;
-    let doc = sqlx::query("SELECT body, game_id FROM script_documents WHERE id=?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| "db_error")?
-        .ok_or("script_missing")?;
-    let body: String = doc.get("body");
-    let game_id: String = doc.get("game_id");
-    let romaji = character_romaji_block(pool, &game_id).await;
-    let chunks = plan_chunks(&body, DEFAULT_CHUNK_BYTES);
+    if run.rebuild {
+        sqlx::query("DELETE FROM script_compaction WHERE document_id=?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .map_err(|_| "db_error")?;
+    }
+    let (body, chunks, romaji) = load_document(pool, id).await?;
     let chunk_count = chunks.len();
     if chunk_count > MAX_CHUNKS {
         return Err("script_too_large".into());
@@ -863,27 +940,7 @@ pub async fn compact(
         romaji,
     };
 
-    let mut tasks = Vec::with_capacity(agent_count);
-    for (index, &(start, end)) in plan.iter().enumerate() {
-        tasks.push(run_agent(
-            &call,
-            AgentJob {
-                index,
-                start,
-                end,
-                body: &body,
-                chunks: &chunks,
-                chunk_count,
-                step,
-            },
-        ));
-    }
-    let results = futures_util::future::join_all(tasks).await;
-    if let Some(err) = results.into_iter().find_map(Result::err) {
-        // Other agents' finished chunks are already persisted; the caller
-        // resumes on the next call.
-        return Err(err);
-    }
+    summarize_segments(&call, &body, &chunks, &plan, step).await?;
 
     // Segment digests: only for multi-agent runs, and only once every
     // outline exists. Each is stored as it is produced, so a failure in the
@@ -926,8 +983,88 @@ pub async fn compact(
         chunk_count: guard.chunk_count,
         done_chunks: guard.done,
         agent_count: guard.agent_count,
+        compactor_version: COMPACTOR_VERSION,
+        current_version: COMPACTOR_VERSION,
         digest: guard.digest.clone(),
+        digest_outdated: false,
     })
+}
+
+/// Run every agent over its own segment for this call. A failure is returned
+/// once every agent has stopped: chunks finished before it are already
+/// persisted, so the caller resumes instead of losing that work.
+async fn summarize_segments(
+    call: &CallCtx<'_>,
+    body: &str,
+    chunks: &[(usize, usize)],
+    plan: &[(usize, usize)],
+    step: usize,
+) -> Result<(), String> {
+    let chunk_count = chunks.len();
+    let tasks = plan
+        .iter()
+        .enumerate()
+        .map(|(index, &(start, end))| {
+            run_agent(
+                call,
+                AgentJob {
+                    index,
+                    start,
+                    end,
+                    body,
+                    chunks,
+                    chunk_count,
+                    step,
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    futures_util::future::join_all(tasks)
+        .await
+        .into_iter()
+        .find_map(Result::err)
+        .map_or(Ok(()), Err)
+}
+
+/// Load the body, the chunk plan and the name mapping for one document.
+///
+/// The plan is stored at import, so a repeat call costs one row read instead of
+/// re-splitting the script. Documents imported before the plan existed compute it
+/// once and the plan is written back, which also keeps the stored chunk count in
+/// step with what this run actually uses.
+async fn load_document(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<(String, Vec<(usize, usize)>, String), String> {
+    let doc = sqlx::query("SELECT body, game_id, chunk_plan_json FROM script_documents WHERE id=?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| "db_error")?
+        .ok_or("script_missing")?;
+    let body: String = doc.get("body");
+    let game_id: String = doc.get("game_id");
+    let romaji = character_romaji_block(pool, &game_id).await;
+    let stored_plan: Option<String> = doc.get("chunk_plan_json");
+    let chunks = match stored_plan
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<Vec<(usize, usize)>>(json).ok())
+    {
+        Some(plan) => plan,
+        None => {
+            let plan = plan_chunks(&body, DEFAULT_CHUNK_BYTES);
+            let json = serde_json::to_string(&plan).map_err(|_| "db_error")?;
+            sqlx::query("UPDATE script_documents SET chunk_plan_json=?, chunk_count=? WHERE id=?")
+                .bind(&json)
+                .bind(i64::try_from(plan.len()).unwrap_or(i64::MAX))
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|_| "db_error")?;
+            plan
+        }
+    };
+    Ok((body, chunks, romaji))
 }
 
 /// One summarizer agent's loop over its segment: summarize up to `step` chunks
@@ -1195,5 +1332,61 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err, "no_files");
+    }
+}
+
+#[cfg(test)]
+mod plan_tests {
+    use super::*;
+
+    /// The chunk plan is derived from a body that never changes after import, so
+    /// it is stored and reused. Compaction used to re-plan the whole script on
+    /// every call, which re-walked up to 300k lines to find the next eight chunks.
+    #[tokio::test]
+    async fn an_imported_document_keeps_its_chunk_plan() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("pool");
+        sqlx::migrate!("src/db/migrations")
+            .run(&pool)
+            .await
+            .expect("migrate");
+        let game = "01a151db-6666-7000-8000-000000000001";
+        sqlx::query(
+            "INSERT INTO games (id, title, status, updated_at, device_id) \
+             VALUES (?, 'Saku', 'playing', 1, 'dev')",
+        )
+        .bind(game)
+        .execute(&pool)
+        .await
+        .expect("insert game");
+
+        // Long enough for more than one chunk at the 48 KB budget.
+        let line = "雪々: ゆきゆきは、そう思う……\n";
+        let body = line.repeat(12_000);
+        let path = std::env::temp_dir().join(format!("vn-plan-{}.txt", std::process::id()));
+        std::fs::write(&path, &body).expect("write script");
+        let stored = import(&pool, game, &[path.to_string_lossy().into_owned()])
+            .await
+            .expect("import");
+        std::fs::remove_file(&path).ok();
+
+        let (plan_json, chunk_count): (Option<String>, Option<i64>) =
+            sqlx::query_as("SELECT chunk_plan_json, chunk_count FROM script_documents WHERE id=?")
+                .bind(&stored.id)
+                .fetch_one(&pool)
+                .await
+                .expect("read plan");
+        let plan: Vec<(usize, usize)> =
+            serde_json::from_str(plan_json.as_deref().expect("stored plan")).expect("decode");
+        assert_eq!(plan.len(), plan_chunks(&body, DEFAULT_CHUNK_BYTES).len());
+        assert_eq!(
+            chunk_count.and_then(|n| usize::try_from(n).ok()),
+            Some(plan.len()),
+            "the count is stored beside the plan"
+        );
+        // And the document info reports it before any compaction row exists.
+        assert_eq!(usize::try_from(stored.chunk_count).unwrap_or(0), plan.len());
+        assert!(stored.compaction.is_none());
     }
 }

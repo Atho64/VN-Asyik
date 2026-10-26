@@ -10,7 +10,7 @@ import type { GameCard, LocalArt, NsfwMode } from "@/lib/ipc/types";
 
 const mocks = vi.hoisted(() => ({
   getGame: vi.fn(),
-  listSessions: vi.fn(),
+  listGameSessions: vi.fn(),
   listEndings: vi.fn(),
   listExecutables: vi.fn(),
   vndbDetail: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock("@/lib/ipc/client", () => ({
   IpcError: class extends Error {},
   api: {
     getGame: mocks.getGame,
-    listSessions: mocks.listSessions,
+    listGameSessions: mocks.listGameSessions,
     listEndings: mocks.listEndings,
     trackingListExecutables: mocks.listExecutables,
     vndbDetail: mocks.vndbDetail,
@@ -47,6 +47,7 @@ vi.mock("@/lib/ipc/client", () => ({
 vi.mock("@/features/tracking/MapExecutable", () => ({ MapExecutable: () => null }));
 vi.mock("@/features/game/RoutesCard", () => ({ RoutesCard: () => null }));
 vi.mock("@/features/game/ScriptCard", () => ({ ScriptCard: () => null }));
+vi.mock("@/features/game/WalkthroughCard", () => ({ WalkthroughCard: () => null }));
 vi.mock("@/features/game/PlayButton", () => ({ PlayButton: () => null }));
 
 const { GameDetailScreen } = await import("./GameDetailScreen");
@@ -140,7 +141,12 @@ function heroImage(container: HTMLElement): HTMLImageElement | null {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getGame.mockResolvedValue(detail());
-  mocks.listSessions.mockResolvedValue([]);
+  mocks.listGameSessions.mockResolvedValue({
+    sessions: [],
+    totalSessions: 0,
+    countedMs: 0,
+    afkMs: 0,
+  });
   mocks.listEndings.mockResolvedValue([]);
   mocks.listExecutables.mockResolvedValue([]);
   mocks.vndbDetail.mockResolvedValue(null);
@@ -254,7 +260,36 @@ describe("returning to a game", () => {
     useAppStore.setState({ cards: [detail()] });
     renderDetail();
     await waitFor(() => expect(mocks.getGame).toHaveBeenCalledWith("game-one"));
-    await waitFor(() => expect(mocks.listSessions).toHaveBeenCalledWith("game-one"));
+    await waitFor(() =>
+      expect(mocks.listGameSessions).toHaveBeenCalledWith("game-one"),
+    );
+  });
+
+  it("says when the session list is only the newest page", async () => {
+    // The list is capped so a long-lived game does not load every session. The
+    // cap must be stated, or a 50-row list reads as the whole history.
+    mocks.listGameSessions.mockResolvedValue({
+      sessions: [
+        {
+          meta: { id: "s1", updated_at: 1, device_id_device: "test", deleted: false },
+          game_id: "game-one",
+          chapter_id: null,
+          started_at: 1_700_000_000_000,
+          ended_at: 1_700_000_600_000,
+          counted_ms: 600_000,
+          afk_ms: 0,
+          source: "desktop",
+        },
+      ],
+      totalSessions: 122,
+      countedMs: 13_266_000,
+      afkMs: 0,
+    });
+    renderDetail();
+
+    expect(
+      await screen.findByText(/121 older of 122 sessions/),
+    ).toBeInTheDocument();
   });
 
   it("does not refetch the cover on every return", async () => {
@@ -319,7 +354,18 @@ describe("VNDB metadata refresh across navigation", () => {
     renderDetail();
     // Painted from the cache on the first frame, before any request returns.
     expect(screen.queryByText("From VNDB")).not.toBeNull();
-    // And the row is still re-read, because playtime and sessions move.
-    await waitFor(() => expect(mocks.vndbDetail).toHaveBeenCalledWith("v1"));
+    // And the metadata row is not requested again; only the mutable gameplay
+    // rows (playtime, sessions) are re-read.
+    await waitFor(() => expect(mocks.getGame).toHaveBeenCalled());
+    expect(mocks.vndbDetail).not.toHaveBeenCalled();
+  });
+
+  it("remembers a VNDB detail that came back empty", async () => {
+    // "Asked, nothing there" must not look like "never asked", or a game whose
+    // VNDB row has no details re-requests on every visit.
+    useAppStore.setState({ vndbDetails: { v1: null } });
+    renderDetail();
+    await waitFor(() => expect(mocks.getGame).toHaveBeenCalled());
+    expect(mocks.vndbDetail).not.toHaveBeenCalled();
   });
 });

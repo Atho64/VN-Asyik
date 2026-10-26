@@ -35,6 +35,26 @@ pub enum UploadError {
     NoApiKey,
 }
 
+/// The HTTP client every presence upload uses.
+///
+/// Separate from [`upload_to_host`] so the request shape can be inspected without
+/// reaching the network. The `User-Agent` is load-bearing, not courtesy: both hosts
+/// sit behind Cloudflare, which refuses a client that does not identify itself. The
+/// app used to send none, so every upload was rejected and the card silently lost
+/// its image — indistinguishable, from the settings screen, from "this does
+/// nothing".
+///
+/// # Errors
+/// Fails when the TLS client cannot be built.
+pub fn upload_client() -> Result<reqwest::Client, UploadError> {
+    crate::vndb::http_client_builder()
+        .user_agent(crate::vndb::USER_AGENT)
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_mins(1))
+        .build()
+        .map_err(|err| UploadError::Request(err.to_string()))
+}
+
 /// Uploads one image to the configured host, returning its public URL.
 ///
 /// Endpoints match `EwE`'s `upload_image_file`: catbox takes a multipart form
@@ -50,11 +70,7 @@ pub async fn upload_to_host(
     bytes: Vec<u8>,
     filename: &str,
 ) -> Result<String, UploadError> {
-    let client = crate::vndb::http_client_builder()
-        .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_mins(1))
-        .build()
-        .map_err(|err| UploadError::Request(err.to_string()))?;
+    let client = upload_client()?;
     match host {
         RpcImageHost::Catbox => {
             let part = reqwest::multipart::Part::bytes(bytes)
@@ -143,6 +159,29 @@ pub struct UploadCache {
 }
 
 impl UploadCache {
+    /// Remember an answer without touching the network.
+    ///
+    /// Test-only: it is the only way to exercise the callers that ask a host for
+    /// a URL (the live poll and the settings preview) without reaching catbox in
+    /// a unit test.
+    #[cfg(test)]
+    pub fn seed(&self, key: &str, url: &str) {
+        self.done
+            .lock()
+            .expect("cache")
+            .insert(key.to_owned(), url.to_owned());
+    }
+
+    /// The URL already known for this key, if any.
+    ///
+    /// Separate from [`Self::get_or_upload`] so a caller can answer without even
+    /// reading the source file. The poll loop runs every two seconds: re-reading
+    /// and re-blurring a cover to discover the URL it already has is pure waste.
+    #[must_use]
+    pub fn get(&self, key: &str) -> Option<String> {
+        self.done.lock().expect("cache").get(key).cloned()
+    }
+
     /// Returns the cached URL, or runs `upload` once for this key.
     ///
     /// `upload` is created eagerly by the caller but polled only when this call

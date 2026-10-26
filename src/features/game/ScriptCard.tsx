@@ -156,15 +156,19 @@ export function ScriptCard({ gameId }: { gameId: string }) {
    * chunks, so progress is visible between calls and a stop request (or the
    * card unmounting) takes effect without abandoning a completed batch — the
    * backend resumes from `doneChunks` on the next run.
+   *
+   * `rebuild` starts over instead of resuming: that is the only way to replace
+   * a finished digest written by an older summarizer, whose stored chunk
+   * summaries cannot be reused with the current prompts.
    */
-  const summarize = async (doc: ScriptDocument): Promise<void> => {
+  const summarize = async (doc: ScriptDocument, rebuild = false): Promise<void> => {
     if (compactingId !== null) return;
     setCompactingId(doc.id);
     stopRef.current = false;
     try {
-      for (;;) {
+      for (let first = true; ; first = false) {
         if (stopRef.current) return;
-        const info = await scriptApi.compact(doc.id);
+        const info = await scriptApi.compact(doc.id, undefined, rebuild && first);
         setDocs((prev) =>
           prev
             ? prev.map((entry) =>
@@ -209,7 +213,7 @@ export function ScriptCard({ gameId }: { gameId: string }) {
       return (
         <span className="script-row__state script-row__state--done">
           <Icon name="check" size={12} />
-          {t("script.digestReady")}
+          {info.digestOutdated ? t("script.digestOld") : t("script.digestReady")}
         </span>
       );
     }
@@ -303,6 +307,14 @@ export function ScriptCard({ gameId }: { gameId: string }) {
                       }}
                     >
                       {t("script.stop")}
+                    </Button>
+                  ) : doc.compaction?.digest && doc.compaction.digestOutdated ? (
+                    <Button
+                      variant="secondary"
+                      title={t("script.rebuildHint")}
+                      onClick={() => void summarize(doc, true)}
+                    >
+                      {t("script.rebuild")}
                     </Button>
                   ) : needsWork ? (
                     <Button variant="secondary" onClick={() => void summarize(doc)}>

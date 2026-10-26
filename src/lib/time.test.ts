@@ -15,10 +15,19 @@ import {
 describe("formatDuration", () => {
   it("renders h:mm with padded minutes", () => {
     expect(formatDuration(0)).toBe("0:00");
-    expect(formatDuration(59_999)).toBe("0:00");
     expect(formatDuration(5 * 60_000)).toBe("0:05");
     expect(formatDuration(90 * 60_000)).toBe("1:30");
     expect(formatDuration(10 * 3_600_000)).toBe("10:00");
+  });
+
+  it("shows a sub-minute session instead of rounding it to nothing", () => {
+    // The tracker writes ~4 s slices, so rows between 1 s and 59 s exist and are
+    // real playtime. They used to print 0:00.
+    expect(formatDuration(4_000)).toBe("0:04");
+    expect(formatDuration(1_057)).toBe("0:01");
+    expect(formatDuration(59_999)).toBe("0:59");
+    // Exactly one minute is not sub-minute.
+    expect(formatDuration(60_000)).toBe("0:01");
   });
 
   it("treats negative and invalid input as zero", () => {
@@ -37,6 +46,21 @@ describe("formatDurationLong", () => {
   it("speaks Indonesian when asked", () => {
     expect(formatDurationLong(5 * 60_000, "id")).toBe("5 menit");
     expect(formatDurationLong(60 * 60_000, "id")).toBe("1jam");
+  });
+
+  it("reports real sub-minute sessions in seconds, not zero minutes", () => {
+    // The bug behind "0 menit" rows next to real timestamps: counted time below a
+    // minute floored to 0. It must say how long the session was.
+    expect(formatDurationLong(4_000)).toBe("4 s");
+    expect(formatDurationLong(1_057)).toBe("1 s");
+    expect(formatDurationLong(4_000, "id")).toBe("4 detik");
+    // A true zero still reads as nothing played.
+    expect(formatDurationLong(0)).toBe("0 min");
+  });
+
+  it("does not misreport exactly one minute as seconds", () => {
+    expect(formatDurationLong(60_000)).toBe("1 min");
+    expect(formatDurationLong(120_000, "id")).toBe("2 menit");
   });
 });
 
