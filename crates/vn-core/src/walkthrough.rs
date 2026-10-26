@@ -107,13 +107,20 @@ pub fn decode_html_bytes(bytes: &[u8]) -> String {
 fn detect_charset(head: &[u8]) -> Option<String> {
     let s: String = head
         .iter()
-        .map(|&b| if b.is_ascii() { (b as char).to_ascii_lowercase() } else { ' ' })
+        .map(|&b| {
+            if b.is_ascii() {
+                (b as char).to_ascii_lowercase()
+            } else {
+                ' '
+            }
+        })
         .collect();
     if let Some(pos) = s.find("charset") {
         let rest = s[pos + 7..].trim_start();
         if let Some(after_eq) = rest.strip_prefix('=') {
             let trimmed = after_eq.trim_start_matches(['"', '\'', ' ']);
-            let end = trimmed.find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ';' || c == '>');
+            let end = trimmed
+                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ';' || c == '>');
             let label = if let Some(e) = end {
                 &trimmed[..e]
             } else {
@@ -137,8 +144,9 @@ pub fn decode_shift_jis(bytes: &[u8]) -> String {
 /// Parse walkthrough links from any Seiya-Saiga index page (home, galge, kouryaku).
 #[must_use]
 pub fn parse_index_links(html: &str, base_url: &str) -> Vec<WalkthroughIndexEntry> {
-    let re = regex::Regex::new(r#"(?is)<a[^>]*href=["']?([^"'#\s>]+)["']?[^>]*>(?P<title>.*?)</a>"#)
-        .expect("valid link regex");
+    let re =
+        regex::Regex::new(r#"(?is)<a[^>]*href=["']?([^"'#\s>]+)["']?[^>]*>(?P<title>.*?)</a>"#)
+            .expect("valid link regex");
 
     let mut entries = Vec::new();
     let mut seen_urls = std::collections::HashSet::new();
@@ -147,7 +155,10 @@ pub fn parse_index_links(html: &str, base_url: &str) -> Vec<WalkthroughIndexEntr
         let href = cap[1].trim();
         let raw_title = clean_html_tags(&cap["title"]);
 
-        if !href.ends_with(".html") {
+        if !std::path::Path::new(href)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("html"))
+        {
             continue;
         }
 
@@ -218,9 +229,9 @@ fn normalize_for_match(s: &str) -> String {
     for c in s.chars() {
         match c {
             // Full-width space, half-width space, punctuation, brackets, quotes, wave dashes
-            ' ' | '\u{3000}' | '-' | '－' | '・' | '\u{ff65}' | ':' | '：' | '！' | '!' | '？' | '?'
-            | '~' | '～' | '〜' | '_' | '/' | '／' | '\\' | '.' | '。' | ',' | '、' | '，'
-            | '+' | '＋' | '\'' | '’' | '‘' | '"' | '“' | '”' | '(' | ')' | '（' | '）'
+            ' ' | '\u{3000}' | '-' | '－' | '・' | '\u{ff65}' | ':' | '：' | '！' | '!' | '？'
+            | '?' | '~' | '～' | '〜' | '_' | '/' | '／' | '\\' | '.' | '。' | ',' | '、'
+            | '，' | '+' | '＋' | '\'' | '’' | '‘' | '"' | '“' | '”' | '(' | ')' | '（' | '）'
             | '【' | '】' | '『' | '』' | '「' | '」' | '［' | '］' | '[' | ']' => {}
             // Normalize case
             other => {
@@ -272,10 +283,15 @@ pub fn search_index(
             if title_lower.contains(&query_lower) {
                 score += 50;
             } else if !query_tokens.is_empty()
-                && query_tokens.iter().all(|tok| title_lower.contains(&tok.to_lowercase()))
+                && query_tokens
+                    .iter()
+                    .all(|tok| title_lower.contains(&tok.to_lowercase()))
             {
                 score += 40;
-            } else if query_tokens.iter().any(|tok| tok.len() >= 2 && title_lower.contains(&tok.to_lowercase())) {
+            } else if query_tokens
+                .iter()
+                .any(|tok| tok.len() >= 2 && title_lower.contains(&tok.to_lowercase()))
+            {
                 score += 20;
             }
         }
@@ -285,8 +301,12 @@ pub fn search_index(
         }
     }
 
-    scored.sort_by(|a, b| b.0.cmp(&a.0));
-    scored.into_iter().take(limit).map(|(_, e)| e.clone()).collect()
+    scored.sort_by_key(|b| std::cmp::Reverse(b.0));
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, e)| e.clone())
+        .collect()
 }
 
 /// Find matching candidate entries for a game based on all its titles and aliases.
@@ -379,7 +399,8 @@ pub fn parse_seiya_walkthrough(
     // (typically bgcolor="#ccffff" or similar) with route titles, followed by
     // a row containing the corresponding steps for each column.
     let tr_re = regex::Regex::new(r"(?is)<tr[^>]*>(?P<tr>.*?)</tr>").expect("valid tr_re");
-    let td_re = regex::Regex::new(r#"(?is)<t[dh](?P<attrs>[^>]*)>(?P<content>.*?)</t[dh]>"#).expect("valid td_re");
+    let cell_re = regex::Regex::new(r"(?is)<t[dh](?P<attrs>[^>]*)>(?P<content>.*?)</t[dh]>")
+        .expect("valid cell_re");
 
     let tr_caps: Vec<_> = tr_re.captures_iter(html).collect();
     let mut routes = Vec::new();
@@ -388,16 +409,20 @@ pub fn parse_seiya_walkthrough(
 
     while row_idx < tr_caps.len() {
         let tr_str = &tr_caps[row_idx]["tr"];
-        let header_tds: Vec<_> = td_re.captures_iter(tr_str).collect();
+        let header_tds: Vec<_> = cell_re.captures_iter(tr_str).collect();
 
-        let is_header_row = !header_tds.is_empty() && header_tds.iter().any(|td| {
-            let attrs = td["attrs"].to_ascii_lowercase();
-            attrs.contains("ccffff") || attrs.contains("ccccff") || attrs.contains("99ccff") || attrs.contains("ccffcc")
-        });
+        let is_header_row = !header_tds.is_empty()
+            && header_tds.iter().any(|td| {
+                let attrs = td["attrs"].to_ascii_lowercase();
+                attrs.contains("ccffff")
+                    || attrs.contains("ccccff")
+                    || attrs.contains("99ccff")
+                    || attrs.contains("ccffcc")
+            });
 
         if is_header_row && row_idx + 1 < tr_caps.len() {
             let body_tr_str = &tr_caps[row_idx + 1]["tr"];
-            let body_tds: Vec<_> = td_re.captures_iter(body_tr_str).collect();
+            let body_tds: Vec<_> = cell_re.captures_iter(body_tr_str).collect();
 
             for (col_idx, h_cap) in header_tds.iter().enumerate() {
                 let raw_title = clean_html_tags(&h_cap["content"]);
@@ -456,8 +481,9 @@ fn clean_html_tags(s: &str) -> String {
 
 /// Extract page title from either the white title header or `<title>`.
 fn extract_title(html: &str) -> Option<String> {
-    let header_re = regex::Regex::new(r#"(?is)<FONT[^>]*size=["']?6["']?[^>]*>(?P<title>.*?)</FONT>"#)
-        .expect("valid header_re");
+    let header_re =
+        regex::Regex::new(r#"(?is)<FONT[^>]*size=["']?6["']?[^>]*>(?P<title>.*?)</FONT>"#)
+            .expect("valid header_re");
     if let Some(cap) = header_re.captures(html) {
         let clean = clean_html_tags(&cap["title"]);
         let trimmed = clean.trim_matches(|c| c == '◆' || c == '★' || c == '■' || c == ' ');
@@ -466,14 +492,17 @@ fn extract_title(html: &str) -> Option<String> {
         }
     }
 
-    let title_re = regex::Regex::new(r#"(?is)<title>(?P<title>.*?)</title>"#).expect("valid title_re");
+    let title_re =
+        regex::Regex::new(r"(?is)<title>(?P<title>.*?)</title>").expect("valid title_re");
     if let Some(cap) = title_re.captures(html) {
         let clean = clean_html_tags(&cap["title"]);
         let stripped = clean
             .split([':', '：'])
-            .last()
+            .next_back()
             .unwrap_or(&clean)
-            .trim_matches(|c| c == '【' || c == '】' || c == '攻' || c == '略' || c == ' ' || c == '◆');
+            .trim_matches(|c| {
+                c == '【' || c == '】' || c == '攻' || c == '略' || c == ' ' || c == '◆'
+            });
         if !stripped.is_empty() {
             return Some(stripped.to_string());
         }
@@ -507,7 +536,7 @@ fn extract_notes(html: &str) -> Option<String> {
 /// Parse the step items inside a route's table cell.
 fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
     // Split on `<br>`, `<hr>`, or newlines
-    let line_re = regex::Regex::new(r#"(?i)<br\s*/?>|<hr\s*/?>|\n"#).expect("valid split re");
+    let line_re = regex::Regex::new(r"(?i)<br\s*/?>|<hr\s*/?>|\n").expect("valid split re");
     let mut items = Vec::new();
 
     for raw_part in line_re.split(body) {
@@ -540,7 +569,8 @@ fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
         }
 
         // 2. Save point marker
-        if clean.contains("セーブ") || clean.starts_with("◆セーブ") || clean.starts_with("セーブ") {
+        if clean.contains("セーブ") || clean.starts_with("◆セーブ") || clean.starts_with("セーブ")
+        {
             *counter += 1;
             items.push(WalkthroughItem {
                 id: format!("s_{counter}"),
@@ -552,7 +582,11 @@ fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
         }
 
         // 3. Ending marker
-        if clean.contains("END") || clean.contains("BAD") || clean.contains("TrueEnd") || clean.ends_with("エンド") {
+        if clean.contains("END")
+            || clean.contains("BAD")
+            || clean.contains("TrueEnd")
+            || clean.ends_with("エンド")
+        {
             *counter += 1;
             items.push(WalkthroughItem {
                 id: format!("e_{counter}"),
@@ -617,9 +651,15 @@ mod tests {
         let entries = parse_kouryaku_index(html);
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].title, "AIR 全年齢版");
-        assert_eq!(entries[0].url, "https://galge.seiya-saiga.com/game/key/air_me.html");
+        assert_eq!(
+            entries[0].url,
+            "https://galge.seiya-saiga.com/game/key/air_me.html"
+        );
         assert_eq!(entries[1].title, "Kanon メモリアル");
-        assert_eq!(entries[1].url, "https://galge.seiya-saiga.com/game/key/kanon_me.html");
+        assert_eq!(
+            entries[1].url,
+            "https://galge.seiya-saiga.com/game/key/kanon_me.html"
+        );
     }
 
     #[test]
@@ -675,7 +715,10 @@ mod tests {
         </html>
         "##;
 
-        let res = parse_seiya_walkthrough(html, "https://galge.seiya-saiga.com/game/key/rewrite_plus.html");
+        let res = parse_seiya_walkthrough(
+            html,
+            "https://galge.seiya-saiga.com/game/key/rewrite_plus.html",
+        );
         assert!(res.is_ok());
         let wt = res.unwrap();
 
@@ -753,7 +796,10 @@ mod tests {
         </html>
         "##;
 
-        let res = parse_seiya_walkthrough(html, "https://seiya-saiga.com/game/favorite/sakuramoyu.html");
+        let res = parse_seiya_walkthrough(
+            html,
+            "https://seiya-saiga.com/game/favorite/sakuramoyu.html",
+        );
         assert!(res.is_ok());
         let wt = res.unwrap();
         assert_eq!(wt.routes.len(), 3);
@@ -791,7 +837,10 @@ mod tests {
         // 2. Normalizes fullwidth quotes and wave dashes across VNDB and Seiya-Saiga
         let res2 = search_index(&entries, "さくら、もゆ。-as the Night's, Reincarnation-", 5);
         assert_eq!(res2.len(), 1);
-        assert_eq!(res2[0].title, "さくら、もゆ。 -as the Night’s，Reincarnation-");
+        assert_eq!(
+            res2[0].title,
+            "さくら、もゆ。 -as the Night’s，Reincarnation-"
+        );
 
         // 3. Partial / prefix search on Japanese title
         let res3 = search_index(&entries, "リトルバスターズ", 5);

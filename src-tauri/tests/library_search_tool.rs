@@ -7,6 +7,7 @@
 //! a live chat answer.
 
 use serde_json::Value;
+use std::fmt::Write;
 use vn_core::chat::{ChatOptions, Spoilers};
 use vn_tracker_lib::ai::conversation::tools::{self, ToolContext};
 use vn_tracker_lib::db::Db;
@@ -91,9 +92,10 @@ fn tag_blob(tags: &str, index: usize) -> String {
         } else {
             0.0
         };
-        blob.push_str(&format!(
+        let _ = write!(
+            blob,
             r#"{{"name":"{name}","rating":2.0,"spoiler":{spoiler}}}"#
-        ));
+        );
     }
     blob.push(']');
     blob

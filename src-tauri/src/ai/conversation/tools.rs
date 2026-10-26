@@ -3,6 +3,7 @@ use super::Source;
 use crate::vndb::dto::VnQueryResult;
 use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool};
+use std::fmt::Write;
 use vn_core::chat::{ChatOptions, Spoilers, ToolArgs, public_text};
 
 pub struct ToolContext<'a> {
@@ -117,7 +118,7 @@ const PAGE: i64 = 20;
 
 /// Find owned games by title, original title, VNDB id or tag name.
 ///
-/// Filtering, ordering, paging and the tie count all run in SQLite. The previous
+/// Filtering, ordering, paging and the tie count all run in `SQLite`. The previous
 /// version loaded every live game, built a JSON card for each (parsing its tag
 /// blob), then filtered and sorted those values in Rust: on a large library that
 /// decoded thousands of tag arrays to answer a question about twenty titles.
@@ -132,14 +133,15 @@ async fn search_library(ctx: &ToolContext<'_>, args: &ToolArgs) -> Result<Value,
     let mut where_clause = String::from(" AND (?1 IS NULL OR g.id=?1)");
     let mut next = 2;
     if args.status.is_some() {
-        where_clause.push_str(&format!(" AND g.status=?{next}"));
+        let _ = write!(where_clause, " AND g.status=?{next}");
         next += 1;
     }
     let fuzzy = !query.is_empty();
     if fuzzy {
-        where_clause.push_str(&format!(
+        let _ = write!(
+            where_clause,
             " AND (INSTR(LOWER(g.title),?{next})>0              OR INSTR(LOWER(COALESCE(g.title_original,'')),?{next})>0              OR INSTR(LOWER(COALESCE(g.vndb_id,'')),?{next})>0              OR INSTR(LOWER(COALESCE(d.tags_json,'')),?{next})>0)"
-        ));
+        );
     }
     let order = match args.sort.as_deref() {
         Some("rating") => " ORDER BY g.rating IS NULL, g.rating DESC, g.title",

@@ -1046,23 +1046,22 @@ async fn load_document(
     let game_id: String = doc.get("game_id");
     let romaji = character_romaji_block(pool, &game_id).await;
     let stored_plan: Option<String> = doc.get("chunk_plan_json");
-    let chunks = match stored_plan
+    let chunks = if let Some(plan) = stored_plan
         .as_deref()
         .and_then(|json| serde_json::from_str::<Vec<(usize, usize)>>(json).ok())
     {
-        Some(plan) => plan,
-        None => {
-            let plan = plan_chunks(&body, DEFAULT_CHUNK_BYTES);
-            let json = serde_json::to_string(&plan).map_err(|_| "db_error")?;
-            sqlx::query("UPDATE script_documents SET chunk_plan_json=?, chunk_count=? WHERE id=?")
-                .bind(&json)
-                .bind(i64::try_from(plan.len()).unwrap_or(i64::MAX))
-                .bind(id)
-                .execute(pool)
-                .await
-                .map_err(|_| "db_error")?;
-            plan
-        }
+        plan
+    } else {
+        let plan = plan_chunks(&body, DEFAULT_CHUNK_BYTES);
+        let json = serde_json::to_string(&plan).map_err(|_| "db_error")?;
+        sqlx::query("UPDATE script_documents SET chunk_plan_json=?, chunk_count=? WHERE id=?")
+            .bind(&json)
+            .bind(i64::try_from(plan.len()).unwrap_or(i64::MAX))
+            .bind(id)
+            .execute(pool)
+            .await
+            .map_err(|_| "db_error")?;
+        plan
     };
     Ok((body, chunks, romaji))
 }

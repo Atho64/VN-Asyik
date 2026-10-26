@@ -1,6 +1,7 @@
 //! Walkthrough service: fetches, parses, stores, and translates visual novel walkthroughs.
 
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::net::SocketAddr;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -22,8 +23,14 @@ const SEIYA_MAIN_URL: &str = "https://seiya-saiga.com/";
 const SEIYA_BEKKAN_KOURYAKU_URL: &str = "https://galge.seiya-saiga.com/game/kouryaku.html";
 pub const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-static INDEX_CACHE: LazyLock<RwLock<Option<(std::time::Instant, Vec<WalkthroughIndexEntry>)>>> =
-    LazyLock::new(|| RwLock::new(None));
+type CachedIndex = (std::time::Instant, Vec<WalkthroughIndexEntry>);
+static INDEX_CACHE: LazyLock<RwLock<Option<CachedIndex>>> = LazyLock::new(|| RwLock::new(None));
+
+#[derive(Deserialize)]
+struct CharItem {
+    name: Option<String>,
+    original: Option<String>,
+}
 
 /// Errors that can occur during walkthrough operations.
 #[derive(Debug, thiserror::Error)]
@@ -50,7 +57,7 @@ pub struct WalkthroughView {
     pub notes: Option<String>,
     pub routes: Vec<WalkthroughRoute>,
     pub checked_items: Vec<String>,
-    /// Available translations: map of "provider_lang" => Vec<WalkthroughRoute>
+    /// Available translations: map of "`provider_lang`" => `Vec<WalkthroughRoute>`
     pub translations: HashMap<String, Vec<WalkthroughRoute>>,
     pub character_glossary: HashMap<String, String>,
 }
@@ -74,8 +81,11 @@ pub fn build_seiya_client() -> Result<reqwest::Client, WalkthroughError> {
     builder.build().map_err(WalkthroughError::Http)
 }
 
-/// Fetch raw HTML from a Seiya-Saiga page, handling Shift_JIS decoding.
-pub async fn fetch_seiya_html(client: &reqwest::Client, url: &str) -> Result<String, WalkthroughError> {
+/// Fetch raw HTML from a Seiya-Saiga page, handling `Shift_JIS` decoding.
+pub async fn fetch_seiya_html(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<String, WalkthroughError> {
     let normalized = if url.starts_with("http://") {
         url.replacen("http://", "https://", 1)
     } else {
@@ -92,10 +102,11 @@ pub async fn fetch_master_index(
 ) -> Result<Vec<WalkthroughIndexEntry>, WalkthroughError> {
     {
         let cache_read = INDEX_CACHE.read().await;
-        if let Some((fetched_at, entries)) = cache_read.as_ref() {
-            if fetched_at.elapsed() < Duration::from_secs(3600 * 6) && !entries.is_empty() {
-                return Ok(entries.clone());
-            }
+        if let Some((_, entries)) = cache_read
+            .as_ref()
+            .filter(|(t, e)| t.elapsed() < Duration::from_hours(6) && !e.is_empty())
+        {
+            return Ok(entries.clone());
         }
     }
 
@@ -168,23 +179,16 @@ pub async fn load_character_glossary(
         return glossary;
     };
 
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT characters_json FROM vndb_details WHERE vn_id = ?"
-    )
-    .bind(vn_id)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT characters_json FROM vndb_details WHERE vn_id = ?")
+            .bind(vn_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
     let Some((json_str,)) = row else {
         return glossary;
     };
-
-    #[derive(Deserialize)]
-    struct CharItem {
-        name: Option<String>,
-        original: Option<String>,
-    }
 
     if let Ok(chars) = serde_json::from_str::<Vec<CharItem>>(&json_str) {
         for c in chars {
@@ -194,13 +198,13 @@ pub async fn load_character_glossary(
                 if !clean_name.is_empty() && !clean_orig.is_empty() {
                     glossary.insert(clean_orig.clone(), clean_name.clone());
                     // Also support single given name if space separated (e.g. "神戸 小鳥" -> "小鳥", "Kotori")
-                    if let (Some(orig_last), Some(name_first)) = (
-                        clean_orig.split([' ', '　']).last(),
-                        clean_name.split(' ').next(),
-                    ) {
-                        if orig_last.len() >= 2 && !glossary.contains_key(orig_last) {
-                            glossary.insert(orig_last.to_string(), name_first.to_string());
-                        }
+                    let orig_last = clean_orig.split([' ', '　']).next_back();
+                    let name_first = clean_name.split(' ').next();
+                    if let (Some(l), Some(f)) = (orig_last, name_first)
+                        && l.len() >= 2
+                        && !glossary.contains_key(l)
+                    {
+                        glossary.insert(l.to_string(), f.to_string());
                     }
                 }
             }
@@ -218,7 +222,7 @@ pub async fn get_walkthrough_view(
 ) -> Result<Option<WalkthroughView>, WalkthroughError> {
     let row: Option<(String, String, Option<String>, String, String)> = sqlx::query_as(
         "SELECT title, source_url, notes, routes_json, checked_items_json \
-         FROM game_walkthroughs WHERE game_id = ?"
+         FROM game_walkthroughs WHERE game_id = ?",
     )
     .bind(game_id)
     .fetch_optional(pool)
@@ -228,14 +232,14 @@ pub async fn get_walkthrough_view(
         return Ok(None);
     };
 
-    let routes: Vec<WalkthroughRoute> = serde_json::from_str(&routes_json)
-        .map_err(|e| WalkthroughError::Parse(e.to_string()))?;
+    let routes: Vec<WalkthroughRoute> =
+        serde_json::from_str(&routes_json).map_err(|e| WalkthroughError::Parse(e.to_string()))?;
     let checked_items: Vec<String> = serde_json::from_str(&checked_items_json).unwrap_or_default();
 
     // Load translations
     let trans_rows: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT provider, target_lang, routes_json \
-         FROM walkthrough_translations WHERE game_id = ?"
+         FROM walkthrough_translations WHERE game_id = ?",
     )
     .bind(game_id)
     .fetch_all(pool)
@@ -271,7 +275,8 @@ pub async fn save_walkthrough(
 ) -> Result<(), WalkthroughError> {
     let routes_json = serde_json::to_string(&walkthrough.routes)
         .map_err(|e| WalkthroughError::Parse(e.to_string()))?;
-    let now = vn_core::clock::Timestamp::now().map_err(|e| WalkthroughError::Parse(e.to_string()))?;
+    let now =
+        vn_core::clock::Timestamp::now().map_err(|e| WalkthroughError::Parse(e.to_string()))?;
     let now_ms = now.as_millis();
 
     sqlx::query(
@@ -305,9 +310,10 @@ pub async fn save_translation(
     target_lang: &str,
     routes: &[WalkthroughRoute],
 ) -> Result<(), WalkthroughError> {
-    let routes_json = serde_json::to_string(routes)
-        .map_err(|e| WalkthroughError::Parse(e.to_string()))?;
-    let now = vn_core::clock::Timestamp::now().map_err(|e| WalkthroughError::Parse(e.to_string()))?;
+    let routes_json =
+        serde_json::to_string(routes).map_err(|e| WalkthroughError::Parse(e.to_string()))?;
+    let now =
+        vn_core::clock::Timestamp::now().map_err(|e| WalkthroughError::Parse(e.to_string()))?;
     let now_ms = now.as_millis();
 
     sqlx::query(
@@ -334,12 +340,11 @@ pub async fn toggle_checked_item(
     game_id: &str,
     item_id: &str,
 ) -> Result<Vec<String>, WalkthroughError> {
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT checked_items_json FROM game_walkthroughs WHERE game_id = ?"
-    )
-    .bind(game_id)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT checked_items_json FROM game_walkthroughs WHERE game_id = ?")
+            .bind(game_id)
+            .fetch_optional(pool)
+            .await?;
 
     let Some((json_str,)) = row else {
         return Err(WalkthroughError::NotFound);
@@ -352,7 +357,8 @@ pub async fn toggle_checked_item(
         items.push(item_id.to_string());
     }
 
-    let next_json = serde_json::to_string(&items).map_err(|e| WalkthroughError::Parse(e.to_string()))?;
+    let next_json =
+        serde_json::to_string(&items).map_err(|e| WalkthroughError::Parse(e.to_string()))?;
     sqlx::query("UPDATE game_walkthroughs SET checked_items_json = ? WHERE game_id = ?")
         .bind(&next_json)
         .bind(game_id)
@@ -363,10 +369,7 @@ pub async fn toggle_checked_item(
 }
 
 /// Clear all checked progress for a game walkthrough.
-pub async fn clear_checked_items(
-    pool: &SqlitePool,
-    game_id: &str,
-) -> Result<(), WalkthroughError> {
+pub async fn clear_checked_items(pool: &SqlitePool, game_id: &str) -> Result<(), WalkthroughError> {
     sqlx::query("UPDATE game_walkthroughs SET checked_items_json = '[]' WHERE game_id = ?")
         .bind(game_id)
         .execute(pool)
@@ -375,6 +378,7 @@ pub async fn clear_checked_items(
 }
 
 /// Translate text lines in batch using Google Translate's free API.
+#[allow(clippy::implicit_hasher)]
 pub async fn translate_batch_google(
     client: &reqwest::Client,
     texts: &[String],
@@ -443,6 +447,7 @@ pub async fn translate_batch_google(
 }
 
 /// Translate text lines in batch using the configured AI provider, with VNDB character glossary.
+#[allow(clippy::implicit_hasher)]
 pub async fn translate_batch_ai(
     client: &reqwest::Client,
     config: &ChatConfig,
@@ -464,7 +469,7 @@ pub async fn translate_batch_ai(
     if !glossary.is_empty() {
         glossary_block.push_str("\nCharacter Name Glossary from VNDB (Adhere strictly):\n");
         for (jp, en) in glossary {
-            glossary_block.push_str(&format!("- {jp} => {en}\n"));
+            let _ = writeln!(glossary_block, "- {jp} => {en}");
         }
     }
 
@@ -488,7 +493,10 @@ pub async fn translate_batch_ai(
     let cleaned = raw_reply.trim();
     let json_str = if cleaned.starts_with("```") {
         let lines: Vec<&str> = cleaned.lines().collect();
-        if lines.len() >= 2 && lines.first().unwrap().starts_with("```") && lines.last().unwrap().starts_with("```") {
+        if lines.len() >= 2
+            && lines.first().unwrap().starts_with("```")
+            && lines.last().unwrap().starts_with("```")
+        {
             lines[1..lines.len() - 1].join("\n")
         } else {
             cleaned.to_string()
@@ -497,16 +505,23 @@ pub async fn translate_batch_ai(
         cleaned.to_string()
     };
 
-    if let Ok(translated_array) = serde_json::from_str::<Vec<String>>(&json_str) {
-        if translated_array.len() == texts.len() {
-            return Ok(translated_array);
-        }
+    if let Some(translated_array) = serde_json::from_str::<Vec<String>>(&json_str)
+        .ok()
+        .filter(|arr| arr.len() == texts.len())
+    {
+        return Ok(translated_array);
     }
 
     // Fallback: line-by-line parsing if json array was malformed
     let mut lines = Vec::new();
     for line in json_str.lines() {
-        let t = line.trim().trim_start_matches(|c| c == '-' || c == '*' || c == '"' || c == '[' || c == ']' || c == ',').trim_end_matches([',', '"', ']']).trim();
+        let t = line
+            .trim()
+            .trim_start_matches(|c| {
+                c == '-' || c == '*' || c == '"' || c == '[' || c == ']' || c == ','
+            })
+            .trim_end_matches([',', '"', ']'])
+            .trim();
         if !t.is_empty() {
             lines.push(t.to_string());
         }

@@ -1,19 +1,28 @@
 //! Walkthrough IPC: fetch, scrape, store, translate, and manage visual novel walkthroughs.
 
 use tauri::State;
-use vn_core::walkthrough::{WalkthroughIndexEntry, WalkthroughRoute, find_best_match, parse_seiya_walkthrough};
+use vn_core::walkthrough::{
+    WalkthroughIndexEntry, WalkthroughRoute, find_best_match, parse_seiya_walkthrough,
+};
 
 use super::{CommandError, CommandResult};
 use crate::state::AppState;
 use crate::walkthrough::{
-    USER_AGENT, WalkthroughView, build_seiya_client, clear_checked_items,
-    fetch_master_index, fetch_seiya_html, get_walkthrough_view, save_translation,
-    save_walkthrough, toggle_checked_item, translate_batch_ai, translate_batch_google,
+    USER_AGENT, WalkthroughView, build_seiya_client, clear_checked_items, fetch_master_index,
+    fetch_seiya_html, get_walkthrough_view, save_translation, save_walkthrough,
+    toggle_checked_item, translate_batch_ai, translate_batch_google,
 };
 
 fn error(err: impl std::fmt::Display) -> CommandError {
     CommandError::new("walkthrough", err.to_string())
 }
+
+type VndbDetailsRow = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
 
 /// Retrieve candidate title variants for matching against Seiya-Saiga's index.
 async fn collect_candidate_titles(
@@ -45,12 +54,13 @@ async fn collect_candidate_titles(
 
     // 1. Fetch title, title_original, and vndb_id from `games` table
     let mut game_vn_id = None;
-    if let Ok(Some((title, title_orig, db_vn_id))) = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
-        "SELECT title, title_original, vndb_id FROM games WHERE id = ?"
-    )
-    .bind(game_id)
-    .fetch_optional(pool)
-    .await
+    if let Ok(Some((title, title_orig, db_vn_id))) =
+        sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
+            "SELECT title, title_original, vndb_id FROM games WHERE id = ?",
+        )
+        .bind(game_id)
+        .fetch_optional(pool)
+        .await
     {
         game_vn_id = db_vn_id;
 
@@ -62,16 +72,15 @@ async fn collect_candidate_titles(
     }
 
     // 2. VNDB titles and aliases
-    let target_vn_id = vn_id.map(|s| s.to_string()).or(game_vn_id);
+    let target_vn_id = vn_id.map(ToString::to_string).or(game_vn_id);
     if let Some(ref vid) = target_vn_id {
-        let row: Option<(Option<String>, Option<String>, Option<String>, Option<String>)> =
-            sqlx::query_as(
-                "SELECT title, alttitle, titles_json, aliases_json FROM vndb_details WHERE vn_id = ?"
-            )
-            .bind(vid)
-            .fetch_optional(pool)
-            .await
-            .unwrap_or(None);
+        let row: Option<VndbDetailsRow> = sqlx::query_as(
+            "SELECT title, alttitle, titles_json, aliases_json FROM vndb_details WHERE vn_id = ?",
+        )
+        .bind(vid)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
 
         if let Some((v_title, alttitle, titles_json, aliases_json)) = row {
             // Priority to Japanese alttitle
@@ -91,11 +100,12 @@ async fn collect_candidate_titles(
                     }
                 }
             }
-            if let Some(aj) = aliases_json {
-                if let Ok(aliases) = serde_json::from_str::<Vec<String>>(&aj) {
-                    for a in aliases {
-                        add_with_subtitles(&a, &mut add_candidate);
-                    }
+            if let Some(aliases) = aliases_json
+                .as_deref()
+                .and_then(|aj| serde_json::from_str::<Vec<String>>(aj).ok())
+            {
+                for a in aliases {
+                    add_with_subtitles(&a, &mut add_candidate);
                 }
             }
             if let Some(t) = v_title {
@@ -136,9 +146,7 @@ pub async fn walkthrough_search_candidate(
 
 /// Free-text search across Seiya-Saiga's entire master walkthrough catalog.
 #[tauri::command]
-pub async fn walkthrough_search(
-    query: String,
-) -> CommandResult<Vec<WalkthroughIndexEntry>> {
+pub async fn walkthrough_search(query: String) -> CommandResult<Vec<WalkthroughIndexEntry>> {
     let client = build_seiya_client().map_err(error)?;
     let index = fetch_master_index(&client).await.map_err(error)?;
     let results = vn_core::walkthrough::search_index(&index, &query, 16);
@@ -164,8 +172,9 @@ pub async fn walkthrough_fetch(
         trimmed
     } else {
         let index = fetch_master_index(&client).await.map_err(error)?;
-        let candidates = collect_candidate_titles(state.db().pool(), &game_id, vn_id.as_deref()).await;
-        let matched = find_best_match(&index, &candidates)
+        let candidates =
+            collect_candidate_titles(state.db().pool(), &game_id, vn_id.as_deref()).await;
+        find_best_match(&index, &candidates)
             .map(|e| e.url.clone())
             .or_else(|| {
                 vn_core::walkthrough::find_candidate_matches(&index, &candidates, 1)
@@ -173,14 +182,17 @@ pub async fn walkthrough_fetch(
                     .next()
                     .map(|e| e.url)
             })
-            .ok_or_else(|| error("Could not find a matching walkthrough on Seiya-Saiga. Please search or provide the URL manually."))?;
-        matched
+            .ok_or_else(|| error("Could not find a matching walkthrough on Seiya-Saiga. Please search or provide the URL manually."))?
     };
 
-    let html = fetch_seiya_html(&client, &target_url).await.map_err(error)?;
+    let html = fetch_seiya_html(&client, &target_url)
+        .await
+        .map_err(error)?;
     let parsed = parse_seiya_walkthrough(&html, &target_url).map_err(|e| error(e.to_string()))?;
 
-    save_walkthrough(state.db().pool(), &game_id, &parsed).await.map_err(error)?;
+    save_walkthrough(state.db().pool(), &game_id, &parsed)
+        .await
+        .map_err(error)?;
 
     let view = get_walkthrough_view(state.db().pool(), &game_id, vn_id.as_deref())
         .await
@@ -204,7 +216,8 @@ pub async fn walkthrough_translate(
         .map_err(error)?
         .ok_or_else(|| error("No walkthrough to translate. Please fetch one first."))?;
 
-    let glossary = crate::walkthrough::load_character_glossary(state.db().pool(), vn_id.as_deref()).await;
+    let glossary =
+        crate::walkthrough::load_character_glossary(state.db().pool(), vn_id.as_deref()).await;
 
     // Collect all strings that need translation:
     // Route titles + item texts
@@ -309,5 +322,7 @@ pub async fn walkthrough_clear_progress(
     state: State<'_, AppState>,
     game_id: String,
 ) -> CommandResult<()> {
-    clear_checked_items(state.db().pool(), &game_id).await.map_err(error)
+    clear_checked_items(state.db().pool(), &game_id)
+        .await
+        .map_err(error)
 }
