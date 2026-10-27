@@ -382,6 +382,35 @@ async fn idle_time_becomes_afk_after_the_threshold() {
 }
 
 #[tokio::test]
+async fn a_session_spent_clicking_through_dialogue_is_not_filed_as_away() {
+    // The probe reports "time since the last input", so a click 300 ms before the
+    // poll shows 300 ms of idle -- never zero. Counting that as an idle run made
+    // every session look away after about a minute of active playing.
+    let (db, device, game_id, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        300,
+    );
+
+    // Two minutes of play, polling every 2 s, each poll taken just after a click.
+    for step in 0..=60 {
+        service
+            .poll(db.pool(), &device, t(step * 2_000))
+            .await
+            .expect("poll");
+    }
+
+    let status = service.status(db.pool()).await;
+    assert_eq!(status.game_id, Some(game_id.to_string()));
+    assert_eq!(status.afk_ms, 0, "clicking through a scene is not a break");
+    assert_eq!(
+        status.active_ms, 120_000,
+        "the active clock must keep advancing while the reader is present"
+    );
+}
+
+#[tokio::test]
 async fn the_process_exiting_closes_the_run() {
     let (db, device, _game, probe, service) = fixture().await;
     probe.set(

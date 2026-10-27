@@ -132,8 +132,11 @@ pub fn account(samples: &[Sample], config: AfkConfig) -> ActivityTotals {
 
 /// Commit an idle run: AFK if it outlasts the threshold, otherwise reading time.
 ///
-/// This is the only place the grace rule is decided. The tracker calls it too, so a
-/// change here moves detected sessions and folded samples together.
+/// This is the grace rule for a fold over sampled activity. The live tracker does
+/// not accumulate runs this way: it reads the OS's own idle duration on every poll
+/// and charges only the part past the threshold (`tracker::away_ms_in_gap`), so a
+/// break is away from its first second past the grace and a session that is being
+/// clicked through never becomes a break at all.
 pub fn resolve_idle_run(
     totals: &mut ActivityTotals,
     active_ms: &mut i64,

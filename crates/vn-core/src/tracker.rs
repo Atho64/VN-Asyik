@@ -13,9 +13,10 @@
 //! * A run is split into **segments** by chapter changes, because per-chapter
 //!   time is a headline feature. Segments are emitted as separate sessions, so a
 //!   chapter change never loses accumulated time.
-//! * Inside a segment, every gap is classified as **active** or **away**. The grace
-//!   boundary is `crate::afk::resolve_idle_run`, shared with the sample fold: an idle
-//!   run under the threshold is reading time, and only the part past it is away.
+//! * Inside a segment, every gap is classified as **active** or **away** from the
+//!   OS's own idle measurement. The grace boundary is the configured AFK
+//!   threshold: an idle run under the threshold is reading time, and only the part
+//!   past it is away.
 //! * **Checkpoints** do not close the session. They emit a snapshot so the caller
 //!   can persist progress; the session continues and the final write supersedes
 //!   the checkpoint, keyed by session id.
@@ -172,10 +173,6 @@ struct OpenSegment {
     afk_ms: i64,
     /// Time accrued since the last checkpoint or segment start.
     since_emit_ms: i64,
-    /// Length of the current stretch without input.
-    idle_run_ms: i64,
-    /// Whether the current idle run has crossed the threshold.
-    idle_is_afk: bool,
 }
 
 impl OpenSegment {
@@ -187,21 +184,7 @@ impl OpenSegment {
             active_ms: 0,
             afk_ms: 0,
             since_emit_ms: 0,
-            idle_run_ms: 0,
-            idle_is_afk: false,
         }
-    }
-
-    /// Ask the shared fold whether this idle run has crossed the grace threshold.
-    ///
-    /// The run is passed as a single stretch so the verdict comes from
-    /// `afk::resolve_idle_run` rather than a second comparison that could drift.
-    fn idle_run_has_crossed(&self, config: crate::afk::AfkConfig) -> bool {
-        let mut totals = crate::afk::ActivityTotals::default();
-        let mut active = 0;
-        let mut idle_run = self.idle_run_ms;
-        crate::afk::resolve_idle_run(&mut totals, &mut active, &mut idle_run, config);
-        totals.afk_ms > 0
     }
 
     fn snapshot(
@@ -304,9 +287,6 @@ impl Tracker {
                 self.phase = Phase::Tracking;
                 if self.open.is_none() {
                     self.open_segment(now);
-                } else if let Some(open) = self.open.as_mut() {
-                    open.idle_run_ms = 0;
-                    open.idle_is_afk = false;
                 }
             }
             Event::FocusLost => {
@@ -404,19 +384,16 @@ impl Tracker {
         };
         open.active_ms += delta;
         open.since_emit_ms += delta;
-        open.idle_run_ms = 0;
-        open.idle_is_afk = false;
         self.maybe_checkpoint(now, emitted);
     }
 
     /// Accrue a tick, attributing the gap to active or away time.
     ///
-    /// `idle_for_ms` is the OS's own measure, so a tick that reports more idle
-    /// time than the gap itself is clamped to the gap. That happens routinely
-    /// when a tick is delayed.
-    ///
-    /// The grace boundary is asked of `afk::resolve_idle_run`, so the tracked path and
-    /// the sample fold cannot disagree about where it sits.
+    /// `idle_for_ms` is how long the user had gone without input when this tick
+    /// was taken, measured by the OS. It is not a flag saying the gap was idle:
+    /// after a click half a second ago it reads 500, and that is somebody who is
+    /// present. Only the stretch of the current idle run past the grace threshold
+    /// is away time, so the reading seconds of a break stay credited.
     fn accrue_tick(
         &mut self,
         delta: i64,
@@ -431,22 +408,9 @@ impl Tracker {
             return;
         };
 
-        let threshold = self.config.afk;
-        if idle_for_ms > 0 {
-            open.idle_run_ms += delta;
-            open.idle_is_afk = open.idle_run_has_crossed(threshold);
-        } else {
-            // Input arrived: the run ended below the threshold, so it was reading
-            // time and is already counted as active.
-            open.idle_run_ms = 0;
-            open.idle_is_afk = false;
-        }
-
-        if open.idle_is_afk {
-            open.afk_ms += delta;
-        } else {
-            open.active_ms += delta;
-        }
+        let away = away_ms_in_gap(delta, idle_for_ms, self.config.afk.threshold_ms);
+        open.afk_ms += away;
+        open.active_ms += delta - away;
         open.since_emit_ms += delta;
         self.maybe_checkpoint(now, emitted);
     }
@@ -512,6 +476,18 @@ impl Tracker {
     }
 }
 
+/// How many of the last `gap_ms` were away from the keyboard.
+///
+/// `idle_for_ms` and `gap_ms` are measured by clocks that agree on "now": the
+/// current idle run began `idle_for_ms` ago and the gap began `gap_ms` ago, so
+/// the away window is the part of the run past the grace threshold. Clamping to
+/// the gap matters in both directions — a run longer than the gap means the whole
+/// gap was idle (a delayed or skipped poll), and a run shorter than the gap means
+/// input arrived inside it and only the tail is away.
+fn away_ms_in_gap(gap_ms: i64, idle_for_ms: i64, threshold_ms: i64) -> i64 {
+    (idle_for_ms.max(0) - threshold_ms.max(0)).clamp(0, gap_ms.max(0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -556,6 +532,21 @@ mod tests {
         let config = TrackerConfig::default();
         assert!(config.checkpoint_interval_ms >= 15_000);
         assert!(config.checkpoint_interval_ms <= 30_000);
+    }
+
+    #[test]
+    fn the_away_helper_clamps_a_delayed_poll_to_the_gap() {
+        // A poll delayed by a suspended machine reports an idle run longer than the
+        // gap; only the gap can be charged, never phantom time.
+        assert_eq!(away_ms_in_gap(2_000, 3_600_000, 60_000), 2_000);
+        // Input arrived 500 ms before the tick.
+        assert_eq!(away_ms_in_gap(2_000, 500, 60_000), 0);
+        // The idle run began inside the gap and crossed the threshold 700 ms ago.
+        assert_eq!(away_ms_in_gap(2_000, 60_700, 60_000), 700);
+        // A clock that went backwards must not produce negative away time.
+        assert_eq!(away_ms_in_gap(2_000, -5, 60_000), 0);
+        // Two events in the same millisecond carry no time at all.
+        assert_eq!(away_ms_in_gap(0, 3_600_000, 60_000), 0);
     }
 
     #[test]
@@ -643,6 +634,69 @@ mod tests {
         let segment = out.into_iter().next_back().expect("segment");
         assert_eq!(segment.afk_ms, 0, "30 s of reading is not a break");
         assert_eq!(segment.active_ms, 33_000);
+    }
+
+    #[test]
+    fn a_near_zero_idle_reading_is_not_a_break() {
+        // `idle_for_ms` is "time since the last input", not a flag: with a click
+        // 300 ms ago it reads 300, never 0. Accumulating that as an idle run made
+        // every session look away after a minute of *playing*, so the active clock
+        // stopped and the away figure started from zero mid-session.
+        let (mut tracker, _) = tracker();
+        tracker.apply(Event::FocusGained, t(0));
+
+        // Five minutes of clicking: one poll every 5 s, each seeing 300 ms of idle.
+        for step in 1..=60 {
+            tracker.apply(Event::Tick { idle_for_ms: 300 }, t(step * 5_000));
+        }
+        let segment = tracker
+            .apply(Event::Stop, t(301_000))
+            .into_iter()
+            .next()
+            .expect("segment");
+        assert_eq!(segment.afk_ms, 0, "a click every few seconds is playing");
+        assert_eq!(segment.active_ms, 301_000);
+    }
+
+    #[test]
+    fn a_break_is_the_part_past_the_grace_and_never_restarts() {
+        // Away is derived from the OS's idle run on every tick, so a second break
+        // adds to the first instead of starting over, and each run's grace period
+        // stays reading time.
+        let (mut tracker, _) = tracker();
+        tracker.apply(Event::FocusGained, t(0));
+
+        // 120 s without input: away from the 61st second on.
+        for step in 1..=120 {
+            tracker.apply(
+                Event::Tick {
+                    idle_for_ms: step * 1_000,
+                },
+                t(step * 1_000),
+            );
+        }
+        // Back: the last input arrived 400 ms before this tick.
+        tracker.apply(Event::Tick { idle_for_ms: 400 }, t(121_000));
+        // A second, 129 s run measured from that input.
+        for step in 122..=250 {
+            tracker.apply(
+                Event::Tick {
+                    idle_for_ms: (step - 121) * 1_000,
+                },
+                t(step * 1_000),
+            );
+        }
+        let segment = tracker
+            .apply(Event::Stop, t(251_000))
+            .into_iter()
+            .next()
+            .expect("segment");
+
+        // First run: idle since t=0, away from 60 s -> 60 s.
+        // Second run: idle since t=121 s, away from 181 s -> 69 s.
+        assert_eq!(segment.afk_ms, 60_000 + 69_000);
+        assert_eq!(segment.active_ms, 251_000 - 129_000);
+        assert_eq!(segment.elapsed_ms(), 251_000);
     }
 
     #[test]
