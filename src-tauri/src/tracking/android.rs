@@ -302,10 +302,15 @@ async fn apply_query_result(
 
     // The moment our own app took the foreground, if it did. Recording stops
     // here, because whatever runs after is the user in VN Asyik, not reading.
+    //
+    // Only a return *since the last commit* counts. The replay window always
+    // starts at `started_at_ms`, so the previous round's return event is still in
+    // it; taking that one capped the cutoff at a moment the cursor had already
+    // passed, and every later stretch of the same session was silently dropped.
     let left_to_self = events.iter().find(|event| {
         event.kind == vn_core::usage::UsageEventKind::Resumed
             && event.package.as_deref() == Some(SELF_PACKAGE_MARKER)
-            && event.at_ms > selection.started_at_ms
+            && event.at_ms > selection.cursor_ms
     });
     // Include the boundary event in the exclusive window: DEVICE_* must discard
     // an open activity rather than close it at an invented shutdown time.
@@ -605,6 +610,67 @@ mod tests {
             load_selection(db.pool()).await.expect("load").is_some(),
             "the selection survives so reading can continue"
         );
+    }
+
+    #[tokio::test]
+    async fn reading_after_returning_to_the_app_keeps_counting() {
+        // The reported sequence one step further: come back to VN Asyik, then go
+        // back to the game and read again. The cutoff has to be the return of
+        // *this* round, not the first one in the replay window, or the persisted
+        // cursor never moves past it and every later stretch is dropped.
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Second stretch").await;
+        let selected = selection(game);
+
+        // Round 1: 90 s reading, back to VN Asyik at 100_000.
+        let first = apply_query_result(
+            db.pool(),
+            &device,
+            selected,
+            101_000,
+            false,
+            Ok(vec![
+                event(Some("org.example.runner"), 1, 2_000),
+                event(Some("com.android.chrome"), 1, 92_000),
+                event(Some(SELF_PACKAGE_MARKER), 1, 100_000),
+            ]),
+        )
+        .await
+        .expect("first replay");
+        assert_eq!(first.counted_ms, 90_000);
+
+        // Round 2: back to the game at 200_000, five minutes of reading, return at
+        // 500_000. UsageStats replays the whole window from `started_at_ms`, so the
+        // first round's own return event is still in the log.
+        let selected = load_selection(db.pool())
+            .await
+            .expect("load")
+            .expect("selection");
+        let view = apply_query_result(
+            db.pool(),
+            &device,
+            selected,
+            501_000,
+            false,
+            Ok(vec![
+                event(Some("org.example.runner"), 1, 2_000),
+                event(Some("com.android.chrome"), 1, 92_000),
+                event(Some(SELF_PACKAGE_MARKER), 1, 100_000),
+                event(Some("org.example.runner"), 1, 200_000),
+                event(Some(SELF_PACKAGE_MARKER), 1, 500_000),
+            ]),
+        )
+        .await
+        .expect("second replay");
+
+        assert!(view.active, "the session continues across both stretches");
+        assert_eq!(
+            view.counted_ms,
+            90_000 + 300_000,
+            "the time read after coming back must be counted"
+        );
+        assert_eq!(total(db.pool(), game).await, 390_000);
     }
 
     #[tokio::test]
