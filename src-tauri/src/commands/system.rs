@@ -175,6 +175,26 @@ pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Rewrite the tray menu in the language the UI is currently using.
+///
+/// The tray is built in Rust before the frontend knows the locale, so the labels
+/// start as English and are replaced here as soon as the UI boots and whenever the
+/// user switches language. Every other user-visible string in the app comes from
+/// the i18n dictionaries; the tray menu is no exception.
+#[tauri::command]
+#[allow(unused_variables, clippy::needless_pass_by_value)]
+pub fn tray_set_labels(
+    app: tauri::AppHandle,
+    show: String,
+    hide: String,
+    quit: String,
+) -> Result<(), crate::commands::CommandError> {
+    #[cfg(desktop)]
+    crate::tray::set_labels(&app, &crate::tray::TrayLabels { show, hide, quit })
+        .map_err(|err| crate::commands::CommandError::new("tray", err.to_string()))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::external_url_allowed;

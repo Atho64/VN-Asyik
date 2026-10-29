@@ -127,6 +127,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => query.removeEventListener("change", apply);
   }, [prefs.theme, prefs.reduce_effects, locale, platform?.os]);
 
+  // The tray menu is built in Rust before the frontend knows the locale, so it
+  // starts in English. Relabel it as soon as the UI knows the language, and
+  // again on every switch: the tray is a user-visible surface like any other.
+  useEffect(() => {
+    void api
+      .traySetLabels(t("tray.show"), t("tray.hide"), t("tray.quit"))
+      .catch(() => {
+        // Platforms without a tray have nothing to relabel.
+      });
+  }, [t]);
+
   useLayoutEffect(() => {
     // The focused card can leave the virtual range while its artwork remains
     // in the shell. Revoke every previous reveal when the content policy changes,

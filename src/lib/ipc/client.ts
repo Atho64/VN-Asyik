@@ -419,6 +419,7 @@ export interface Api {
   showWindow(): Promise<void>;
   toggleWindow(): Promise<boolean>;
   quitApp(): Promise<void>;
+  traySetLabels(show: string, hide: string, quit: string): Promise<void>;
 }
 
 /** `void` commands still resolve to `null` over IPC. */
@@ -711,6 +712,8 @@ export const api: Api = {
   showWindow: () => call("show_window", voidSchema),
   toggleWindow: () => call("toggle_window", z.boolean()),
   quitApp: () => call("quit_app", voidSchema),
+  traySetLabels: (show, hide, quit) =>
+    call("tray_set_labels", voidSchema, { show, hide, quit }),
 };
 
 /** True when running inside the Tauri shell. */

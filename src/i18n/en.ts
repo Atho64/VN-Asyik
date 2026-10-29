@@ -1023,6 +1023,76 @@ export const en = {
   "palette.minimizeWindowHint": "Minimize window to taskbar",
   "palette.quitApp": "Quit VN Asyik",
   "palette.quitAppHint": "Exit application completely",
+  "tray.show": "Show VN Asyik",
+  "tray.hide": "Hide to tray",
+  "tray.quit": "Quit",
+  "nav.guide": "Guide",
+  // The guide is written for the build it ships with, so the screenshots and the
+  // text cannot drift apart without someone noticing.
+  "guide.title": "VN Asyik guide",
+  "guide.intro":
+    "Everything this app does, shown with screenshots of the version you are running.",
+  "guide.library.title": "Library",
+  "guide.library.body": "Every game you imported, with its cover, status and playtime.",
+  "guide.library.p1": "Search, filter by status and sort; results update as you type.",
+  "guide.library.p2":
+    "Three views: Grid, List and Shelf. All virtualized, so thousands of titles still scroll smoothly.",
+  "guide.library.p3": "Explicit art stays blurred until you ask to see a cover.",
+  "guide.tracking.title": "Playtime tracking",
+  "guide.tracking.body":
+    "Time counts while the game window is in front and you are not away.",
+  "guide.tracking.p1":
+    "Automatic tracking on: only focused time counts, and idle time is filed as away per the idle-detection threshold.",
+  "guide.tracking.p2":
+    "Automatic tracking off: every second the game runs counts, away time included; the session stops when the game closes and is not continued.",
+  "guide.tracking.p3": "Scan a folder, then map an executable to a game. Nothing is guessed.",
+  "guide.chapters.title": "Routes, chapters and endings",
+  "guide.chapters.body":
+    "Siglus engines write the chapter into the window title, and the app reads it: a date, a day number or a chapter number, full-width characters included.",
+  "guide.chapters.p1":
+    "The manual timer counts the same way playtime does, and stops by itself when the game closes.",
+  "guide.chapters.p2":
+    "Routes and endings are yours to name; a detected chapter and a manual one can be joined with the offered merge.",
+  "guide.chapters.p3":
+    "If your game writes another shape, use a custom pattern (regex) in Settings, General.",
+  "guide.game.title": "Start from the app",
+  "guide.game.body":
+    "The Play button launches a mapped game and binds that process to it immediately.",
+  "guide.game.p1": "When a Locale Emulator profile is chosen, the game starts through it.",
+  "guide.game.p2": "Once the game runs, the chapter is read from its window title.",
+  "guide.game.p3":
+    "One game is one running session; pressing Play twice does not double the time.",
+  "guide.stats.title": "Stats",
+  "guide.stats.body":
+    "Playtime by game, route and month, computed from the stored sessions.",
+  "guide.stats.p1": "Active time and away time stay separate instead of being merged.",
+  "guide.stats.p2": "A session under a minute is still shown in seconds.",
+  "guide.stats.p3":
+    "The range can be changed; a figure with no data behind it says not recorded, not zero.",
+  "guide.discover.title": "Discover",
+  "guide.discover.body":
+    "Ask what to read next; suggestions come from what people wrote and always cite sources.",
+  "guide.discover.p1": "VNDB is free; web search uses your own Tavily key.",
+  "guide.discover.p2": "Every suggestion carries the links it came from.",
+  "guide.discover.p3": "No answer without a source you can open yourself.",
+  "guide.chat.title": "Companion chat",
+  "guide.chat.body":
+    "The chat can read the text currently on screen through LunaTranslator, and digests of a script you imported yourself.",
+  "guide.chat.p1": "The Text Hook status is shown in the chat header.",
+  "guide.chat.p2":
+    "The personality can be changed; facts, quotes and the spoiler policy stay the same.",
+  "guide.chat.p3":
+    "Script digests are saved per chunk, so closing the app does not lose progress.",
+  "guide.settings.title": "Settings",
+  "guide.settings.body":
+    "Theme, language, artwork concealment, idle detection, and reading chapters from window titles.",
+  "guide.settings.p1":
+    "Indonesian and English are available; the tray menu follows the chosen language.",
+  "guide.settings.p2":
+    "Backup and transfer use one .vn-asyik-library file with conflict review.",
+  "guide.settings.p3": "VNDB and folder sync are optional. There is no telemetry.",
+  "guide.footer":
+    "Press Ctrl+K anywhere for the command palette: jump screens, find a title, or hide the app to the tray.",
   "palette.close": "Close",
 
   "common.close": "Close",

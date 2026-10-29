@@ -1024,6 +1024,80 @@ export const id: Messages = {
   "palette.minimizeWindowHint": "Kecilkan jendela ke taskbar",
   "palette.quitApp": "Keluar dari VN Asyik",
   "palette.quitAppHint": "Hentikan aplikasi sepenuhnya",
+  "tray.show": "Tampilkan VN Asyik",
+  "tray.hide": "Sembunyikan ke tray",
+  "tray.quit": "Keluar",
+  "nav.guide": "Panduan",
+  // The guide is written for the build it ships with, so the screenshots and the
+  // text cannot drift apart without someone noticing.
+  "guide.title": "Panduan VN Asyik",
+  "guide.intro":
+    "Semua yang bisa dilakukan aplikasi ini, dengan tangkapan layar dari versi yang sedang kamu pakai.",
+  "guide.library.title": "Koleksi",
+  "guide.library.body":
+    "Semua game yang kamu impor, dengan sampul, status, dan waktu main.",
+  "guide.library.p1":
+    "Cari, filter status, dan urutkan; hasilnya langsung tanpa memuat ulang.",
+  "guide.library.p2":
+    "Tiga tampilan: Kisi, Daftar, dan Rak. Semua divirtualisasi, jadi tetap lancar untuk ribuan judul.",
+  "guide.library.p3":
+    "Gambar eksplisit diburamkan dulu dan baru terbuka saat kamu memintanya.",
+  "guide.tracking.title": "Pelacakan waktu",
+  "guide.tracking.body":
+    "Aplikasi mencatat waktu hanya saat jendela game di depan dan kamu tidak sedang pergi.",
+  "guide.tracking.p1":
+    "Lacak otomatis aktif: hanya waktu fokus yang dihitung, waktu diam dipisah sebagai AFK sesuai ambang Deteksi diam.",
+  "guide.tracking.p2":
+    "Lacak otomatis mati: semua waktu selama game berjalan dihitung, termasuk AFK; sesi berhenti saat gamenya ditutup dan tidak dilanjutkan.",
+  "guide.tracking.p3": "Pindai folder lalu petakan exe ke game. Tidak ada tebakan otomatis.",
+  "guide.chapters.title": "Rute, chapter, dan ending",
+  "guide.chapters.body":
+    "Engine Siglus menulis chapter di judul jendela, dan aplikasi membacanya: tanggal, hari, atau nomor chapter, termasuk karakter full-width.",
+  "guide.chapters.p1":
+    "Timer manual menghitung dengan aturan yang sama seperti waktu main, dan berhenti sendiri saat game ditutup.",
+  "guide.chapters.p2":
+    "Rute dan ending kamu yang memberi nama; chapter hasil deteksi dan manual bisa digabung lewat tawaran merge.",
+  "guide.chapters.p3":
+    "Kalau caption game-mu berbentuk lain, pakai Pola khusus (regex) di Pengaturan, Umum.",
+  "guide.game.title": "Mulai dari aplikasi",
+  "guide.game.body":
+    "Tombol Play menjalankan game yang sudah dipetakan, dan prosesnya langsung terikat ke game itu.",
+  "guide.game.p1":
+    "Kalau profil Locale Emulator dipilih, game dijalankan lewat emulator itu.",
+  "guide.game.p2": "Setelah game jalan, chapter dibaca dari judul jendelanya.",
+  "guide.game.p3":
+    "Satu game satu sesi berjalan; menekan Play dua kali tidak menggandakan waktunya.",
+  "guide.stats.title": "Statistik",
+  "guide.stats.body":
+    "Waktu baca per game, rute, dan bulan, dihitung dari sesi yang tersimpan.",
+  "guide.stats.p1": "Waktu aktif dan waktu pergi dipisah, bukan digabung diam-diam.",
+  "guide.stats.p2": "Sesi di bawah satu menit tetap tampil dalam detik.",
+  "guide.stats.p3":
+    "Rentang waktu bisa diganti; angka yang tidak ada datanya ditulis belum tercatat, bukan nol.",
+  "guide.discover.title": "Temukan",
+  "guide.discover.body":
+    "Tanya mau baca apa selanjutnya; saran diambil dari tulisan orang dan selalu menyebut sumbernya.",
+  "guide.discover.p1": "VNDB gratis; pencarian web memakai kunci Tavily milikmu.",
+  "guide.discover.p2": "Setiap saran menyertakan tautan sumbernya.",
+  "guide.discover.p3": "Tidak ada jawaban tanpa rujukan yang bisa kamu buka sendiri.",
+  "guide.chat.title": "Chat pendamping",
+  "guide.chat.body":
+    "Chat bisa membaca teks yang sedang ada di layar lewat LunaTranslator, dan ringkasan skrip yang kamu impor sendiri.",
+  "guide.chat.p1": "Status Text Hook tampil di header chat.",
+  "guide.chat.p2":
+    "Kepribadian bisa diganti; fakta, kutipan, dan aturan spoiler tetap sama.",
+  "guide.chat.p3":
+    "Ringkasan skrip disimpan bertahap, jadi menutup aplikasi tidak menghapus progres.",
+  "guide.settings.title": "Pengaturan",
+  "guide.settings.body":
+    "Tema, bahasa, sensor gambar, deteksi diam, dan pembacaan chapter dari judul jendela.",
+  "guide.settings.p1":
+    "Tersedia bahasa Indonesia dan Inggris; menu tray ikut bahasa yang dipilih.",
+  "guide.settings.p2":
+    "Cadangan dan transfer memakai satu file .vn-asyik-library dengan review konflik.",
+  "guide.settings.p3": "Sinkron VNDB dan folder opsional. Tidak ada telemetri.",
+  "guide.footer":
+    "Tekan Ctrl+K kapan saja untuk Command Palette: lompat layar, cari judul, atau sembunyikan aplikasi ke tray.",
   "palette.close": "Tutup",
 
   "common.close": "Tutup",

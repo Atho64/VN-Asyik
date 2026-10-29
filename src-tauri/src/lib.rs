@@ -99,6 +99,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::system::show_window,
         commands::system::toggle_window,
         commands::system::quit_app,
+        commands::system::tray_set_labels,
         commands::vndb::vndb_search,
         commands::vndb::vndb_preview,
         commands::vndb::vndb_import,

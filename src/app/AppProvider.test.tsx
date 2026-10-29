@@ -22,6 +22,9 @@ vi.mock("@/lib/ipc/client", () => ({
     platformInfo: mocks.platform,
     trackingAndroidSession: mocks.session,
     listGames: mocks.listGames,
+    // The provider relabels the tray once it knows the locale; the mock only has
+    // to exist, since a tray is a desktop surface and this suite never sees one.
+    traySetLabels: vi.fn().mockResolvedValue(undefined),
   },
   IpcError: class extends Error {},
 }));
