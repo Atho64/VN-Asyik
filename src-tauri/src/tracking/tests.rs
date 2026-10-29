@@ -198,6 +198,55 @@ async fn a_siglus_title_caption_creates_a_chapter_and_updates_it_in_place() {
 }
 
 #[tokio::test]
+async fn a_full_width_day_and_route_caption_are_attributed() {
+    // `anemoi` writes neither of the older shapes: the marker is a day number
+    // early on and a route plus a chapter number once a route starts, and every
+    // character of it is full-width. Both captions below are the live ones.
+    let (db, device, game_id, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    probe.set_title("Tracked Game Ｄａｙ １");
+
+    service.poll(db.pool(), &device, t(0)).await.expect("poll");
+    service
+        .poll(db.pool(), &device, t(2_000))
+        .await
+        .expect("poll");
+    let chapters = chapters_of(db.pool(), game_id).await;
+    assert_eq!(chapters.len(), 1, "one chapter from the day caption");
+    assert_eq!(chapters[0].0, "Day 1", "the label stays with the number");
+    assert_eq!(chapters[0].1, None, "a day caption names no route");
+
+    // The next day is a different chapter, not a rename of the first.
+    probe.set_title("Tracked Game Ｄａｙ ２");
+    service
+        .poll(db.pool(), &device, t(4_000))
+        .await
+        .expect("poll");
+    let chapters = chapters_of(db.pool(), game_id).await;
+    assert_eq!(chapters.len(), 2, "day 2 is its own chapter");
+    assert_eq!(chapters[1].0, "Day 2");
+
+    // Once a route starts the caption names it before the chapter number.
+    probe.set_title("Tracked Game アネモイ Ｃｈａｐｔｅｒ ０１");
+    service
+        .poll(db.pool(), &device, t(6_000))
+        .await
+        .expect("poll");
+    let chapters = chapters_of(db.pool(), game_id).await;
+    assert_eq!(chapters.len(), 3);
+    assert_eq!(chapters[2].0, "アネモイ Chapter 01");
+    assert_eq!(
+        chapters[2].1.as_deref(),
+        Some("アネモイ"),
+        "the katakana section is the route"
+    );
+}
+
+#[tokio::test]
 async fn a_caption_belonging_to_a_different_game_is_not_attributed() {
     // The caption is the only chapter source that does not identify its game, so
     // it has to be matched against the tracked game's title. A caption from

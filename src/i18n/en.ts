@@ -327,13 +327,14 @@ export const en = {
   "titles.section": "Reading chapters from window titles",
   "titles.intro": "Some engines put your progress in the window title.",
   "titles.format": "Source",
-  "titles.siglus": "Siglus (verified)",
-  "titles.siglusHint": "Siglus engines.",
+  "titles.siglus": "Siglus",
+  "titles.siglusHint":
+    "Reads the caption shapes seen so far: a date (７月２６日), a numbered day (Day 1) or a chapter number (Chapter 01). Not every Siglus caption looks like these. If your game writes something else, use a custom pattern.",
   "titles.custom": "Custom pattern",
   "titles.off": "Off",
   "titles.offHint": "Do not read window titles at all.",
   "titles.customHint":
-    "For an engine not listed. Two groups read as route and position; one group reads as the position.",
+    "For a caption the Siglus format does not cover. Written as a regular expression (Rust regex syntax); two groups read as route and position, one group as the position.",
   "titles.pattern": "Pattern",
   "titles.patternHint": "Two groups: route, then position. One group is the position.",
   "titles.sample": "Test a caption",

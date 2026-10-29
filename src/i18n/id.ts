@@ -327,13 +327,14 @@ export const id: Messages = {
   "titles.section": "Membaca bab dari judul jendela",
   "titles.intro": "Sebagian engine menaruh progresmu di judul jendela.",
   "titles.format": "Sumber",
-  "titles.siglus": "Siglus (terverifikasi)",
-  "titles.siglusHint": "Engine Siglus.",
+  "titles.siglus": "Siglus",
+  "titles.siglusHint":
+    "Membaca bentuk caption yang sudah dicoba sejauh ini: tanggal (７月２６日), hari bernomor (Day 1), atau nomor bab (Chapter 01). Belum semua caption Siglus berbentuk begitu. Kalau game-mu menulis bentuk lain, pakai pola khusus.",
   "titles.custom": "Pola khusus",
   "titles.off": "Mati",
   "titles.offHint": "Jangan baca judul jendela sama sekali.",
   "titles.customHint":
-    "Untuk engine yang tidak terdaftar. Dua grup dibaca sebagai rute dan posisi; satu grup sebagai posisi.",
+    "Untuk caption yang tidak tercakup format Siglus. Ditulis sebagai regex (sintaks Rust); dua grup dibaca sebagai rute dan posisi, satu grup sebagai posisi.",
   "titles.pattern": "Pola",
   "titles.patternHint": "Dua grup: rute, lalu posisi. Satu grup berarti posisi.",
   "titles.sample": "Uji judul",

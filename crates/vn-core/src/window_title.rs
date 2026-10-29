@@ -3,16 +3,19 @@
 //! # Why the title
 //!
 //! Some engines put their progress in the caption. Siglus does, verified live on
-//! `Summer Pockets REFLECTION BLUE`:
+//! two games:
 //!
 //! ```text
 //! Summer Pockets REFLECTION BLUE Pocket ７月２６日
 //! Summer Pockets REFLECTION BLUE 静久 ８月７日
 //! Summer Pockets REFLECTION BLUE ７月３０日
 //! Summer Pockets REFLECTION BLUE
+//! anemoi Ｄａｙ １
 //! ```
 //!
-//! Reading a caption needs no injection, no memory offsets and no unpacked
+//! The last sample is not a date: the marker is a label and a number, and every
+//! character of it is full-width (`Ｄ` U+FF24, `１` U+FF11). Both shapes are read
+//! here. Reading a caption needs no injection, no memory offsets and no unpacked
 //! archives, so unlike an offset chain it keeps working across game updates.
 //! Engines that put nothing useful in the title simply report no chapter.
 //!
@@ -20,7 +23,9 @@
 //!
 //! It never guesses. A title with no recognisable marker yields [`TitleChapter::None`]
 //! rather than a made-up chapter name, because a wrong chapter silently corrupts
-//! playtime attribution and the user has no way to notice.
+//! playtime attribution and the user has no way to notice. A trailing number is
+//! not enough on its own: `Save Slot 3` is a menu, so the number has to follow a
+//! word that means a chapter, or a date unit.
 
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +37,7 @@ pub enum TitleChapter {
     Found {
         /// The route or section word, when the title carries one.
         section: Option<String>,
-        /// The date or position marker, as written, e.g. `７月２６日`.
+        /// The date or position marker, as written, e.g. `７月２６日` or `Day 1`.
         position: String,
         /// Display name combining both, e.g. `Pocket ７月２６日`.
         name: String,
@@ -43,16 +48,18 @@ pub enum TitleChapter {
     Foreign,
 }
 
-/// Full-width digits used by Japanese titles, mapped to ASCII.
+/// Fold the full-width forms a Japanese caption uses onto ASCII.
 ///
-/// Titles write `７月２６日` with full-width numerals, so a `\d` match finds
-/// nothing. Normalising first keeps the marker pattern simple.
-fn normalise_digits(text: &str) -> String {
+/// Titles write `７月２６日` and `Ｄａｙ １` with full-width characters, so a `\d`
+/// or `Day` match finds nothing: `Ｄ` is U+FF24, not `D`. Full-width Latin,
+/// digits and punctuation all sit in U+FF01..=U+FF5E, exactly 0xFEE0 above the
+/// ASCII they stand for, and the ideographic space (U+3000) is a word break like
+/// any other. Normalising first keeps every marker pattern simple.
+fn normalise_width(text: &str) -> String {
     text.chars()
         .map(|ch| match ch {
-            // Full-width ０..９ sit at U+FF10..U+FF19, ten in a row, so the offset
-            // from the start of the run is the digit.
-            '\u{FF10}'..='\u{FF19}' => char::from_u32(ch as u32 - 0xFF10 + 0x30).unwrap_or(ch),
+            '\u{FF01}'..='\u{FF5E}' => char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch),
+            '\u{3000}' => ' ',
             other => other,
         })
         .collect()
@@ -60,14 +67,14 @@ fn normalise_digits(text: &str) -> String {
 
 /// Whether a character can be part of a date marker.
 fn is_marker_char(ch: char) -> bool {
-    ch.is_ascii_digit() || ch.is_whitespace() || matches!(ch, '月' | '日' | '/' | '－' | '-')
+    ch.is_ascii_digit() || ch.is_whitespace() || matches!(ch, '月' | '日' | '/' | '-')
 }
 
 /// Split a normalised title into `(before, marker)` for the trailing date.
 ///
 /// Returns the text before the marker and the marker itself, or `None` when the
 /// title does not end with a date.
-fn split_trailing_marker(normalised: &str) -> Option<(&str, &str)> {
+fn split_trailing_date(normalised: &str) -> Option<(&str, &str)> {
     let trimmed = normalised.trim_end();
     let start = trimmed
         .char_indices()
@@ -86,6 +93,88 @@ fn split_trailing_marker(normalised: &str) -> Option<(&str, &str)> {
     Some((&trimmed[..start], marker))
 }
 
+/// Byte offset where the trailing run of ASCII digits starts.
+///
+/// The run is maximal, so the character before it is never a digit and may be a
+/// space (`Day 1`) or a letter (`Day1`). `None` when the text does not end in a
+/// digit at all.
+fn trailing_digits_start(text: &str) -> Option<usize> {
+    text.char_indices()
+        .rev()
+        .take_while(|(_, ch)| ch.is_ascii_digit())
+        .last()
+        .map(|(index, _)| index)
+}
+
+/// Words that turn a trailing number into a chapter position.
+///
+/// The label is what separates a chapter from a count: a caption ending in
+/// `Slot 3` or `Save 2` is a menu, and crediting that number as a chapter would
+/// attribute playtime to a chapter that does not exist. Only words whose meaning
+/// is unambiguous are listed; `Day` is verified live on `anemoi`, the rest are
+/// the same shape.
+const COUNTER_LABELS: &[&str] = &[
+    "day", "chapter", "ch", "ch.", "episode", "ep", "ep.", "part",
+];
+
+/// Split `(before, marker)` for a labelled counter such as `Day 1`.
+///
+/// Both `Day 1` and `Day1` are accepted, because the engine decides where the
+/// space goes. The marker is returned whole, label included: the position is
+/// what the UI shows, and `Day 1` is how the game names that chapter.
+fn split_trailing_label(title: &str) -> Option<(&str, &str)> {
+    let trimmed = title.trim_end();
+    let number_start = trailing_digits_start(trimmed)?;
+    let head = trimmed[..number_start].trim_end();
+    let label_start = head
+        .char_indices()
+        .rev()
+        .take_while(|(_, ch)| ch.is_ascii_alphabetic() || *ch == '.')
+        .last()
+        .map(|(index, _)| index)?;
+    let label = &head[label_start..];
+    if !COUNTER_LABELS.contains(&label.to_ascii_lowercase().as_str()) {
+        return None;
+    }
+    let before = head[..label_start].trim_end();
+    Some((before, &trimmed[before.len()..]))
+}
+
+/// Split `(before, marker)` for a Japanese counter: `第3話`, `第2章`, `2日目`.
+///
+/// `第` is required before an episode or chapter unit, so a menu caption such as
+/// `全12話` (the episode total) does not become a chapter, and the day counter
+/// only counts with `目` — which is what keeps it apart from the date `7月26日`.
+fn split_trailing_counter(title: &str) -> Option<(&str, &str)> {
+    let trimmed = title.trim_end();
+    let (without_unit, unit) = trimmed
+        .strip_suffix("日目")
+        .map(|rest| (rest, "日目"))
+        .or_else(|| {
+            ["話", "章", "幕"]
+                .into_iter()
+                .find_map(|unit| trimmed.strip_suffix(unit).map(|rest| (rest, unit)))
+        })?;
+    let mut marker_start = trailing_digits_start(without_unit)?;
+    if unit != "日目" {
+        // `第` belongs to the marker, so the section is what comes before it.
+        marker_start = without_unit[..marker_start].strip_suffix('第')?.len();
+    }
+    let before = trimmed[..marker_start].trim_end();
+    Some((before, &trimmed[before.len()..]))
+}
+
+/// Split a normalised title into `(before, marker)` for a trailing chapter marker.
+///
+/// Dates are tried first because `７月２６日` is the older verified shape and must
+/// keep parsing exactly as it did; then a labelled counter (`Day 1`), then a
+/// Japanese counter (`第3話`).
+fn split_trailing_marker(normalised: &str) -> Option<(&str, &str)> {
+    split_trailing_date(normalised)
+        .or_else(|| split_trailing_label(normalised))
+        .or_else(|| split_trailing_counter(normalised))
+}
+
 /// Parse a Siglus window title.
 ///
 /// `game_title` is the library's name for the game, used to strip the prefix the
@@ -94,7 +183,7 @@ fn split_trailing_marker(normalised: &str) -> Option<(&str, &str)> {
 /// entry.
 #[must_use]
 pub fn parse_siglus_title(title: &str, game_title: &str) -> TitleChapter {
-    let normalised = normalise_digits(title);
+    let normalised = normalise_width(title);
     let trimmed = normalised.trim();
 
     if trimmed.is_empty() {
@@ -105,10 +194,11 @@ pub fn parse_siglus_title(title: &str, game_title: &str) -> TitleChapter {
     //
     // The engine writes its own caption, which is not always byte-identical to the
     // library entry: it can be shorter ("Summer Pockets" for "Summer Pockets
-    // REFLECTION BLUE"). Try the full name, then the longest leading run of its
-    // words that the caption actually starts with.
-    let game = game_title.trim();
-    let mut rest = strip_prefix_ignore_ascii_case(trimmed, game).map(str::trim_start);
+    // REFLECTION BLUE") or written in full-width characters. Try the full name,
+    // then the longest leading run of its words that the caption actually starts
+    // with.
+    let game = normalise_width(game_title.trim());
+    let mut rest = strip_prefix_ignore_ascii_case(trimmed, &game).map(str::trim_start);
     if rest.is_none() {
         let mut words: Vec<&str> = game.split_whitespace().collect();
         while !words.is_empty() {
@@ -299,5 +389,180 @@ mod tests {
         assert!(!engine_has_title_chapters("kirikiri"));
         assert!(!engine_has_title_chapters("artemis"));
         assert!(!engine_has_title_chapters("unknown"));
+    }
+
+    // --- labelled counters -------------------------------------------------
+    //
+    // `anemoi` writes a day number instead of a date, and writes the whole marker
+    // in full-width characters. Observed live: `anemoi Ｄａｙ １`.
+
+    const ANEMOI: &str = "anemoi";
+
+    #[test]
+    fn a_full_width_day_marker_is_captured() {
+        assert_eq!(
+            parse_siglus_title("anemoi Ｄａｙ １", ANEMOI),
+            TitleChapter::Found {
+                section: None,
+                position: "Day 1".to_owned(),
+                name: "Day 1".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn the_day_marker_reads_the_same_in_half_width() {
+        assert_eq!(
+            parse_siglus_title("anemoi Day 1", ANEMOI),
+            parse_siglus_title("anemoi Ｄａｙ １", ANEMOI)
+        );
+        // A lower-case label is recognised too, and the position keeps the case
+        // the caption used, because that is what the user sees in the game.
+        assert_eq!(
+            parse_siglus_title("anemoi day 1", ANEMOI),
+            TitleChapter::Found {
+                section: None,
+                position: "day 1".to_owned(),
+                name: "day 1".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_katakana_section_before_a_chapter_number_is_kept() {
+        // Observed live on another route of `anemoi`: the caption names the route
+        // in katakana and writes `Chapter` and the number full-width.
+        assert_eq!(
+            parse_siglus_title("anemoi アネモイ Ｃｈａｐｔｅｒ ０１", ANEMOI),
+            TitleChapter::Found {
+                section: Some("アネモイ".to_owned()),
+                position: "Chapter 01".to_owned(),
+                name: "アネモイ Chapter 01".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn the_day_number_is_kept_with_its_label() {
+        // The position is what the UI shows: `Day 12`, not `12`. A bare number
+        // loses the only part that says what it counts.
+        assert_eq!(
+            parse_siglus_title("anemoi Ｄａｙ １２", ANEMOI),
+            TitleChapter::Found {
+                section: None,
+                position: "Day 12".to_owned(),
+                name: "Day 12".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_section_before_a_day_marker_is_kept() {
+        assert_eq!(
+            parse_siglus_title("anemoi アオイ Ｄａｙ ３", ANEMOI),
+            TitleChapter::Found {
+                section: Some("アオイ".to_owned()),
+                position: "Day 3".to_owned(),
+                name: "アオイ Day 3".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn other_chapter_words_work_the_same_way() {
+        for (title, position) in [
+            ("anemoi Chapter 2", "Chapter 2"),
+            ("anemoi Episode 4", "Episode 4"),
+            ("anemoi Part 5", "Part 5"),
+            ("anemoi Ch. 2", "Ch. 2"),
+            ("anemoi Ep 7", "Ep 7"),
+        ] {
+            assert_eq!(
+                parse_siglus_title(title, ANEMOI),
+                TitleChapter::Found {
+                    section: None,
+                    position: position.to_owned(),
+                    name: position.to_owned(),
+                },
+                "{title}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_number_after_an_unrelated_word_is_not_a_chapter() {
+        // `Save Slot 3` and `Volume 2` are menus. Only a word that means a
+        // chapter turns a number into one; anything else stays silent, because a
+        // made-up chapter corrupts attribution silently.
+        assert_eq!(
+            parse_siglus_title("anemoi Save Slot 3", ANEMOI),
+            TitleChapter::None
+        );
+        assert_eq!(
+            parse_siglus_title("anemoi Volume 2", ANEMOI),
+            TitleChapter::None
+        );
+        // A label with no number behind it is not a position either.
+        assert_eq!(parse_siglus_title("anemoi Day", ANEMOI), TitleChapter::None);
+        assert_eq!(
+            parse_siglus_title("anemoi Chapter", ANEMOI),
+            TitleChapter::None
+        );
+    }
+
+    #[test]
+    fn a_japanese_counter_is_captured() {
+        assert_eq!(
+            parse_siglus_title("anemoi 第３話", ANEMOI),
+            TitleChapter::Found {
+                section: None,
+                position: "第3話".to_owned(),
+                name: "第3話".to_owned(),
+            }
+        );
+        assert_eq!(
+            parse_siglus_title("anemoi ２日目", ANEMOI),
+            TitleChapter::Found {
+                section: None,
+                position: "2日目".to_owned(),
+                name: "2日目".to_owned(),
+            }
+        );
+        assert_eq!(
+            parse_siglus_title("anemoi アオイ 第2章", ANEMOI),
+            TitleChapter::Found {
+                section: Some("アオイ".to_owned()),
+                position: "第2章".to_owned(),
+                name: "アオイ 第2章".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn an_episode_total_is_not_a_chapter() {
+        // `全12話` on a menu is a count, not the current episode: `第` is what
+        // makes the unit a marker.
+        assert_eq!(
+            parse_siglus_title("anemoi 全12話", ANEMOI),
+            TitleChapter::None
+        );
+    }
+
+    #[test]
+    fn a_full_width_game_name_still_matches() {
+        // The caption and the library entry can both be full-width.
+        assert!(matches!(
+            parse_siglus_title("ａｎｅｍｏｉ Ｄａｙ １", ANEMOI),
+            TitleChapter::Found { .. }
+        ));
+    }
+
+    #[test]
+    fn a_foreign_caption_is_still_foreign() {
+        // The day marker must not make the parser accept another window.
+        assert_eq!(
+            parse_siglus_title("Day 1 - Notepad", ANEMOI),
+            TitleChapter::Foreign
+        );
     }
 }

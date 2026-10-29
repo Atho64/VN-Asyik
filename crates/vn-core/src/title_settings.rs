@@ -85,10 +85,13 @@ impl Default for TitleSettings {
     }
 }
 
-/// Maximum pattern length accepted.
+/// Maximum pattern length accepted, in bytes.
 ///
-/// A pattern longer than this is either a paste accident or an attempt to make
-/// the tracker work hard; neither is worth supporting.
+/// Bytes rather than characters because that is what `str::len` measures, and the
+/// point is to bound the work, not to be generous with a script: 512 bytes is
+/// still over 170 Japanese characters. A pattern longer than this is either a
+/// paste accident or an attempt to make the tracker work hard; neither is worth
+/// supporting.
 pub const MAX_PATTERN_LEN: usize = 512;
 
 /// What a matching title yields.
@@ -155,6 +158,10 @@ impl CustomPattern {
     }
 
     /// Read a caption with this pattern.
+    ///
+    /// Returns `None` when the pattern does not match **and** when the group it
+    /// matched captured nothing: an empty chapter name would create a row the UI
+    /// cannot show, which is worse than reporting no chapter.
     #[must_use]
     pub fn parse(&self, title: &str) -> Option<ParsedTitle> {
         let captures = self.regex.captures(title)?;
@@ -164,19 +171,21 @@ impl CustomPattern {
             .flatten()
             .map(|m| m.as_str())
             .collect();
-        match groups.as_slice() {
+        let (route, position) = match groups.as_slice() {
             // Two or more groups: route then position.
-            [route, position, ..] => Some(ParsedTitle {
-                route: Some((*route).trim().to_owned()).filter(|text| !text.is_empty()),
-                position: (*position).trim().to_owned(),
-            }),
+            [route, position, ..] => (Some((*route).trim()), *position),
             // One group: it is the chapter itself.
-            [only] => Some(ParsedTitle {
-                route: None,
-                position: (*only).trim().to_owned(),
-            }),
-            [] => None,
+            [only] => (None, *only),
+            [] => return None,
+        };
+        let position = position.trim().to_owned();
+        if position.is_empty() {
+            return None;
         }
+        Some(ParsedTitle {
+            route: route.map(str::to_owned).filter(|text| !text.is_empty()),
+            position,
+        })
     }
 }
 
@@ -298,6 +307,19 @@ mod tests {
     fn a_non_matching_title_returns_none_rather_than_empty_strings() {
         let pattern = CustomPattern::new(r"\[(.+)\]").unwrap();
         assert!(pattern.parse("Game with no marker").is_none());
+    }
+
+    #[test]
+    fn a_match_that_captures_nothing_is_not_a_chapter() {
+        // `Day(\d*)` matches the word and captures "". Storing that would create
+        // a chapter with no name, which the user cannot recognise or delete, so
+        // it reads as no match — the same answer as a caption with no marker.
+        let pattern = CustomPattern::new(r"Day(\d*)").unwrap();
+        assert!(pattern.parse("Some VN Day").is_none());
+        assert_eq!(
+            pattern.parse("Some VN Day3").map(|parsed| parsed.position),
+            Some("3".to_owned())
+        );
     }
 
     #[test]

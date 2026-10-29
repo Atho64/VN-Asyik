@@ -9,9 +9,11 @@ import type { PatternTest, TitleConfig } from "@/lib/ipc/types";
 /**
  * How chapters are read from window titles.
  *
- * Siglus writes its progress into the caption and that format is verified, so it
- * is the default. Other engines may do the same in formats nobody here has seen,
- * so an advanced pattern covers them without waiting for a build.
+ * Siglus writes its progress into the caption, so that is the default. Only a
+ * handful of caption shapes have actually been seen, so the option is not sold as
+ * "verified": a game whose caption reads differently needs a custom pattern, and
+ * the hint under the select says exactly that rather than leaving the user with a
+ * source that quietly reads nothing.
  *
  * The tester is not decoration: a pattern that never matches looks exactly like
  * a game that writes no titles, and only showing the match makes that
