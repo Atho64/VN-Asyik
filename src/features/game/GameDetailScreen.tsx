@@ -29,6 +29,7 @@ import { fallbackPalette } from "@/lib/palette";
 import { stripFormatting } from "@/lib/vndbText";
 import {
   formatDateTime,
+  formatDuration,
   formatDurationLong,
   localDateTimeToMs,
   lengthProgress,
@@ -132,8 +133,7 @@ export function GameDetailScreen() {
   // for the whole page, so a detail row that does not exist is not requested
   // again on every visit.
   const vndbDetailKnown = useCallback(
-    (vnId: string) =>
-      useAppStore.getState().vndbDetails[vnId] !== undefined,
+    (vnId: string) => useAppStore.getState().vndbDetails[vnId] !== undefined,
     [],
   );
   const cacheVndbDetail = useAppStore((state) => state.cacheVndbDetail);
@@ -298,6 +298,19 @@ export function GameDetailScreen() {
   const { game, total_ms: totalMs, afk_ms: afkMs } = card;
   const fallback = fallbackPalette(game.title);
   const progress = lengthProgress(totalMs, game.length_minutes);
+  // The percentage reads against the estimate itself: "0% dari 62 j" is
+  // shorter than "0% dari durasi tertulis" and actually says something.
+  const lengthText =
+    game.length_minutes && game.length_minutes > 0
+      ? formatDuration(game.length_minutes * 60_000, locale)
+      : null;
+  const progressText =
+    progress !== null && lengthText
+      ? t("game.progress", {
+          percent: Math.round(progress * 100),
+          length: lengthText,
+        })
+      : null;
   // Metadata was frozen at import time: nothing in the app could re-fetch it, so a
   // cached row never learned about fields added later. This re-reads VNDB and
   // leaves the game row (status, rating, notes, playtime) untouched.
@@ -496,76 +509,80 @@ export function GameDetailScreen() {
         </div>
 
         <div className="detail__head">
-          <h2 className="detail__title over-art">{game.title}</h2>
-          {/* Every other name the VN has, minus the one above. Previously this
+          <div className="detail__intro">
+            <h2 className="detail__title over-art">{game.title}</h2>
+            {/* Every other name the VN has, minus the one above. Previously this
               showed `title_original` alone, which for KANADE is the same string as
               the title, so the header printed the name twice and said nothing
               about the Latin or English release names. */}
-          {otherTitles.length > 0 ? (
-            <ul className="detail__alts" aria-label={t("detail.alsoKnownAs")}>
-              {otherTitles.map((title) => (
-                <li key={`${title.role}:${title.text}`} className="detail__alt">
-                  <span className="detail__alt-role">{t(`detail.titleRole.${title.role}`)}</span>
-                  <span className="detail__alt-text">{title.text}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+            {otherTitles.length > 0 ? (
+              <ul className="detail__alts" aria-label={t("detail.alsoKnownAs")}>
+                {otherTitles.map((title) => (
+                  <li key={`${title.role}:${title.text}`} className="detail__alt">
+                    <span className="detail__alt-role">
+                      {t(`detail.titleRole.${title.role}`)}
+                    </span>
+                    <span className="detail__alt-text">{title.text}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
 
-          <div className="detail__facts">
-            <StatusChip status={game.status} />
-            <RatingPicker
-              value={game.rating}
-              onChange={(rating) => void updateGame({ id: game.meta.id, rating })}
-            />
-            {/* The community score, next to the user's own: the pair is the
+            <div className="detail__facts">
+              <StatusChip status={game.status} />
+              <RatingPicker
+                value={game.rating}
+                onChange={(rating) => void updateGame({ id: game.meta.id, rating })}
+              />
+              {/* The community score, next to the user's own: the pair is the
                 interesting thing, and it was only visible at the bottom of the
                 VNDB card. */}
-            {vndb?.rating ? (
-              <span
-                className="chip tnum"
-                title={t("detail.vndbRatingHint", {
-                  count: vndb.votecount ?? 0,
-                })}
-              >
-                <Icon name="star" size={12} />
-                {t("detail.vndbRating", {
-                  value: (vndb.rating / 10).toFixed(1),
-                })}
-              </span>
-            ) : null}
-            {/* The link to the entry itself, next to the score it came from. The
+              {vndb?.rating ? (
+                <span
+                  className="chip tnum"
+                  title={t("detail.vndbRatingHint", {
+                    count: vndb.votecount ?? 0,
+                  })}
+                >
+                  <Icon name="star" size={12} />
+                  {t("detail.vndbRating", {
+                    value: (vndb.rating / 10).toFixed(1),
+                  })}
+                </span>
+              ) : null}
+              {/* The link to the entry itself, next to the score it came from. The
                 facts card below repeats it because that is where a reader looks
                 for "more", but a VN page is something people want one click away
                 from the hero, which is where they decide to go. */}
-            {game.vndb_id ? (
-              <button
-                type="button"
-                className="chip chip--link tnum"
-                title={t("detail.viewOnVndbHint", { vn: game.vndb_id })}
-                onClick={() => {
-                  void api
-                    .openExternal(vndbVnUrl(game.vndb_id ?? ""))
-                    .catch((caught: unknown) => {
-                      pushToast(
-                        "error",
-                        caught instanceof IpcError ? caught.message : t("common.error"),
-                      );
-                    });
-                }}
-              >
-                {game.vndb_id}
-              </button>
-            ) : null}
-            <span className="chip tnum">
-              <Icon name="clock" size={12} />
-              {formatDurationLong(totalMs, locale)}
-            </span>
-            {afkMs > 0 ? (
-              <span className="chip tnum" title={t("game.afkHint")}>
-                {t("detail.away")}: {formatDurationLong(afkMs, locale)}
+              {game.vndb_id ? (
+                <button
+                  type="button"
+                  className="chip chip--link tnum"
+                  title={t("detail.viewOnVndbHint", { vn: game.vndb_id })}
+                  onClick={() => {
+                    void api
+                      .openExternal(vndbVnUrl(game.vndb_id ?? ""))
+                      .catch((caught: unknown) => {
+                        pushToast(
+                          "error",
+                          caught instanceof IpcError ? caught.message : t("common.error"),
+                        );
+                      });
+                  }}
+                >
+                  {game.vndb_id}
+                </button>
+              ) : null}
+              <span className="chip tnum">
+                <Icon name="clock" size={12} />
+                {formatDurationLong(totalMs, locale)}
               </span>
-            ) : null}
+              {afkMs > 0 ? (
+                <span className="chip tnum" title={t("game.afkHint")}>
+                  {t("detail.away")}: {formatDurationLong(afkMs, locale)}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {/* One right-aligned column: secondary action, progress, primary action.
@@ -580,32 +597,42 @@ export function GameDetailScreen() {
               >
                 {t("vnchat.askGame")}
               </Link>
-              {progress !== null ? (
+              {progress !== null && progressText ? (
                 <span className="detail__progress caption">
                   <ProgressRing
                     progress={progress}
                     size={22}
-                    title={t("game.progress", {
+                    title={t("game.progressHint", {
                       percent: Math.round(progress * 100),
+                      length: lengthText ?? "",
                     })}
                   />
-                  {t("game.progress", { percent: Math.round(progress * 100) })}
+                  {progressText}
                 </span>
               ) : null}
             </div>
             <PlayButton gameId={game.meta.id} mappedExecutable={executables[0] ?? null} />
           </div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {statusOrder.map((status: GameStatus) => (
-              <Chip
-                key={status}
-                selected={game.status === status}
-                onClick={() => void updateGame({ id: game.meta.id, status })}
-              >
-                {t(`status.${status}`)}
-              </Chip>
-            ))}
+          {/* The five status chips are setters, not facts. Unlabelled and 8 px
+              under the Play button they read as a second row of fact chips, and
+              on a phone the whole head felt packed. The label says what they do
+              and the rule separates them from the primary action. */}
+          <div className="detail__status">
+            <span className="detail__status-label caption">
+              {t("detail.changeStatus")}
+            </span>
+            <div className="detail__status-chips">
+              {statusOrder.map((status: GameStatus) => (
+                <Chip
+                  key={status}
+                  selected={game.status === status}
+                  onClick={() => void updateGame({ id: game.meta.id, status })}
+                >
+                  {t(`status.${status}`)}
+                </Chip>
+              ))}
+            </div>
           </div>
         </div>
       </header>
@@ -706,7 +733,10 @@ export function GameDetailScreen() {
                     <li key={entry.id} className="tracking__row tracking__row--divided">
                       <Icon name="play" size={14} />
                       <span style={{ minWidth: 0, flex: 1 }}>
-                        <span className="row__title" title={entry.exe_path ?? entry.exe_name}>
+                        <span
+                          className="row__title"
+                          title={entry.exe_path ?? entry.exe_name}
+                        >
                           {entry.exe_path ?? entry.exe_name}
                           {entry.runner_kind ? (
                             <span

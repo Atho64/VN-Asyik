@@ -13,26 +13,36 @@ import {
 } from "./time";
 
 describe("formatDuration", () => {
-  it("renders h:mm with padded minutes", () => {
-    expect(formatDuration(0)).toBe("0:00");
-    expect(formatDuration(5 * 60_000)).toBe("0:05");
-    expect(formatDuration(90 * 60_000)).toBe("1:30");
-    expect(formatDuration(10 * 3_600_000)).toBe("10:00");
+  it("writes the unit instead of an ambiguous colon", () => {
+    // `0:06` read the same for six seconds and six minutes. The unit says
+    // which one it is, at the size a dense row can afford.
+    expect(formatDuration(0)).toBe("0s");
+    expect(formatDuration(6_000)).toBe("6s");
+    expect(formatDuration(6 * 60_000)).toBe("6m");
+    expect(formatDuration(90 * 60_000)).toBe("1h 30m");
+    expect(formatDuration(10 * 3_600_000)).toBe("10h");
+    expect(formatDuration(12 * 3_600_000 + 40 * 60_000)).toBe("12h 40m");
   });
 
-  it("shows a sub-minute session instead of rounding it to nothing", () => {
-    // The tracker writes ~4 s slices, so rows between 1 s and 59 s exist and are
-    // real playtime. They used to print 0:00.
-    expect(formatDuration(4_000)).toBe("0:04");
-    expect(formatDuration(1_057)).toBe("0:01");
-    expect(formatDuration(59_999)).toBe("0:59");
-    // Exactly one minute is not sub-minute.
-    expect(formatDuration(60_000)).toBe("0:01");
+  it("keeps a sub-minute session in seconds", () => {
+    // The tracker writes ~4 s slices, so rows between 1 s and 59 s exist and
+    // are real playtime. They used to read as six-hundredths of an hour.
+    expect(formatDuration(4_000)).toBe("4s");
+    expect(formatDuration(1_057)).toBe("1s");
+    expect(formatDuration(59_999)).toBe("59s");
+    expect(formatDuration(60_000)).toBe("1m");
+  });
+
+  it("localises the units", () => {
+    expect(formatDuration(4_000, "id")).toBe("4 dtk");
+    expect(formatDuration(6 * 60_000, "id")).toBe("6 mnt");
+    expect(formatDuration(90 * 60_000, "id")).toBe("1 j 30 mnt");
+    expect(formatDuration(0, "id")).toBe("0 dtk");
   });
 
   it("treats negative and invalid input as zero", () => {
-    expect(formatDuration(-1)).toBe("0:00");
-    expect(formatDuration(Number.NaN)).toBe("0:00");
+    expect(formatDuration(-1)).toBe("0s");
+    expect(formatDuration(Number.NaN)).toBe("0s");
   });
 });
 

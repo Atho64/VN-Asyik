@@ -35,7 +35,7 @@ export function RoutesCard({
   /** Opens the "add a past session" sheet. */
   onAddTime?: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
 
   const [routes, setRoutes] = useState<RouteView[]>([]);
@@ -193,7 +193,7 @@ export function RoutesCard({
         .find((chapter) => chapter.id === timer?.chapterId)?.displayName ??
       timer?.chapterName ??
       "";
-    const elapsed = formatDuration(timer?.elapsedMs ?? 0);
+    const elapsed = formatDuration(timer?.elapsedMs ?? 0, locale);
     setBusy(true);
     try {
       setTimer(await api.trackingManualStop());
@@ -204,7 +204,7 @@ export function RoutesCard({
     } finally {
       setBusy(false);
     }
-  }, [pushToast, refresh, routes, t, timer]);
+  }, [locale, pushToast, refresh, routes, t, timer]);
 
   const totalChapters = routes.reduce((sum, route) => sum + route.chaptersTotal, 0);
 
@@ -356,7 +356,7 @@ export function RoutesCard({
                     </span>
                   )}
                   <span className="chapter-group__total">
-                    {route.playtimeMs > 0 ? formatDuration(route.playtimeMs) : null}
+                    {route.playtimeMs > 0 ? formatDuration(route.playtimeMs, locale) : null}
                     <span className="chapter-group__count">
                       {route.chaptersTotal > 0
                         ? t("chapters.routeCount", {
@@ -602,13 +602,13 @@ export function RoutesCard({
                               <span className="caption tnum">
                                 {chapter.playtimeMs > 0
                                   ? t("chapters.time", {
-                                      time: formatDuration(chapter.playtimeMs),
+                                      time: formatDuration(chapter.playtimeMs, locale),
                                     })
                                   : t("chapters.untimed")}
                               </span>
                               {isTimed ? (
                                 <Chip className="chip--accent">
-                                  {formatDuration(timer?.elapsedMs ?? 0)}
+                                  {formatDuration(timer?.elapsedMs ?? 0, locale)}
                                 </Chip>
                               ) : null}
                             </span>

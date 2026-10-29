@@ -90,7 +90,7 @@ function RevealButton({ art }: { art: Artwork }) {
  * the content setting and is revealed only on an explicit action.
  */
 export function CoverCard({ card, size = "grid" }: CoverCardProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { openMenu } = useContextMenu();
   const navigate = useNavigate();
   const { game, total_ms: totalMs, afk_ms: afkMs } = card;
@@ -189,14 +189,14 @@ export function CoverCard({ card, size = "grid" }: CoverCardProps) {
           </div>
           <div className="cover__meta tnum">
             {totalMs > 0
-              ? t("game.played", { time: formatDuration(totalMs) })
+              ? t("game.played", { time: formatDuration(totalMs, locale) })
               : t("game.notPlayed")}
             {/* Away time is always shown separately; it is never merged into the
                 playtime figure above. */}
             {afkMs > 0 ? (
               <span title={t("game.afkHint")}>
                 {" · "}
-                {t("game.afk", { time: formatDuration(afkMs) })}
+                {t("game.afk", { time: formatDuration(afkMs, locale) })}
               </span>
             ) : null}
           </div>
@@ -214,7 +214,7 @@ export function CoverCard({ card, size = "grid" }: CoverCardProps) {
 
 /** Dense row used by the list view. Same data, one line. */
 export function GameRow({ card }: { card: GameCard }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { game, total_ms: totalMs, afk_ms: afkMs } = card;
   const art = useLibraryArt(game);
   const { policy, imageUrl, fallback, publishAccent } = art;
@@ -259,8 +259,8 @@ export function GameRow({ card }: { card: GameCard }) {
         <div className="row__title">{game.title}</div>
         <div className="row__sub">
           {t(`status.${game.status}`)}
-          {totalMs > 0 ? ` · ${formatDuration(totalMs)}` : ""}
-          {afkMs > 0 ? ` · ${t("game.afk", { time: formatDuration(afkMs) })}` : ""}
+          {totalMs > 0 ? ` · ${formatDuration(totalMs, locale)}` : ""}
+          {afkMs > 0 ? ` · ${t("game.afk", { time: formatDuration(afkMs, locale) })}` : ""}
         </div>
         {concealed ? (
           <div className="row__reveal">

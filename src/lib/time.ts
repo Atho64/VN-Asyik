@@ -6,6 +6,8 @@
  * people compare across games is whole minutes.
  */
 
+import type { Locale } from "@/i18n";
+
 export const MS_PER_SECOND = 1_000;
 export const MS_PER_MINUTE = 60_000;
 export const MS_PER_HOUR = 3_600_000;
@@ -29,16 +31,38 @@ export function secondsOf(ms: number): number {
   return Number.isFinite(ms) && ms > 0 ? Math.floor(ms / MS_PER_SECOND) : 0;
 }
 
-/** `h:mm`, the compact form for dense rows and cards. */
-export function formatDuration(ms: number): string {
-  // A sub-minute slice gets `0:04`, not a bare `0:00`: the compact form keeps the
-  // `m:ss` shape zero-padded so the column stays aligned either way.
-  if (isSubMinute(ms)) return `0:${String(secondsOf(ms)).padStart(2, "0")}`;
-  if (!Number.isFinite(ms) || ms <= 0) return "0:00";
-  const totalMinutes = Math.floor(ms / MS_PER_MINUTE);
+/** Unit labels for the compact duration, per locale. */
+const COMPACT_UNITS: Record<
+  Locale,
+  { h: string; m: string; s: string; sep: string }
+> = {
+  en: { h: "h", m: "m", s: "s", sep: "" },
+  // Indonesian words, abbreviated the way readers write them. Single letters
+  // would be shorter but `d` already means day, so `dtk` cannot be misread, and
+  // the abbreviation takes a space because that is how it is written.
+  id: { h: "j", m: "mnt", s: "dtk", sep: " " },
+};
+
+/**
+ * Compact duration in units: `45s`, `12m`, `1h 20m` (`45 dtk`, `12 mnt`,
+ * `1 j 20 mnt` in Indonesian).
+ *
+ * The old `0:06` shape was ambiguous in the one place the difference matters:
+ * six seconds and six minutes printed identically, and whether a chapter had 6 s
+ * or 6 min behind it is exactly the question a playtime tracker must answer.
+ * Units say it outright, and they localise: Indonesian reads `dtk`, `mnt`, `j`.
+ */
+export function formatDuration(ms: number, locale: Locale = "en"): string {
+  const unit = COMPACT_UNITS[locale] ?? COMPACT_UNITS.en;
+  const totalSeconds = Number.isFinite(ms) ? Math.floor(Math.max(ms, 0) / MS_PER_SECOND) : 0;
+  if (totalSeconds <= 0) return `0${unit.sep}${unit.s}`;
+  if (totalSeconds < 60) return `${totalSeconds}${unit.sep}${unit.s}`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}${unit.sep}${unit.m}`;
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  return `${hours}:${minutes.toString().padStart(2, "0")}`;
+  if (minutes === 0) return `${hours}${unit.sep}${unit.h}`;
+  return `${hours}${unit.sep}${unit.h} ${minutes}${unit.sep}${unit.m}`;
 }
 
 /** `12h 40m`, the readable form for detail headers and stats. */

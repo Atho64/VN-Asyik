@@ -16,7 +16,7 @@ import type { AndroidSessionView, TrackingStatus } from "@/lib/ipc/types";
  * per-game session is active. Shows active and away time as separate figures.
  */
 export function NowPlayingBar() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
   const cards = useAppStore((state) => state.cards);
   const setCards = useAppStore((state) => state.setCards);
@@ -122,7 +122,7 @@ export function NowPlayingBar() {
             {title}
           </div>
           <div className="caption tnum">
-            {`${t("tracking.tracking")} · ${t("tracking.active")} ${formatDuration(activeMs)}`}
+            {`${t("tracking.tracking")} · ${t("tracking.active")} ${formatDuration(activeMs, locale)}`}
           </div>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
@@ -195,7 +195,7 @@ export function NowPlayingBar() {
                 status.active_ms,
               )}${
                 status.afk_ms > 0
-                  ? ` · ${t("tracking.away")} ${formatDuration(status.afk_ms)}`
+                  ? ` · ${t("tracking.away")} ${formatDuration(status.afk_ms, locale)}`
                   : ""
               }`}
         </div>

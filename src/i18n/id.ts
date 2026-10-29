@@ -416,7 +416,8 @@ export const id: Messages = {
   "game.rating": "Nilai {{rating}} dari 10",
   "game.notPlayed": "Belum dimulai",
   "game.played": "{{time}} dimainkan",
-  "game.progress": "{{percent}}% dari durasi tertulis",
+  "game.progress": "{{percent}}% dari {{length}}",
+  "game.progressHint": "{{percent}}% dari {{length}}, estimasi panjang dari VNDB",
   "game.afk": "{{time}} tidak di depan layar",
   "game.afkHint":
     "Waktu tanpa input, dicatat terpisah dan tidak dihitung sebagai waktu baca.",
@@ -540,6 +541,7 @@ export const id: Messages = {
   "detail.cancelled": "Dibatalkan",
   "detail.finished": "Selesai",
   "detail.status": "Status",
+  "detail.changeStatus": "Status baca",
   "detail.unreleased": "Belum rilis",
   "detail.unknownDate": "Tanggal tidak diketahui",
   "detail.viewOnVndb": "Buka di VNDB",

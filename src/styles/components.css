@@ -975,6 +975,69 @@ select optgroup {
   min-width: 8rem;
 }
 
+/* A phone cannot fit a chapter name, a rename chip, the detected name, the
+ * recorded time and the rename button on one line. The meta block refused to
+ * shrink while the name clipped to nothing, so the row grew wider than the
+ * card and the name ran off its right edge: the screenshot that started this
+ * fix showed "Diganti nama" and the detected name overlapping while the
+ * title spilled out. The row wraps now and the name gets its own line. */
+@media (max-width: 599px) {
+  .chapter-row {
+    flex-wrap: wrap;
+    padding-bottom: var(--space-1);
+  }
+
+  .chapter-row__pick {
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: var(--space-1) var(--space-2);
+    min-width: 0;
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .chapter-row__name {
+    flex: 1 1 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+
+  .chapter-row__meta {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .chapter-row__rename {
+    flex: 1 1 100%;
+  }
+
+  /* The row's own action keeps one column of its own instead of stacking under
+   * the row: the name and the meta wrap inside the pick, and the rename button
+   * sits beside them rather than adding a third line to every chapter. */
+  .chapter-row > .btn {
+    flex: 0 0 auto;
+    align-self: center;
+  }
+}
+
+/* The route card's header carries two actions. On a phone they stacked into a
+ * tall column and the title was centred between them, so "Tambah waktu" floated
+ * above "Rute". The header wraps as a unit: title first, actions underneath. */
+@media (max-width: 599px) {
+  .card__header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .card__header > .chapter-head__actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+}
+
 .chapter-form {
   display: grid;
   gap: var(--space-3);
@@ -1937,10 +2000,12 @@ select optgroup {
 }
 
 @media (max-width: 480px) {
-  /* On a phone the two-column grid squeezes the name to nothing. */
+  /* Keep the label and the name on one line. Stacking them was right when
+   * the pill spanned the whole head; the pill now sits in the text column
+   * beside the cover, where "JEPANG アネモイ" fits, and two stacked lines
+   * made the header taller for no gain. */
   .detail__alt {
-    grid-template-columns: 1fr;
-    gap: 0;
+    gap: var(--space-2);
   }
 }
 

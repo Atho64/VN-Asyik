@@ -470,6 +470,41 @@
  * real minimum and the action column is capped, so the two share the row instead
  * of one starving the other.
  */
+/* The status setters, separate from the facts above them. */
+.detail__status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.detail__status-label {
+  color: var(--text-faint);
+}
+
+.detail__status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (max-width: 899px) {
+  /* On a phone the chip row sat 8 px under Play and made the head read as one
+   * wall of controls. A rule and a little air give the primary action room.
+   */
+  .detail__status {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* Title, alternate names and facts as one block. Transparent by default so
+ * the desktop grid still places them directly; a phone turns it into a real
+ * column beside the cover. */
+.detail__intro {
+  display: contents;
+}
+
 @media (min-width: 900px) {
   .detail__head {
     display: grid;
@@ -589,6 +624,33 @@
   gap: var(--space-2);
 }
 
+/* The secondary action and the progress line, as one group.
+ *
+ * On a phone this group is a flex item beside the Play button, and as a bare
+ * block it shrank to the chat button's width: the percentage wrapped under it,
+ * spilled left past the card padding and clipped the progress ring. It gets its
+ * own line below 900 px, and never shrinks below its content. */
+.detail__actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.detail__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+@media (max-width: 899px) {
+  .detail__actions-row {
+    flex: 1 1 100%;
+  }
+}
+
 .detail__facts {
   display: flex;
   flex-wrap: wrap;
@@ -633,13 +695,57 @@
     grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   }
 
+  /* Two columns down to the narrowest phone: stacking put a 132 px cover
+   * alone on its own row and left half the screen empty above the title.
+   * The cover column is small enough that the text keeps a workable width,
+   * and the head starts at the top of the artwork instead of below it. */
   .detail__hero {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-3);
     padding-top: var(--space-4);
   }
 
+  /* The head becomes transparent so its parts can take grid cells: the intro
+   * sits beside the cover, and the actions and status setters span the full
+   * width instead of being squeezed into the narrow text column. */
+  .detail__hero > .detail__head {
+    display: contents;
+  }
+
+  .detail__intro {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .detail__hero > .detail__head > .detail__actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .detail__hero > .detail__head > .detail__status {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
   .detail__art {
-    width: 132px;
+    width: 100%;
+  }
+
+  /* The rating spends a chip's width on "dari 10", which a 0-10 field does
+   * not need spelled out on a phone; the value stays editable as before. */
+  .rating__of {
+    display: none;
+  }
+
+  /* Facts are one list: keep the wrapped rows tight so they read as a block
+   * rather than as two separate groups of chips. */
+  .detail__facts {
+    gap: 6px;
   }
 
   .settings__row:not(.settings__row--choice) {
@@ -804,10 +910,15 @@
 /* Label and control read as one group: on a wide card a control pinned to the
  * far edge floats in empty space. Choice rows below are the exception — the
  * "in use" marker stays at the end of the full-width button. */
+/* Label on the left, control on the right. Left-aligned, every toggle started
+ * wherever its own label happened to end, so a screen of rows read as a ragged
+ * column even though each row was internally tidy. `space-between` puts every
+ * control on the same edge, which is what makes them scannable.
+ */
 .settings__row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: var(--space-4);
   min-height: var(--touch-target);
 }
@@ -1002,6 +1113,7 @@
 @media (max-width: 599px) {
   .settings__row:not(.settings__row--choice) {
     align-items: flex-start;
+    justify-content: flex-start;
     flex-direction: column;
     gap: var(--space-2);
   }
