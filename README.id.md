@@ -23,9 +23,10 @@ bisa kamu lihat sendiri-sendiri. Sesi ditulis tiap 20 detik, jadi crash atau
 reboot paksa kehilangan hitungan detik, bukan sepanjang malam.
 
 **Rute dan ending.** Rute sepenuhnya milikmu: kamu yang memberi nama, dan ending
-menggantung padanya. Deteksi bab membaca keadaan mesin saat ada adapter yang
-sudah terverifikasi, dan jatuh ke atribusi tingkat gim saat tidak ada — jawaban
-yang jujur untuk gim yang build-nya belum pernah dianalisis siapa pun.
+menggantung padanya. Deteksi bab membaca judul jendela game saat engine-nya
+menuliskannya (lihat [Bab dari judul jendela](#bab-dari-judul-jendela)), dan
+jatuh ke atribusi tingkat gim saat tidak ada — jawaban yang jujur untuk gim yang
+tidak melaporkan apa pun.
 
 **Statistik.** Waktu baca per gim, per rute, dan per bulan, dihitung dari
 sesinya sendiri.
@@ -35,10 +36,102 @@ sedang kamu baca, bergiliran sesuai kolom yang kamu atur. Kover eksplisit
 diblur dulu sebelum dikirim ke mana pun, kalau kamu memang mengaktifkan host
 gambar.
 
+**Panduan rute.** Ambil panduan pilihan rute langsung dari indeks Seiya-Saiga
+(mencakup lebih dari 4.800 judul PC dan konsol). Langkah pilihan, rute, dan
+lencana ending disajikan rapi per tab, lengkap dengan pencarian judul Jepang
+yang dinormalisasi dan opsi terjemahan.
+
+**Rekomendasi bacaan.** Tanya apa yang layak dibaca berikutnya. Jawaban diramu
+dari preferensi seleramu dan model embedding lokal, atau pencarian web terbuka
+via Tavily yang selalu menyertakan tautan sumber halamannya, bukan tebakan
+tanpa rujukan.
+
+**Sinkronisasi dan cadangan.** Selaraskan pustaka dan sesi baca antarperangkat
+lewat folder bersama di jaringan lokal (LAN) tanpa bergantung pada server pihak
+ketiga. Pustaka lengkap juga bisa diekspor ke satu berkas `.vn-asyik-library`
+untuk dipindahkan atau dipulihkan kapan saja dengan penanganan konflik yang
+transparan.
+
+**Akses cepat.** Tekan `Ctrl+K` (atau `Cmd+K`) kapan saja untuk membuka palet
+perintah: cari judul di pustaka seketika, pindah layar, atau kendalikan pelacakan
+tanpa menyentuh mouse.
+
+**Latar belakang & System Tray.** Di desktop, jendela VN Asyik dapat disembunyikan
+ke taskbar notification area (system tray) lewat tombol samping, pintasan
+`Ctrl+Shift+H`, Command Palette, atau dengan menutup jendela ('X'). Pelacakan
+waktu bermain dan text hook LunaTranslator tetap berjalan di latar belakang tanpa
+mengganggu visual novel yang sedang dibaca, dan jendela dapat dipanggil kembali
+dengan sekali klik pada ikon tray.
+
 **Android.** Waktu baca diambil dari event foreground `UsageStats`, yang butuh
-izin Usage Access. Android tidak bisa melihat isi jendela aplikasi lain, jadi
-bab di sana diatur manual dan aplikasi mengatakannya terang-terangan alih-alih
+izin Usage Access — baik untuk gim langsung maupun yang dijalankan lewat
+emulator. Android tidak bisa melihat isi jendela aplikasi lain, jadi bab di
+sana diatur manual dan aplikasi mengatakannya terang-terangan alih-alih
 menebak.
+
+## Bab dari judul jendela
+
+Di desktop, bab diambil dari apa yang ditulis game di judul jendelanya sendiri:
+tanpa injeksi, tanpa membaca memori, dan tidak rusak saat game di-update. Siglus
+menaruh progresnya di sana, dan bentuk-bentuk ini sudah terverifikasi:
+
+```text
+Summer Pockets REFLECTION BLUE 静久 ８月７日   rute 静久, bab 8月7日
+anemoi Ｄａｙ １                              bab Day 1
+anemoi アネモイ Ｃｈａｐｔｅｒ ０１            rute アネモイ, bab Chapter 01
+```
+
+Karakter full-width dilipat dulu sebelum dicocokkan, jadi `Ｄａｙ １` dan
+`Day 1` dibaca sama. Judul tanpa penanda — layar judul, menu — tidak
+menghasilkan apa pun daripada mengarang bab; angka telanjang bukan bab; dan
+judul yang tidak menyebut nama game yang sedang dilacak diabaikan.
+
+### Pola khusus
+
+Kalau game-mu menulis bentuk yang tidak tercakup di atas, buka **Pengaturan →
+Umum → Membaca bab dari judul jendela**, ubah **Sumber** ke **Pola khusus**,
+lalu isi polanya. Sintaksnya Rust [`regex`](https://docs.rs/regex) 1.x — waktu
+linear, tanpa look-around, tanpa backreference, maksimal 512 byte (sekitar 170
+karakter Jepang) — dan dijalankan pada seluruh judul apa adanya, termasuk nama
+game.
+
+- **Dua grup:** yang pertama rute, yang kedua bab.
+- **Satu grup:** itu babnya.
+
+Minimal harus ada satu grup — pola tanpa grup ditolak saat disimpan. Grup yang
+tidak ikut dalam kecocokan dilewati, jadi grup rute opsional menyisakan babnya
+saja.
+
+Dua sifat dialek itu yang perlu diketahui untuk caption Jepang: `\d` cocok
+dengan angka Unicode apa pun (termasuk `１２` full-width), dan `(?i)` membuat
+pencocokan tidak peka huruf besar/kecil.
+
+Untuk judul seperti `Fate/stay night [Fate] Day 3`:
+
+```text
+^.*?\[(.+)\]\s*(.+)$    rute "Fate", bab "Day 3"
+^.*?\s(Day \d+)$        bab "Day 3"                 (satu grup)
+```
+
+Yang perlu diketahui sebelum menyimpan:
+
+- Pola tidak di-anchor: pola itu cocok di mana pun dalam judul kecuali kamu
+  menulis `^` dan `$` sendiri.
+- Kecocokan yang grupnya menangkap string kosong dianggap tidak cocok — nama bab
+  kosong lebih buruk daripada tidak ada bab.
+- Pola khusus **tidak** melipat karakter full-width: `Day` tidak pernah cocok
+  dengan `Ｄａｙ`, karena keduanya karakter berbeda. Untuk caption yang ditulis
+  begitu, tulis karakter tersebut di polanya, atau biarkan sumbernya di
+  **Siglus** yang melipatnya.
+- **Uji** menjalankan pola pada judul contoh, yang sudah terisi dari jendela
+  yang ada di depan saat panel dibuka — ubah isinya untuk mencoba judul lain.
+  Uji dulu sebelum menyimpan: pola yang tidak pernah cocok terlihat persis
+  seperti game yang tidak menulis bab, dan tidak ada bagian lain di app yang
+  bisa membedakannya.
+
+**Mati** berhenti membaca judul sama sekali. Pilihannya disimpan lokal di
+perangkat ini. Android tidak pernah membaca judul jendela — OS tidak
+mengizinkannya — jadi bab di sana diisi manual.
 
 ## Obrolan pendamping
 

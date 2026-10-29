@@ -22,9 +22,10 @@ separately so you can see both. Sessions are written every 20 seconds, so a
 crash or a forced reboot costs you seconds, not an evening.
 
 **Chapters and endings.** Routes are yours: you name them, and endings hang off
-them. Chapter detection reads engine state where a verified adapter exists and
-falls back to game-level attribution when it does not, which is the honest
-answer for a game whose build nobody has analyzed.
+them. Chapter detection reads the game's window caption where the engine writes
+one (see [Chapters from the window title](#chapters-from-the-window-title)) and
+falls back to game-level attribution where it does not, which is the honest
+answer for a game that reports nothing.
 
 **Stats.** Playtime by game, route and month, from the sessions themselves.
 
@@ -32,9 +33,98 @@ answer for a game whose build nobody has analyzed.
 rotating through whatever fields you configure. Explicit cover art is blurred
 before it is ever sent anywhere, if you opt into an image host at all.
 
+**Walkthroughs.** Pull route choices directly from the Seiya-Saiga index
+covering over 4,800 PC and console titles. Step-by-step choices, route branches,
+and ending badges are organized into clean tabs, backed by normalized Japanese
+title search and inline translation options.
+
+**Recommendations.** Ask what to read next. Suggestions are shaped by your
+taste profile and local vector embeddings, or through open-web searches via
+Tavily that always link back to cited sources rather than guessing without
+receipts.
+
+**Sync and backups.** Sync libraries and sessions across devices over a shared
+folder on your local network (LAN) without third-party servers. Or export your
+entire collection into a single `.vn-asyik-library` file with transparent
+conflict review on import.
+
+**Command palette.** Press `Ctrl+K` (or `Cmd+K`) anywhere for quick keyboard
+navigation: jump across screens, find any title in your library instantly, and
+trigger common actions.
+
+**Background operation & System Tray.** On desktop, hide VN Asyik into the taskbar
+notification area (system tray) using the sidebar button, `Ctrl+Shift+H`, the Command
+Palette, or simply by closing the window ('X'). Playtime tracking and LunaTranslator
+text hooking continue seamlessly in the background while you read your visual novel,
+and the window can be instantly restored by clicking the tray icon.
+
 **Android.** Playtime comes from `UsageStats` foreground events, which needs the
-Usage Access permission. Android cannot see inside another app's windows, so
-chapters there are set by hand and the app says so rather than guessing.
+Usage Access permission — whether running games natively or inside emulators.
+Android cannot see inside another app's windows, so chapters there are set by
+hand and the app says so rather than guessing.
+
+## Chapters from the window title
+
+On desktop, chapters come from what the game writes in its own window caption:
+no injection, no memory reading, nothing that a game update can break. Siglus
+puts its progress there, and these shapes are verified:
+
+```text
+Summer Pockets REFLECTION BLUE 静久 ８月７日   route 静久, chapter 8月7日
+anemoi Ｄａｙ １                              chapter Day 1
+anemoi アネモイ Ｃｈａｐｔｅｒ ０１            route アネモイ, chapter Chapter 01
+```
+
+Full-width characters are folded before matching, so `Ｄａｙ １` and `Day 1` read
+the same. A caption with no marker — the title screen, a menu — attributes
+nothing rather than inventing a chapter, a bare number is not a chapter, and a
+caption that does not name the game you track is ignored.
+
+### Custom pattern
+
+If your game writes a shape none of those cover, open **Settings → General →
+Reading chapters from window titles**, set **Source** to **Custom pattern**, and
+fill in a pattern. It is Rust [`regex`](https://docs.rs/regex) 1.x syntax —
+linear-time, no look-around, no backreferences, at most 512 bytes (about 170
+Japanese characters) — and it runs against the whole caption the way the game
+wrote it, game name included.
+
+- **Two groups:** the first is the route, the second is the chapter.
+- **One group:** it is the chapter.
+
+At least one group is required — a pattern without one is refused when you save.
+Groups that did not take part in the match are skipped, so an optional route
+group leaves just the chapter.
+
+Two properties of that dialect are worth knowing for Japanese captions: `\d`
+matches any Unicode digit (full-width `１２` included), and `(?i)` gives
+case-insensitive matching.
+
+For a caption like `Fate/stay night [Fate] Day 3`:
+
+```text
+^.*?\[(.+)\]\s*(.+)$    route "Fate", chapter "Day 3"
+^.*?\s(Day \d+)$        chapter "Day 3"            (one group)
+```
+
+What to know before saving:
+
+- The pattern is not anchored: it matches anywhere in the caption unless you
+  write `^` and `$` yourself.
+- A match whose group captured nothing is treated as no match — an empty chapter
+  name is worse than none.
+- Custom patterns do **not** fold full-width characters: `Day` never matches
+  `Ｄａｙ`, because they are different characters. For a caption written that way,
+  either put those characters in the pattern or leave the source on **Siglus**,
+  which folds them.
+- **Test** runs the pattern against the sample caption, prefilled from whichever
+  window was in front when the panel opened — edit it to try another. Test
+  before saving: a pattern that never matches looks exactly like a game that
+  writes no chapter, and nothing else in the app can tell them apart.
+
+**Off** stops reading captions. The choice is stored locally on this device.
+Android never reads captions — the OS does not allow it — so chapters there are
+set by hand.
 
 ## Companion chat
 
