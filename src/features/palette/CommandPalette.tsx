@@ -27,6 +27,7 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const setOpen = useAppStore((state) => state.setPaletteOpen);
   const cards = useAppStore((state) => state.cards);
+  const isAndroid = useAppStore((state) => state.platform?.os === "android");
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
@@ -100,24 +101,31 @@ export function CommandPalette() {
           close();
         },
       },
-      {
-        id: "sys-hide",
-        label: t("palette.hideWindow"),
-        hint: t("palette.hideWindowHint"),
-        run: () => {
-          void api.hideWindow();
-          close();
-        },
-      },
-      {
-        id: "sys-minimize",
-        label: t("palette.minimizeWindow"),
-        hint: t("palette.minimizeWindowHint"),
-        run: () => {
-          void api.minimizeWindow();
-          close();
-        },
-      },
+      // Window visibility is a desktop idea: Android has no taskbar or tray to
+      // come back from, and the commands behind these two answer "unsupported"
+      // there. Offering them would be a button that cannot do what it says.
+      ...(isAndroid
+        ? []
+        : [
+            {
+              id: "sys-hide",
+              label: t("palette.hideWindow"),
+              hint: t("palette.hideWindowHint"),
+              run: () => {
+                void api.hideWindow();
+                close();
+              },
+            },
+            {
+              id: "sys-minimize",
+              label: t("palette.minimizeWindow"),
+              hint: t("palette.minimizeWindowHint"),
+              run: () => {
+                void api.minimizeWindow();
+                close();
+              },
+            },
+          ]),
       {
         id: "sys-quit",
         label: t("palette.quitApp"),
@@ -153,7 +161,7 @@ export function CommandPalette() {
       }));
 
     return [...matchedActions, ...matchedGames];
-  }, [cards, close, navigate, query, t]);
+  }, [cards, close, isAndroid, navigate, query, t]);
 
   useEffect(() => {
     inputRef.current?.focus();

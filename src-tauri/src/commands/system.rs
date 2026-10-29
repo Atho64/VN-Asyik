@@ -100,6 +100,11 @@ pub fn hide_window(window: tauri::WebviewWindow) -> Result<(), crate::commands::
 }
 
 /// Minimize the main application window to the taskbar.
+///
+/// Desktop only: `minimize` does not exist on Android, where there is no taskbar
+/// to minimize to. The non-desktop stub answers with the reason instead of the
+/// crate failing to compile for that target.
+#[cfg(desktop)]
 #[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub fn minimize_window(window: tauri::WebviewWindow) -> Result<(), crate::commands::CommandError> {
@@ -111,11 +116,24 @@ pub fn minimize_window(window: tauri::WebviewWindow) -> Result<(), crate::comman
     })
 }
 
+/// Android has no taskbar, so minimizing is not a capability it can offer.
+#[cfg(not(desktop))]
+#[tauri::command]
+pub fn minimize_window() -> Result<(), crate::commands::CommandError> {
+    Err(crate::commands::CommandError::new(
+        "unsupported",
+        "minimizing a window is not supported on this platform",
+    ))
+}
+
 /// Show and focus the main application window.
 #[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub fn show_window(window: tauri::WebviewWindow) -> Result<(), crate::commands::CommandError> {
     let _ = window.show();
+    // A minimized window has to be restored before it can take focus, and
+    // `unminimize` is desktop only.
+    #[cfg(desktop)]
     let _ = window.unminimize();
     window.set_focus().map_err(|err| {
         crate::commands::CommandError::new("focus_failed", format!("could not focus window: {err}"))
@@ -138,6 +156,7 @@ pub fn toggle_window(window: tauri::WebviewWindow) -> Result<bool, crate::comman
         Ok(false)
     } else {
         let _ = window.show();
+        #[cfg(desktop)]
         let _ = window.unminimize();
         window.set_focus().map_err(|err| {
             crate::commands::CommandError::new(
