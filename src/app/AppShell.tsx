@@ -22,7 +22,8 @@ interface NavEntry {
     | "nav.stats"
     | "nav.recommend"
     | "vnchat.title"
-    | "nav.settings";
+    | "nav.settings"
+    | "nav.guide";
   icon: IconName;
 }
 
@@ -37,6 +38,7 @@ const navEntries: NavEntry[] = [
   { to: "/stats", labelKey: "nav.stats", icon: "stats" },
   { to: "/recommend", labelKey: "nav.recommend", icon: "spark" },
   { to: "/chat", labelKey: "vnchat.title", icon: "chat" },
+  { to: "/guide", labelKey: "nav.guide", icon: "guide" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ];
 

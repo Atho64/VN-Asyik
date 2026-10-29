@@ -41,6 +41,13 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: "guide",
+        lazy: async () => {
+          const { GuideScreen } = await import("@/features/guide/GuideScreen");
+          return { Component: GuideScreen };
+        },
+      },
+      {
         path: "settings",
         lazy: async () => {
           const { default: SettingsScreen } = await import(

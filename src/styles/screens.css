@@ -2125,3 +2125,83 @@
 .presence-mode .settings__control {
   flex-wrap: wrap;
 }
+
+/* ---- Guide ---------------------------------------------------------------
+ *
+ * Screenshots are real captures of this build, so they are wide (880 px) and
+ * dominate the row on desktop; the text sits beside them. On a phone the shot
+ * goes on top and the points read as a list, because side-by-side at 390 px
+ * leaves neither half usable. */
+.guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 78rem;
+}
+
+.guide__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.guide__section {
+  display: grid;
+  grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+}
+
+.guide__shot {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+}
+
+.guide__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.guide__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-m);
+  font-weight: 600;
+}
+
+.guide__text {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.guide__points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+}
+
+.guide__footer {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--text-s);
+}
+
+@media (max-width: 900px) {
+  .guide__section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

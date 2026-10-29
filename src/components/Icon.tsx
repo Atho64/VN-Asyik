@@ -31,6 +31,7 @@ export type IconName =
   | "stop"
   | "play"
   | "image"
+  | "guide"
   | "trash";
 
 interface IconProps {
@@ -64,6 +65,12 @@ const paths: Record<IconName, ReactNode> = {
   stats: (
     <>
       <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+    </>
+  ),
+  guide: (
+    <>
+      <path d="M12 6.8C10 5 7.4 4.4 4 4.7v13.4c3.4-.3 6 .4 8 2.2 2-1.8 4.6-2.5 8-2.2V4.7c-3.4-.3-6 .3-8 2.1z" />
+      <path d="M12 6.8v13.5" />
     </>
   ),
   settings: (
