@@ -1017,6 +1017,12 @@ export const id: Messages = {
   "palette.goVndb": "Sinkron VNDB (Pengaturan)",
   "palette.goTransfer": "Transfer data (Pengaturan)",
   "palette.addGame": "Tambah game",
+  "palette.hideWindow": "Sembunyikan ke Taskbar / Tray",
+  "palette.hideWindowHint": "Jalankan di latar belakang (Ctrl+Shift+H)",
+  "palette.minimizeWindow": "Minimalkan ke Taskbar",
+  "palette.minimizeWindowHint": "Kecilkan jendela ke taskbar",
+  "palette.quitApp": "Keluar dari VN Asyik",
+  "palette.quitAppHint": "Hentikan aplikasi sepenuhnya",
   "palette.close": "Tutup",
 
   "common.close": "Tutup",

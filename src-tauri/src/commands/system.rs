@@ -90,6 +90,72 @@ pub fn open_external(
         })
 }
 
+/// Hide the main application window (desktop only).
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+pub fn hide_window(window: tauri::WebviewWindow) -> Result<(), crate::commands::CommandError> {
+    window.hide().map_err(|err| {
+        crate::commands::CommandError::new("hide_failed", format!("could not hide window: {err}"))
+    })
+}
+
+/// Minimize the main application window to the taskbar.
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+pub fn minimize_window(window: tauri::WebviewWindow) -> Result<(), crate::commands::CommandError> {
+    window.minimize().map_err(|err| {
+        crate::commands::CommandError::new(
+            "minimize_failed",
+            format!("could not minimize window: {err}"),
+        )
+    })
+}
+
+/// Show and focus the main application window.
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+pub fn show_window(window: tauri::WebviewWindow) -> Result<(), crate::commands::CommandError> {
+    let _ = window.show();
+    let _ = window.unminimize();
+    window.set_focus().map_err(|err| {
+        crate::commands::CommandError::new("focus_failed", format!("could not focus window: {err}"))
+    })
+}
+
+/// Toggle window visibility between hidden and shown.
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+pub fn toggle_window(window: tauri::WebviewWindow) -> Result<bool, crate::commands::CommandError> {
+    let is_visible = window.is_visible().unwrap_or(true);
+    let is_minimized = window.is_minimized().unwrap_or(false);
+    if is_visible && !is_minimized {
+        window.hide().map_err(|err| {
+            crate::commands::CommandError::new(
+                "hide_failed",
+                format!("could not hide window: {err}"),
+            )
+        })?;
+        Ok(false)
+    } else {
+        let _ = window.show();
+        let _ = window.unminimize();
+        window.set_focus().map_err(|err| {
+            crate::commands::CommandError::new(
+                "focus_failed",
+                format!("could not focus window: {err}"),
+            )
+        })?;
+        Ok(true)
+    }
+}
+
+/// Cleanly exit the application.
+#[allow(clippy::needless_pass_by_value)]
+#[tauri::command]
+pub fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[cfg(test)]
 mod tests {
     use super::external_url_allowed;

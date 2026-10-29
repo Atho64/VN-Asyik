@@ -6,6 +6,7 @@ import { useI18n } from "@/app/useI18n";
 import { Icon } from "@/components/Icon";
 import { rankGames } from "@/lib/library";
 import { AddGameSheet } from "@/features/library/AddGameSheet";
+import { api } from "@/lib/ipc/client";
 
 interface PaletteAction {
   id: string;
@@ -96,6 +97,33 @@ export function CommandPalette() {
         label: t("palette.addGame"),
         run: () => {
           setAddOpen(true);
+          close();
+        },
+      },
+      {
+        id: "sys-hide",
+        label: t("palette.hideWindow"),
+        hint: t("palette.hideWindowHint"),
+        run: () => {
+          void api.hideWindow();
+          close();
+        },
+      },
+      {
+        id: "sys-minimize",
+        label: t("palette.minimizeWindow"),
+        hint: t("palette.minimizeWindowHint"),
+        run: () => {
+          void api.minimizeWindow();
+          close();
+        },
+      },
+      {
+        id: "sys-quit",
+        label: t("palette.quitApp"),
+        hint: t("palette.quitAppHint"),
+        run: () => {
+          void api.quitApp();
           close();
         },
       },

@@ -11,6 +11,7 @@ import { NowPlayingBar } from "@/features/tracking/NowPlayingBar";
 import { CommandPalette } from "@/features/palette/CommandPalette";
 import { Button } from "@/components/Button";
 import { Sheet } from "@/components/Sheet";
+import { api } from "@/lib/ipc/client";
 import appIcon from "@/assets/vn-asyik.svg";
 
 interface NavEntry {
@@ -64,6 +65,17 @@ export function AppShell() {
       focusArt(null);
     }
   }, [pathname]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "H" || e.key === "h")) {
+        e.preventDefault();
+        void api.toggleWindow();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <div className="app">

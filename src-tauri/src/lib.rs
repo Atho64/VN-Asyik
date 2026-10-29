@@ -13,6 +13,7 @@ pub mod secrets;
 pub mod state;
 pub mod sync;
 pub mod tracking;
+pub mod tray;
 pub mod vndb;
 pub mod walkthrough;
 
@@ -93,6 +94,11 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::data::share_backup_file,
         commands::system::platform_info,
         commands::system::open_external,
+        commands::system::hide_window,
+        commands::system::minimize_window,
+        commands::system::show_window,
+        commands::system::toggle_window,
+        commands::system::quit_app,
         commands::vndb::vndb_search,
         commands::vndb::vndb_preview,
         commands::vndb::vndb_import,
@@ -225,11 +231,20 @@ pub fn run() {
             app.manage(state);
             // Start the playtime loop once state exists.
             commands::tracking::spawn_loop(handle.clone());
+            // System tray icon for desktop background operation.
+            tray::setup_tray(&handle)?;
             // Chromium's own right-click menu has no place in a desktop app; the
             // UI draws its own. No-op on platforms without WebView2.
             #[cfg(windows)]
             platform::context_menu::disable_default_context_menu(&handle);
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            #[cfg(desktop)]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(handlers())
         .run(tauri::generate_context!())

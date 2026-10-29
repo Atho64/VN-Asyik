@@ -414,6 +414,11 @@ export interface Api {
   ): Promise<WalkthroughView>;
   walkthroughToggleItem(gameId: string, itemId: string): Promise<string[]>;
   walkthroughClearProgress(gameId: string): Promise<void>;
+  hideWindow(): Promise<void>;
+  minimizeWindow(): Promise<void>;
+  showWindow(): Promise<void>;
+  toggleWindow(): Promise<boolean>;
+  quitApp(): Promise<void>;
 }
 
 /** `void` commands still resolve to `null` over IPC. */
@@ -701,6 +706,11 @@ export const api: Api = {
   walkthroughClearProgress: (gameId: string) =>
     call("walkthrough_clear_progress", voidSchema, { gameId }),
   openExternal: (url) => call("open_external", voidSchema, { url }),
+  hideWindow: () => call("hide_window", voidSchema),
+  minimizeWindow: () => call("minimize_window", voidSchema),
+  showWindow: () => call("show_window", voidSchema),
+  toggleWindow: () => call("toggle_window", z.boolean()),
+  quitApp: () => call("quit_app", voidSchema),
 };
 
 /** True when running inside the Tauri shell. */

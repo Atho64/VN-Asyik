@@ -1016,6 +1016,12 @@ export const en = {
   "palette.goVndb": "VNDB Sync (Settings)",
   "palette.goTransfer": "Transfer data (Settings)",
   "palette.addGame": "Add a game",
+  "palette.hideWindow": "Hide to Taskbar / Tray",
+  "palette.hideWindowHint": "Keep running in background (Ctrl+Shift+H)",
+  "palette.minimizeWindow": "Minimize to Taskbar",
+  "palette.minimizeWindowHint": "Minimize window to taskbar",
+  "palette.quitApp": "Quit VN Asyik",
+  "palette.quitAppHint": "Exit application completely",
   "palette.close": "Close",
 
   "common.close": "Close",
