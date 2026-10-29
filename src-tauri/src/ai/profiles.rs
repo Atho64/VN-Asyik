@@ -483,7 +483,8 @@ mod tests {
         assert_eq!(profiles.active.as_deref(), Some(first.as_str()));
         profiles.remove(&first).expect("delete");
         assert_eq!(profiles.active, None);
-        assert!(profiles.profiles.is_empty());
+        // Compared against the default so a failure prints what was left.
+        assert_eq!(profiles.profiles, Profiles::default().profiles);
     }
 
     #[test]
@@ -494,7 +495,8 @@ mod tests {
         let mut edit = input("A", "https://a.example/v1", "m");
         edit.id = Some("nope".into());
         assert_eq!(code(profiles.upsert(&edit)), "unknown_profile");
-        assert!(profiles.profiles.is_empty());
+        // Compared against the default so a failure prints what was left.
+        assert_eq!(profiles.profiles, Profiles::default().profiles);
     }
 
     #[test]
