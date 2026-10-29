@@ -1,11 +1,14 @@
 /**
  * Application store.
  *
- * Kept deliberately small: a screen's data lives in the screen, while identity
- * (prefs, library index, toasts) lives here because several screens read it.
+ * Kept deliberately small: identity (prefs, library index, toasts) lives here
+ * because several screens read it, and so does state the user typed but that must
+ * outlive a navigation (the library's search/filter set, the VNDB detail cache).
+ * Everything else stays in the screen.
  */
 
 import { create } from "zustand";
+import { initialLibraryBrowse, type LibraryBrowse } from "@/lib/library";
 import type { DetailPayload, GameCard, PlatformInfo, Prefs } from "@/lib/ipc/types";
 
 export type ToastKind = "info" | "success" | "error";
@@ -29,6 +32,15 @@ interface AppState {
   cards: GameCard[];
   libraryLoaded: boolean;
   libraryError: string | null;
+  /**
+   * Search text, status chips, rated-only, view and sort for the library.
+   *
+   * In the store because the screen unmounts on navigation: a search typed in
+   * the library was still applied to the cards, but the query that produced it
+   * lived in the component and died on the way to another menu, so coming back
+   * showed the whole collection again.
+   */
+  libraryBrowse: LibraryBrowse;
   toasts: Toast[];
   paletteOpen: boolean;
   /**
@@ -56,6 +68,8 @@ interface AppState {
   setCards: (cards: GameCard[]) => void;
   setLibraryLoaded: (loaded: boolean) => void;
   setLibraryError: (message: string | null) => void;
+  /** Merge a change into the library browsing state. */
+  updateLibraryBrowse: (patch: Partial<LibraryBrowse>) => void;
   upsertCard: (card: GameCard) => void;
   removeCard: (id: string) => void;
   pushToast: (kind: ToastKind, message: string) => void;
@@ -82,6 +96,7 @@ export const useAppStore = create<AppState>((set) => ({
   cards: [],
   libraryLoaded: false,
   libraryError: null,
+  libraryBrowse: initialLibraryBrowse,
   toasts: [],
   paletteOpen: false,
   refreshingVndb: [],
@@ -92,6 +107,8 @@ export const useAppStore = create<AppState>((set) => ({
   setCards: (cards) => set({ cards, libraryLoaded: true, libraryError: null }),
   setLibraryLoaded: (libraryLoaded) => set({ libraryLoaded }),
   setLibraryError: (libraryError) => set({ libraryError, libraryLoaded: true }),
+  updateLibraryBrowse: (patch) =>
+    set((state) => ({ libraryBrowse: { ...state.libraryBrowse, ...patch } })),
   upsertCard: (card) =>
     set((state) => {
       const index = state.cards.findIndex((entry) => entry.game.meta.id === card.game.meta.id);

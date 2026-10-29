@@ -15,10 +15,13 @@ import {
 } from "@tanstack/react-virtual";
 
 import { CoverCard, GameRow } from "@/components/CoverCard";
+import type { LibraryView } from "@/lib/library";
 import type { GameCard } from "@/lib/ipc/types";
 import { useVirtualCollection } from "./useVirtualCollection";
 
-export type LibraryView = "grid" | "list" | "shelf";
+// The view belongs to the library's browsing state (`LibraryBrowse`), which the
+// store owns; re-exported so callers keep importing it from the component.
+export type { LibraryView };
 
 interface Layout {
   columns: number;

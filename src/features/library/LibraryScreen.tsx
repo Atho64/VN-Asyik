@@ -10,7 +10,7 @@ import { api } from "@/lib/ipc/client";
 import { filterCards, sortCards, statusOrder, type SortKey } from "@/lib/library";
 import type { GameStatus } from "@/lib/ipc/types";
 import { AddGameSheet } from "./AddGameSheet";
-import { VirtualLibrary, type LibraryView } from "./VirtualLibrary";
+import { VirtualLibrary } from "./VirtualLibrary";
 
 /**
  * The library.
@@ -28,11 +28,13 @@ export function LibraryScreen() {
   const setCards = useAppStore((state) => state.setCards);
   const setLibraryError = useAppStore((state) => state.setLibraryError);
 
-  const [query, setQuery] = useState("");
-  const [statuses, setStatuses] = useState<GameStatus[]>([]);
-  const [ratedOnly, setRatedOnly] = useState(false);
-  const [view, setView] = useState<LibraryView>("grid");
-  const [sort, setSort] = useState<SortKey>("recent");
+  // The browsing state (search, chips, view, sort) lives in the store: the
+  // router unmounts this screen on navigation, and the query used to reset while
+  // the results it had produced did not come back with it.
+  const { query, statuses, ratedOnly, view, sort } = useAppStore(
+    (state) => state.libraryBrowse,
+  );
+  const updateLibraryBrowse = useAppStore((state) => state.updateLibraryBrowse);
   const [addOpen, setAddOpen] = useState(false);
   // The collection remounts on a filter change (it resets scroll and remeasures).
   // Its key was an object dumped to JSON, which is a different string for every
@@ -51,18 +53,15 @@ export function LibraryScreen() {
   );
 
   const toggleStatus = (status: GameStatus): void => {
-    setStatuses((current) =>
-      current.includes(status)
-        ? current.filter((entry) => entry !== status)
-        : [...current, status],
-    );
+    updateLibraryBrowse({
+      statuses: statuses.includes(status)
+        ? statuses.filter((entry) => entry !== status)
+        : [...statuses, status],
+    });
   };
 
-  const clearFilters = (): void => {
-    setQuery("");
-    setStatuses([]);
-    setRatedOnly(false);
-  };
+  const clearFilters = (): void =>
+    updateLibraryBrowse({ query: "", statuses: [], ratedOnly: false });
 
   const reload = async (): Promise<void> => {
     try {
@@ -132,7 +131,7 @@ export function LibraryScreen() {
             className="input"
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => updateLibraryBrowse({ query: event.target.value })}
             placeholder={t("library.search")}
             aria-label={t("library.searchLabel")}
           />
@@ -152,7 +151,7 @@ export function LibraryScreen() {
               role="tab"
               aria-selected={view === mode}
               className="tabs__tab"
-              onClick={() => setView(mode)}
+              onClick={() => updateLibraryBrowse({ view: mode })}
             >
               <Icon name={icon} size={14} />
               {t(labelKey)}
@@ -165,7 +164,9 @@ export function LibraryScreen() {
           <select
             className="select"
             value={sort}
-            onChange={(event) => setSort(event.target.value as SortKey)}
+            onChange={(event) =>
+              updateLibraryBrowse({ sort: event.target.value as SortKey })
+            }
             aria-label={t("library.sort")}
           >
             <option value="recent">{t("library.sortRecent")}</option>
@@ -192,7 +193,10 @@ export function LibraryScreen() {
             {t(`status.${status}`)}
           </Chip>
         ))}
-        <Chip selected={ratedOnly} onClick={() => setRatedOnly((value) => !value)}>
+        <Chip
+          selected={ratedOnly}
+          onClick={() => updateLibraryBrowse({ ratedOnly: !ratedOnly })}
+        >
           {t("library.ratedOnly")}
         </Chip>
         <span className="library__count tnum">

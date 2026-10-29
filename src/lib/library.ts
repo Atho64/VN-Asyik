@@ -7,6 +7,9 @@ import type { Game, GameStatus } from "@/lib/ipc/types";
 
 export type SortKey = "recent" | "title" | "rating" | "playtime" | "started";
 
+/** Which of the three library surfaces is showing. */
+export type LibraryView = "grid" | "list" | "shelf";
+
 export interface LibraryFilter {
   query: string;
   statuses: GameStatus[];
@@ -17,6 +20,29 @@ export const emptyFilter: LibraryFilter = {
   query: "",
   statuses: [],
   ratedOnly: false,
+};
+
+/**
+ * Everything that decides what the library shows: the search text, the status
+ * chips, the rated-only toggle, the view and the sort.
+ *
+ * It lives in the app store, not in `LibraryScreen`, because the router unmounts
+ * the screen on every navigation. Search "fate", open a game or another menu,
+ * come back, and the query (with the results it produced) was gone — the state
+ * died with the component, exactly as the VNDB detail cache once did.
+ */
+export interface LibraryBrowse extends LibraryFilter {
+  view: LibraryView;
+  sort: SortKey;
+}
+
+/** The library as it opens: no filter, grid, newest first. */
+export const initialLibraryBrowse: LibraryBrowse = {
+  query: "",
+  statuses: [],
+  ratedOnly: false,
+  view: "grid",
+  sort: "recent",
 };
 
 export const statusOrder: GameStatus[] = [

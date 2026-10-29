@@ -6,6 +6,7 @@ import { VirtualLibrary, type LibraryView } from "./VirtualLibrary";
 import { LibraryScreen } from "./LibraryScreen";
 import { useAppStore } from "@/app/store";
 import { createTranslator } from "@/i18n";
+import { initialLibraryBrowse } from "@/lib/library";
 import type { GameCard } from "@/lib/ipc/types";
 
 vi.mock("@/components/CoverCard", () => ({
@@ -76,6 +77,10 @@ beforeEach(() => {
   rowHeight = 300;
   callbacks.clear();
   rowDimensions.clear();
+  // The library's search/filter set lives in the store (it must outlive a menu
+  // change), so a test that types into the search box would otherwise leave the
+  // next one rendering a filtered library.
+  useAppStore.setState({ libraryBrowse: initialLibraryBrowse });
   vi.stubGlobal("ResizeObserver", TestResizeObserver);
   const originalStyle = window.getComputedStyle;
   vi.spyOn(window, "getComputedStyle").mockImplementation((element) => {
