@@ -10,7 +10,7 @@ export const chatOptionsSchema = z.object({
   allowOnline: z.boolean(),
   language: z.enum(["en", "id"]),
   /** How the companion talks; the same facts and spoiler policy for every one. */
-  persona: z.enum(["companion", "analyst", "playful", "concise"]),
+  persona: z.enum(["companion", "kawaii", "analyst", "playful", "concise"]),
 });
 export type ChatOptions = z.infer<typeof chatOptionsSchema>;
 export const chatThreadSchema = z.object({

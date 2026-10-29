@@ -519,7 +519,7 @@ impl VndbClient {
 
     /// POST a query body and decode the response, retrying throttling and
     /// transient server errors with exponential backoff.
-    async fn post_json<T, B>(&self, path: &str, body: &B) -> Result<T, VndbError>
+    pub(crate) async fn post_json<T, B>(&self, path: &str, body: &B) -> Result<T, VndbError>
     where
         T: DeserializeOwned,
         B: Serialize + ?Sized,

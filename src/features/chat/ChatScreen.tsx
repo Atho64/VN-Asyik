@@ -12,12 +12,14 @@ import {
   type ChatOptions,
   type ChatThread,
 } from "@/lib/ipc/chat";
+import { hookApi, type HookStatusView } from "@/lib/ipc/hook";
 import type { ChatSettings } from "@/lib/ipc/types";
 import { ChatMessageView } from "./ChatMessageView";
 
 /** The companion's personalities, mirroring `vn_core::chat::Persona::ALL`. */
 const CHAT_PERSONAS = [
   { id: "companion", label: "vnchat.persona.companion" },
+  { id: "kawaii", label: "vnchat.persona.kawaii" },
   { id: "analyst", label: "vnchat.persona.analyst" },
   { id: "playful", label: "vnchat.persona.playful" },
   { id: "concise", label: "vnchat.persona.concise" },
@@ -65,6 +67,7 @@ export function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [live, setLive] = useState<ChatMessage | null>(null);
   const [settings, setSettings] = useState<ChatSettings | null>(null);
+  const [hookStatus, setHookStatus] = useState<HookStatusView | null>(null);
   const [options, setOptions] = useState<ChatOptions>({
     gameId: params.get("game"),
     spoilers: "none",
@@ -108,6 +111,17 @@ export function ChatScreen() {
 
   useEffect(() => {
     mounted.current = true;
+    const fetchHook = () => {
+      hookApi
+        .status()
+        .then((status) => {
+          if (mounted.current) setHookStatus(status);
+        })
+        .catch(() => {});
+    };
+    fetchHook();
+    const hookTimer = setInterval(fetchHook, 3000);
+
     void Promise.all([chatApi.list(), api.aiChatSettings()])
       .then(([list, provider]) => {
         if (mounted.current) {
@@ -124,6 +138,7 @@ export function ChatScreen() {
       });
     return () => {
       mounted.current = false;
+      clearInterval(hookTimer);
       if (requestId.current) void chatApi.cancel(requestId.current).catch(() => {});
     };
   }, []);
@@ -503,6 +518,32 @@ export function ChatScreen() {
                   ? "vnchat.onlineHint"
                   : "vnchat.onlineRestricted",
               )}
+            </p>
+          </div>
+
+          <div className="vnchat__group vnchat__group--rules">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <span className="vnchat__label">{t("vnchat.hookStatus")}</span>
+              <span
+                style={{
+                  fontSize: "0.725rem",
+                  padding: "2px 8px",
+                  borderRadius: "999px",
+                  fontWeight: 600,
+                  background: hookStatus?.connected ? "rgba(34, 197, 94, 0.15)" : "rgba(148, 163, 184, 0.15)",
+                  color: hookStatus?.connected ? "#22c55e" : "var(--color-text-subtle)",
+                  border: hookStatus?.connected ? "1px solid rgba(34, 197, 94, 0.3)" : "1px solid var(--color-border)",
+                }}
+              >
+                {hookStatus?.connected
+                  ? t("vnchat.hookConnected", { count: hookStatus.lineCount })
+                  : t("vnchat.hookDisconnected")}
+              </span>
+            </div>
+            <p className="vnchat__hint">
+              {hookStatus?.connected
+                ? t("vnchat.hookHintActive", { count: hookStatus.lines.length })
+                : t("vnchat.hookHintInactive")}
             </p>
           </div>
 

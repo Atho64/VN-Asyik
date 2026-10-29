@@ -1,5 +1,6 @@
 //! Allowlisted read-only tools. Never accepts SQL, paths, URLs or credentials from a model.
 use super::Source;
+use crate::vndb::cache;
 use crate::vndb::dto::VnQueryResult;
 use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool};
@@ -140,7 +141,11 @@ async fn search_library(ctx: &ToolContext<'_>, args: &ToolArgs) -> Result<Value,
     if fuzzy {
         let _ = write!(
             where_clause,
-            " AND (INSTR(LOWER(g.title),?{next})>0              OR INSTR(LOWER(COALESCE(g.title_original,'')),?{next})>0              OR INSTR(LOWER(COALESCE(g.vndb_id,'')),?{next})>0              OR INSTR(LOWER(COALESCE(d.tags_json,'')),?{next})>0)"
+            " AND (INSTR(LOWER(g.title),?{next})>0 \
+             OR INSTR(LOWER(COALESCE(g.title_original,'')),?{next})>0 \
+             OR INSTR(LOWER(COALESCE(g.vndb_id,'')),?{next})>0 \
+             OR INSTR(LOWER(COALESCE(d.tags_json,'')),?{next})>0 \
+             OR INSTR(LOWER(COALESCE(d.characters_json,'')),?{next})>0)"
         );
     }
     let order = match args.sort.as_deref() {
@@ -210,7 +215,7 @@ async fn game(ctx: &ToolContext<'_>, id: &str) -> Result<Value, String> {
         .find(|row| row.get::<String, _>("id") == id)
         .ok_or("game_missing")?;
     let mut output = card(row, ctx.options.spoilers == Spoilers::All);
-    let detail = sqlx::query("SELECT g.notes,d.description,d.fetched_at FROM games g LEFT JOIN vndb_details d ON d.vn_id=g.vndb_id WHERE g.id=? AND g.deleted=0")
+    let detail = sqlx::query("SELECT g.notes,d.description,d.fetched_at,d.characters_json FROM games g LEFT JOIN vndb_details d ON d.vn_id=g.vndb_id WHERE g.id=? AND g.deleted=0")
         .bind(id).fetch_one(ctx.pool).await.map_err(|_| "db_error")?;
     let desc: Option<String> = detail.get("description");
     output["synopsis"] = json!(desc.map(|text| if ctx.options.spoilers == Spoilers::All {
@@ -221,6 +226,36 @@ async fn game(ctx: &ToolContext<'_>, id: &str) -> Result<Value, String> {
     output["metadata_fetched_at"] = json!(detail.get::<Option<i64>, _>("fetched_at"));
     output["story_coverage"] =
         json!("Cached VNDB synopsis only; not a full script or verified route summary.");
+
+    let characters_raw: Option<String> = detail.get("characters_json");
+    if let Some(raw) = characters_raw
+        && let Ok(cast) = serde_json::from_str::<Vec<crate::vndb::dto::Character>>(&raw)
+    {
+        let all = ctx.options.spoilers == Spoilers::All;
+        let character_cards: Vec<Value> = cast
+            .into_iter()
+            .take(60)
+            .map(|c| {
+                let safe_traits: Vec<String> = c
+                    .traits
+                    .into_iter()
+                    .filter(|t| all || t.spoiler.unwrap_or(0) == 0)
+                    .filter_map(|t| t.name)
+                    .take(15)
+                    .collect();
+                json!({
+                    "id": c.id,
+                    "name": c.name,
+                    "original": c.original,
+                    "role": c.role,
+                    "voiced_by": c.voiced_by,
+                    "traits": safe_traits,
+                })
+            })
+            .collect();
+        output["characters"] = json!(character_cards);
+    }
+
     if ctx.options.spoilers == Spoilers::All {
         output["user_notes"] = json!(
             detail
@@ -297,6 +332,7 @@ async fn taste(ctx: &ToolContext<'_>) -> Result<Value, String> {
 /// displayed, so they are the freshest evidence the companion has — but they
 /// carry no game attribution and no history beyond the ring buffer.
 async fn recent_text(ctx: &ToolContext<'_>) -> Result<Value, String> {
+    let status = ctx.hook.status().await;
     let lines = ctx.hook.lines().await;
     let recent: Vec<_> = lines
         .iter()
@@ -305,9 +341,12 @@ async fn recent_text(ctx: &ToolContext<'_>) -> Result<Value, String> {
         .rev()
         .map(|line| json!({"text": line.text, "thread": line.thread, "at_ms": line.at}))
         .collect();
-    Ok(
-        json!({"lines":recent,"coverage":"Live text-hook capture, oldest first, at most the last 30 lines. Present only while a hook is attached to a running game; not attributed to a specific library game, and lines may repeat engine chrome. This is what the player has just read."}),
-    )
+    Ok(json!({
+        "connected": status.connected,
+        "total_captured_lines": status.line_count,
+        "lines": recent,
+        "coverage": "Live text-hook capture, oldest first, at most the last 30 lines. Present while a hook is attached to a running game. This is what the player has just read on screen, so it is fresh evidence and safe to discuss at any spoiler level."
+    }))
 }
 
 /// The compacted digest of the scoped game's imported script. The digest covers
@@ -342,12 +381,31 @@ async fn script_digest(ctx: &ToolContext<'_>) -> Result<Value, String> {
     }
 }
 
+fn extract_vndb_ref(query: &str) -> Option<(char, String)> {
+    let lower = query.trim().to_lowercase();
+    for token in lower.split(|c: char| c.is_whitespace() || c == '/' || c == '?') {
+        let token = token.trim();
+        if (token.starts_with('c') || token.starts_with('v'))
+            && token.len() > 1
+            && token[1..].chars().all(|ch| ch.is_ascii_digit())
+        {
+            return Some((token.chars().next().unwrap(), token.to_owned()));
+        }
+    }
+    None
+}
+
 async fn vndb(
     ctx: &ToolContext<'_>,
     query: &str,
     sources: &mut Vec<Source>,
 ) -> Result<Value, String> {
-    use crate::vndb::cache;
+    if let Some((kind, id)) = extract_vndb_ref(query)
+        && kind == 'c'
+    {
+        return vndb_character(ctx, &id, sources).await;
+    }
+
     let key = format!("chat:vn:{}", query.trim().to_lowercase());
     let now = vn_core::clock::Timestamp::now().map_err(|_| "clock_error")?;
     let cached = cache::get_fresh(ctx.pool, &key, now)
@@ -382,6 +440,139 @@ async fn vndb(
     )
 }
 
+async fn vndb_character(
+    ctx: &ToolContext<'_>,
+    char_id: &str,
+    sources: &mut Vec<Source>,
+) -> Result<Value, String> {
+    let key = format!("chat:char:{char_id}");
+    let now = vn_core::clock::Timestamp::now().map_err(|_| "clock_error")?;
+    let cached = cache::get_fresh(ctx.pool, &key, now)
+        .await
+        .map_err(|_| "db_error")?;
+
+    let (raw_json, stale): (String, bool) = if let Some(raw) = cached {
+        (raw, false)
+    } else if let Some(live_raw) = vndb_character_live(ctx, &key, char_id, now).await {
+        (live_raw, false)
+    } else {
+        let raw = cache::get_any(ctx.pool, &key)
+            .await
+            .map_err(|_| "db_error")?
+            .ok_or("vndb_unavailable")?;
+        (raw, true)
+    };
+
+    let result: Value = serde_json::from_str(&raw_json).map_err(|_| "invalid_cache")?;
+    let characters = result.get("results").and_then(|r| r.as_array());
+    let Some(first) = characters.and_then(|arr| arr.first()) else {
+        return Ok(json!({
+            "character": Value::Null,
+            "message": format!("Character with ID {char_id} was not found on VNDB.")
+        }));
+    };
+
+    let name = first
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(char_id);
+    let source = add_source(
+        sources,
+        name,
+        Some(format!("https://vndb.org/{char_id}")),
+        None,
+    );
+
+    let all_spoilers = ctx.options.spoilers == Spoilers::All;
+    let empty_vec = vec![];
+    let vns = first
+        .get("vns")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty_vec);
+    let mut vns_out = Vec::new();
+    let mut spoiler_count = 0;
+    for vn in vns {
+        let spoiler_lvl = vn.get("spoiler").and_then(Value::as_i64).unwrap_or(0);
+        let vn_id = vn.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let title = vn.get("title").and_then(|v| v.as_str()).unwrap_or("");
+        let role = vn.get("role").and_then(|v| v.as_str()).unwrap_or("");
+
+        if spoiler_lvl > 0 && !all_spoilers {
+            spoiler_count += 1;
+        } else {
+            vns_out.push(json!({
+                "id": vn_id,
+                "title": title,
+                "role": role,
+                "spoiler_level": spoiler_lvl
+            }));
+        }
+    }
+
+    let traits = first
+        .get("traits")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty_vec);
+    let mut traits_out = Vec::new();
+    for t in traits {
+        let spoiler_lvl = t.get("spoiler").and_then(Value::as_i64).unwrap_or(0);
+        let t_name = t.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        if spoiler_lvl == 0 || all_spoilers {
+            traits_out.push(t_name);
+        }
+    }
+
+    let desc = first
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let description = if all_spoilers {
+        desc.chars().take(4000).collect::<String>()
+    } else {
+        public_text(desc)
+    };
+
+    Ok(json!({
+        "source": source,
+        "type": "character",
+        "id": char_id,
+        "name": first.get("name"),
+        "original": first.get("original"),
+        "aliases": first.get("aliases"),
+        "birthday": first.get("birthday"),
+        "height": first.get("height"),
+        "weight": first.get("weight"),
+        "blood_type": first.get("blood_type"),
+        "description": description,
+        "appearances": vns_out,
+        "hidden_spoiler_appearances_count": if !all_spoilers && spoiler_count > 0 { json!(spoiler_count) } else { Value::Null },
+        "traits": traits_out.into_iter().take(25).collect::<Vec<_>>(),
+        "stale_cache": stale,
+        "coverage": "Official VNDB character information"
+    }))
+}
+
+async fn vndb_character_live(
+    ctx: &ToolContext<'_>,
+    key: &str,
+    char_id: &str,
+    now: vn_core::clock::Timestamp,
+) -> Option<String> {
+    use crate::vndb::{cache, dto};
+    let query = dto::CharacterQuery {
+        filters: serde_json::json!(["id", "=", char_id]),
+        fields: "id,name,original,aliases,description,blood_type,height,weight,birthday,sex,gender,vns.id,vns.title,vns.role,vns.spoiler,traits.id,traits.name,traits.spoiler".to_owned(),
+        results: 1,
+        page: 1,
+    };
+    let result: Value = ctx.vndb.post_json("character", &query).await.ok()?;
+    let raw = serde_json::to_string(&result).ok()?;
+    cache::put(ctx.pool, key, &raw, cache::SEARCH_TTL_MS, now)
+        .await
+        .ok()?;
+    Some(raw)
+}
+
 /// Live VNDB lookup that also refreshes the cache. Any failure is `None` so the
 /// caller can fall back to expired cache.
 async fn vndb_live(
@@ -391,16 +582,25 @@ async fn vndb_live(
     now: vn_core::clock::Timestamp,
 ) -> Option<VnQueryResult> {
     use crate::vndb::{cache, dto};
-    let result = ctx
-        .vndb
-        .search_vns(&dto::VnQuery::by_title(
+    let q = if let Some(('v', vn_id)) = extract_vndb_ref(query) {
+        dto::VnQuery {
+            filters: serde_json::json!(["id", "=", vn_id]),
+            fields: "id,title,alttitle,description,released,tags.name,tags.rating,tags.spoiler"
+                .to_owned(),
+            results: 1,
+            page: 1,
+            sort: "id".to_owned(),
+            reverse: false,
+        }
+    } else {
+        dto::VnQuery::by_title(
             query,
             "id,title,alttitle,description,released,tags.name,tags.rating,tags.spoiler",
             1,
             5,
-        ))
-        .await
-        .ok()?;
+        )
+    };
+    let result = ctx.vndb.search_vns(&q).await.ok()?;
     let raw = serde_json::to_string(&result).ok()?;
     cache::put(ctx.pool, key, &raw, cache::SEARCH_TTL_MS, now)
         .await
@@ -439,4 +639,24 @@ async fn web(
     Ok(
         json!({"results":hits,"credits":result.credits,"coverage":"Public search excerpts; verify claims and separate facts from interpretation."}),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_character_and_vn_ids() {
+        assert_eq!(
+            extract_vndb_ref("https://vndb.org/c93625"),
+            Some(('c', "c93625".into()))
+        );
+        assert_eq!(extract_vndb_ref("c93625"), Some(('c', "c93625".into())));
+        assert_eq!(
+            extract_vndb_ref("https://vndb.org/v24351/"),
+            Some(('v', "v24351".into()))
+        );
+        assert_eq!(extract_vndb_ref("v24351"), Some(('v', "v24351".into())));
+        assert_eq!(extract_vndb_ref("CLANNAD"), None);
+    }
 }

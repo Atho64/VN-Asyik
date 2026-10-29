@@ -95,11 +95,18 @@ impl HookHost {
     /// Oversized and empty lines are dropped rather than stored, so a misbehaving
     /// source cannot grow the ring past `MAX_LINE_BYTES` per entry.
     pub async fn push_external(&self, text: &str) {
-        if text.is_empty() || text.len() > MAX_LINE_BYTES {
+        let trimmed = text.trim();
+        if trimmed.is_empty() || text.len() > MAX_LINE_BYTES {
             return;
         }
+        {
+            let inner = self.inner.lock().await;
+            if inner.lines.back().is_some_and(|last| last.text == trimmed) {
+                return;
+            }
+        }
         self.push_line(CapturedLine {
-            text: text.to_owned(),
+            text: trimmed.to_owned(),
             thread: 0,
             at: now_ms(),
         })

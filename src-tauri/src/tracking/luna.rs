@@ -217,6 +217,7 @@ impl LunaMonitor {
                 continue;
             };
             if !settings.enabled {
+                self.host.set_connected(false).await;
                 self.set_status(|s| {
                     s.connected = false;
                     s.url = None;
@@ -241,23 +242,28 @@ impl LunaMonitor {
                     }
                     // A settings change is not a failure; retry immediately
                     // with the new configuration.
-                    backoff = std::time::Duration::from_secs(1);
+                    backoff = std::time::Duration::from_millis(500);
                     continue;
                 }
                 result = self.listen_once(&url) => {
                     self.set_status(|s| s.connected = false).await;
+                    self.host.set_connected(false).await;
                     match result {
                         Err(detail) => {
                             self.set_status(move |s| s.last_error = Some(detail)).await;
                         }
                         // A session that ended cleanly ran for a while; the
                         // next attempt should not inherit its failures' wait.
-                        Ok(()) => backoff = std::time::Duration::from_secs(1),
+                        Ok(()) => backoff = std::time::Duration::from_millis(500),
                     }
                 }
             }
             tokio::time::sleep(backoff).await;
-            backoff = std::cmp::min(backoff * 2, std::time::Duration::from_secs(30));
+            // Local loopback service: cap backoff to 2s max so hook switches or transient reconnects resume quickly.
+            backoff = std::cmp::min(
+                backoff + std::time::Duration::from_millis(500),
+                std::time::Duration::from_secs(2),
+            );
         }
     }
 
@@ -272,6 +278,7 @@ impl LunaMonitor {
             s.last_error = None;
         })
         .await;
+        self.host.set_connected(true).await;
         while let Some(message) = socket.next().await {
             match message {
                 Ok(tokio_tungstenite::tungstenite::Message::Text(text)) => {
@@ -284,11 +291,18 @@ impl LunaMonitor {
                 }
                 // A Close ends the stream cleanly; other frame kinds are
                 // ignored so a newer server cannot break this client.
-                Ok(tokio_tungstenite::tungstenite::Message::Close(_)) => return Ok(()),
+                Ok(tokio_tungstenite::tungstenite::Message::Close(_)) => {
+                    self.host.set_connected(false).await;
+                    return Ok(());
+                }
                 Ok(_) => {}
-                Err(err) => return Err(format!("stream: {err}")),
+                Err(err) => {
+                    self.host.set_connected(false).await;
+                    return Err(format!("stream: {err}"));
+                }
             }
         }
+        self.host.set_connected(false).await;
         Ok(())
     }
 }
