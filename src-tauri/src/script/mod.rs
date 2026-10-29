@@ -962,12 +962,13 @@ pub async fn compact(
         .with_state(|state| final_reduce_input(state, &plan))
         .await
     {
-        let merged = crate::ai::chat::complete(
+        let merged = crate::ai::chat::complete_with_budget(
             client,
             config,
             key,
             REDUCE_SYSTEM_PROMPT,
             &format!("{}{input}", call.romaji),
+            8192,
         )
         .await
         .map_err(|err| err.to_string())?;
@@ -1128,12 +1129,13 @@ async fn make_segment_digest(call: &CallCtx<'_>, index: usize) -> Result<(), Str
     let input = cap_reduce_input(format!(
         "Outlines of segment {index}, in story order:\n\n{joined}"
     ));
-    let digest = crate::ai::chat::complete(
+    let digest = crate::ai::chat::complete_with_budget(
         call.client,
         call.config,
         call.key,
         SEGMENT_REDUCE_SYSTEM_PROMPT,
         &format!("{}{input}", call.romaji),
+        8192,
     )
     .await
     .map_err(|err| err.to_string())?;

@@ -45,10 +45,12 @@ pub const DEFAULT_AGENTS: usize = 3;
 /// Version of the compaction pipeline (prompts, context strategy, agent
 /// layout). Stored with each run's progress: bumping it restarts in-flight
 /// compactions exactly like a model change does, so summaries from two
-/// pipelines never mix. 2 = question-oriented story digests that preserve
-/// branches, chronology and uncertainty; 1 = the phase 19C multi-agent
-/// pipeline with rolling context; 0 marks phase 18/19B single-threaded rows.
-pub const COMPACTOR_VERSION: u32 = 2;
+/// pipelines never mix. 3 = expanded generation token budget (8192) and
+/// clean sentence boundary truncation guards; 2 = question-oriented story
+/// digests that preserve branches, chronology and uncertainty; 1 = the
+/// phase 19C multi-agent pipeline with rolling context; 0 marks phase
+/// 18/19B single-threaded rows.
+pub const COMPACTOR_VERSION: u32 = 3;
 /// Characters of the previous chunk's outline passed to the next map call as
 /// rolling context: enough to carry names and scene threads across a chunk
 /// boundary without re-feeding whole outlines.
@@ -828,6 +830,10 @@ mod tests {
         assert_eq!(
             digest_freshness(COMPACTOR_VERSION, COMPACTOR_VERSION),
             DigestFreshness::Current
+        );
+        assert_eq!(
+            digest_freshness(2, COMPACTOR_VERSION),
+            DigestFreshness::Outdated
         );
         assert_eq!(
             digest_freshness(1, COMPACTOR_VERSION),

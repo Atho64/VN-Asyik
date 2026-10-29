@@ -308,10 +308,14 @@ export function ScriptCard({ gameId }: { gameId: string }) {
                     >
                       {t("script.stop")}
                     </Button>
-                  ) : doc.compaction?.digest && doc.compaction.digestOutdated ? (
+                  ) : doc.compaction?.digest ? (
                     <Button
                       variant="secondary"
-                      title={t("script.rebuildHint")}
+                      title={
+                        doc.compaction.digestOutdated
+                          ? t("script.rebuildHint")
+                          : undefined
+                      }
                       onClick={() => void summarize(doc, true)}
                     >
                       {t("script.rebuild")}

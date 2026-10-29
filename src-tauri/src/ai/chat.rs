@@ -125,9 +125,36 @@ pub async fn complete(
     system: &str,
     user: &str,
 ) -> Result<String, ChatError> {
-    // Generous: reasoning models (Gemma, DeepSeek-R1) spend tokens thinking
-    // before emitting anything, and a truncated reply has no answer at all.
-    request(client, config, key, system, user, 2400).await
+    complete_with_budget(client, config, key, system, user, 2400).await
+}
+
+/// One system/user exchange with an explicit output token budget.
+///
+/// Multi-agent segment digests and final reduce merges handle up to 1200 words
+/// of dense factual information, which requires a larger token budget (e.g. 8192)
+/// so reasoning models and thorough summarizers do not get cut off mid-thought.
+pub async fn complete_with_budget(
+    client: &reqwest::Client,
+    config: &ChatConfig,
+    key: Option<&ChatApiKey>,
+    system: &str,
+    user: &str,
+    max_tokens: u32,
+) -> Result<String, ChatError> {
+    request(client, config, key, system, user, max_tokens).await
+}
+
+/// Truncate cleanly back to the last sentence or paragraph boundary if the response
+/// hit a token limit mid-word or mid-sentence.
+fn clean_truncated_tail(text: &str) -> String {
+    let trimmed = text.trim_end();
+    let delimiters = ['.', '!', '?', '\n', '。', '！', '？', '…'];
+    if let Some(idx) = trimmed.rfind(|c: char| delimiters.contains(&c)) {
+        let end_idx = idx + trimmed[idx..].chars().next().map_or(1, char::len_utf8);
+        trimmed[..end_idx].trim_end().to_owned()
+    } else {
+        trimmed.to_owned()
+    }
 }
 
 async fn request(
@@ -184,8 +211,22 @@ async fn request(
         .next()
         .ok_or_else(|| ChatError::BadResponse("no choices returned".to_owned()))?;
 
+    let is_length_finish = choice.finish_reason.as_deref() == Some("length");
     match choice.message.content {
-        Some(text) if !text.trim().is_empty() => Ok(text),
+        Some(text) if !text.trim().is_empty() => {
+            if is_length_finish {
+                let cleaned = clean_truncated_tail(&text);
+                if cleaned.trim().is_empty() {
+                    Err(ChatError::BadResponse(
+                        "the reply hit the token limit before emitting a complete sentence".to_owned(),
+                    ))
+                } else {
+                    Ok(cleaned)
+                }
+            } else {
+                Ok(text)
+            }
+        }
         // A reasoning model can spend the whole budget thinking and emit nothing.
         // Saying so is far more useful than "empty response", because the fix is
         // to raise the limit or pick a non-reasoning model.
@@ -193,7 +234,7 @@ async fn request(
             "the model used its whole reply budget on reasoning and produced no answer;              raise the token limit, or use a model that does not reason first"
                 .to_owned(),
         )),
-        _ if choice.finish_reason.as_deref() == Some("length") => Err(ChatError::BadResponse(
+        _ if is_length_finish => Err(ChatError::BadResponse(
             "the reply hit the token limit before finishing".to_owned(),
         )),
         _ => Err(ChatError::BadResponse("empty response".to_owned())),
@@ -260,5 +301,26 @@ mod tests {
         .unwrap();
         assert_eq!(parsed.choices[0].message.content.as_deref(), Some("hello"));
         assert!(parsed.choices[0].message.reasoning_content.is_none());
+    }
+
+    #[test]
+    fn clean_truncated_tail_drops_dangling_word_after_sentence_boundary() {
+        let input = "Ibuki is relieved the shampoo matter is postponed. Tai";
+        assert_eq!(
+            clean_truncated_tail(input),
+            "Ibuki is relieved the shampoo matter is postponed."
+        );
+    }
+
+    #[test]
+    fn clean_truncated_tail_handles_cjk_punctuation() {
+        let input = "第一章が終了した。次回につづ";
+        assert_eq!(clean_truncated_tail(input), "第一章が終了した。");
+    }
+
+    #[test]
+    fn clean_truncated_tail_preserves_complete_sentences() {
+        let input = "This is a full sentence.";
+        assert_eq!(clean_truncated_tail(input), "This is a full sentence.");
     }
 }
