@@ -204,3 +204,25 @@
     --text-muted: var(--text);
   }
 }
+
+/* Aliases for names the walkthrough card's older inline styles use.
+ *
+ * That component was written before the token set was named, and asks for
+ * `--color-text-dim`, `--font-size-sm`, `--radius-md` and friends. None of them
+ * existed, so every colour, border and radius silently fell back to the browser
+ * default. Mapping the old names onto the real tokens fixes the card everywhere
+ * at once, in both themes, without rewriting 700 lines of inline style.
+ * Remove this block when that card is moved onto the shared classes. */
+:root {
+  --color-text: var(--text);
+  --color-text-dim: var(--text-muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-surface: var(--surface-1);
+  --color-surface-raised: var(--surface-2);
+  --font-size-xs: var(--text-xs);
+  --font-size-sm: var(--text-s);
+  --radius-sm: var(--radius-s);
+  --radius-md: var(--radius-m);
+}

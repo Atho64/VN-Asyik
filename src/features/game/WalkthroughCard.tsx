@@ -264,9 +264,9 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
           e.preventDefault();
           void handleSearch(searchQuery);
         }}
-        style={{ display: "flex", gap: "var(--space-2)" }}
+        style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}
       >
-        <div style={{ position: "relative", flex: 1 }}>
+        <div style={{ position: "relative", flex: 1, minWidth: "8rem" }}>
           <input
             type="text"
             value={searchQuery}
@@ -335,6 +335,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
+                    flexWrap: "wrap",
                     padding: "var(--space-2) var(--space-3)",
                     background: inSwitchMode ? "var(--color-surface)" : "var(--color-surface-raised)",
                     border: "1px solid var(--color-border)",
@@ -362,7 +363,17 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                         {entry.title}
                       </span>
                     </div>
-                    <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-dim)", fontFamily: "monospace", paddingLeft: "var(--space-1)" }}>
+                    <div
+                    style={{
+                      fontSize: "var(--font-size-xs)",
+                      color: "var(--color-text-dim)",
+                      fontFamily: "monospace",
+                      paddingLeft: "var(--space-1)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                       {formatUrlSlug(entry.url)}
                     </div>
                   </div>
@@ -407,6 +418,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
+                  flexWrap: "wrap",
                   padding: "var(--space-2) var(--space-3)",
                   background: inSwitchMode ? "var(--color-surface)" : "var(--color-surface-raised)",
                   border: "1px solid var(--color-border)",
@@ -434,7 +446,17 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                       {cand.title}
                     </span>
                   </div>
-                  <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-dim)", fontFamily: "monospace", paddingLeft: "var(--space-1)" }}>
+                  <div
+                    style={{
+                      fontSize: "var(--font-size-xs)",
+                      color: "var(--color-text-dim)",
+                      fontFamily: "monospace",
+                      paddingLeft: "var(--space-1)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {formatUrlSlug(cand.url)}
                   </div>
                 </div>
@@ -454,7 +476,15 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
       {/* Manual URL toggle / direct fetch */}
       <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--space-2)" }}>
         {!showInput ? (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "var(--space-2)",
+              }}
+            >
             <Button
               variant="ghost"
                             onClick={() => setShowInput(true)}

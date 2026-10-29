@@ -211,16 +211,28 @@ button.chip--link:hover {
  * the far edge of a wide card it reads as floating in empty space. Centered,
  * not baseline-aligned: a pill's border-box rides ~one padding above its text
  * baseline, so baseline alignment makes the badge hang above the title line. */
+/* Title on the left, aside on the right. Left-aligned, an aside button sat
+ * right after the title and read as a second heading: "Skrip" and "Impor
+ * skrip" looked like two titles on one line. */
 .card__header {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: var(--space-3);
   margin-bottom: var(--space-3);
 }
 
 /* One or two lines of orientation under a card title. Muted, never a wall of
    text: the card body is where the work happens. */
+@media (max-width: 599px) {
+  /* A title plus a few controls does not fit one line; wrapping keeps the
+   * aside readable instead of squeezing the title to one word per line. */
+  .card__header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+}
+
 .card__intro {
   margin: 0 0 var(--space-4);
   max-width: 60ch;

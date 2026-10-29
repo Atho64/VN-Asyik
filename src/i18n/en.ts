@@ -144,7 +144,7 @@ export const en = {
   "tracking.runnerVita3k": "Vita3K (PS Vita)",
   "tracking.runnerRpcs3": "RPCS3 (PS3)",
   "tracking.runnerPcsx2": "PCSX2 (PS2)",
-  "tracking.runnerEden": "Eden / Citron Neo (Switch)",
+  "tracking.runnerEden": "Eden (Switch)",
   "tracking.runnerCitron": "Citron Neo (Switch)",
   "tracking.runnerShadps4": "shadPS4 (PS4)",
   "tracking.runnerPpsspp": "PPSSPP (PSP)",
