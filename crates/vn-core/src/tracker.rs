@@ -240,6 +240,15 @@ impl Tracker {
         self.config.afk = afk;
     }
 
+    /// The AFK configuration in force.
+    ///
+    /// The manual timer reads the same threshold, so a hand-timed chapter and
+    /// a detected session classify an idle stretch identically.
+    #[must_use]
+    pub fn afk_config(&self) -> AfkConfig {
+        self.config.afk
+    }
+
     /// Current phase.
     #[must_use]
     pub const fn phase(&self) -> Phase {
@@ -484,7 +493,7 @@ impl Tracker {
 /// the gap matters in both directions — a run longer than the gap means the whole
 /// gap was idle (a delayed or skipped poll), and a run shorter than the gap means
 /// input arrived inside it and only the tail is away.
-fn away_ms_in_gap(gap_ms: i64, idle_for_ms: i64, threshold_ms: i64) -> i64 {
+pub fn away_ms_in_gap(gap_ms: i64, idle_for_ms: i64, threshold_ms: i64) -> i64 {
     (idle_for_ms.max(0) - threshold_ms.max(0)).clamp(0, gap_ms.max(0))
 }
 

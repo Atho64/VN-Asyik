@@ -300,6 +300,7 @@ export interface Api {
   trackingCapability(): Promise<TrackerCapability>;
   trackingStatus(): Promise<TrackingStatus>;
   trackingSetEnabled(enabled: boolean): Promise<TrackerCapability>;
+  trackingSetMode(mode: string): Promise<TrackerCapability>;
   trackingMapExecutable(gameId: string, exePath: string): Promise<GameExecutable>;
   trackingMapRunnerTarget(input: MapRunnerTargetInput): Promise<GameExecutable>;
   trackingListExecutables(): Promise<GameExecutable[]>;
@@ -577,6 +578,8 @@ export const api: Api = {
     shared("tracking_status", () => call("tracking_status", trackingStatusSchema)),
   trackingSetEnabled: (enabled) =>
     call("tracking_set_enabled", trackerCapabilitySchema, { enabled }),
+  trackingSetMode: (mode) =>
+    call("tracking_set_mode", trackerCapabilitySchema, { mode }),
   trackingMapExecutable: (gameId, exePath) =>
     call("tracking_map_executable", gameExecutableSchema, {
       input: { game_id: gameId, exe_path: exePath },

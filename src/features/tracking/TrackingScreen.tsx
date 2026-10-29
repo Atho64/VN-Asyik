@@ -113,6 +113,20 @@ export function TrackingScreen() {
     }
   };
 
+  const toggleMode = async (): Promise<void> => {
+    if (!capability) return;
+    setBusy(true);
+    try {
+      setCapability(
+        await api.trackingSetMode(capability.mode === "auto" ? "always" : "auto"),
+      );
+    } catch (caught) {
+      fail(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const scan = async (path: string): Promise<void> => {
     setScanning(path);
     try {
@@ -252,6 +266,30 @@ export function TrackingScreen() {
                   ariaLabel={t("tracking.enable")}
                 >
                   {capability.enabled ? t("tracking.on") : t("tracking.off")}
+                </Chip>
+              </div>
+            </div>
+            <div className="settings__row">
+              <span className="settings__label">
+                {t("tracking.auto")}
+                <span className="settings__hint">
+                  {capability.mode === "always"
+                    ? t("tracking.autoOffHint")
+                    : t("tracking.autoOnHint")}
+                </span>
+              </span>
+              <div className="settings__control">
+                {/* The state is the label, and the hint above says what it does.
+                    "Automatic tracking off" does not stop tracking: it counts
+                    every second the game runs instead of watching focus. */}
+                <Chip
+                  selected={capability.mode === "auto"}
+                  onClick={() => void toggleMode()}
+                  ariaLabel={t("tracking.auto")}
+                >
+                  {capability.mode === "auto"
+                    ? t("tracking.autoOn")
+                    : t("tracking.autoOff")}
                 </Chip>
               </div>
             </div>

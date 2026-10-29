@@ -109,6 +109,8 @@ const idleTimer: ManualTimerView = {
   routeId: null,
   chapterName: null,
   elapsedMs: 0,
+  activeMs: 0,
+  afkMs: 0,
   running: false,
 };
 

@@ -764,13 +764,20 @@ export function RoutesCard({
           {timer?.active ? (
             <>
               <span className="manual-timer__clock">
-                {formatDuration(timer.elapsedMs)}
+                {formatDuration(timer.elapsedMs, locale)}
               </span>
               <span className="manual-timer__label">
                 {timer.running
                   ? t("manual.running", { name: timer.chapterName ?? "" })
-                  : t("manual.paused", { time: formatDuration(timer.elapsedMs) })}
+                  : t("manual.paused", { time: formatDuration(timer.elapsedMs, locale) })}
               </span>
+              {/* Counted the way playtime is, so away time is shown rather than
+                  silently folded into the clock. */}
+              {timer.afkMs > 0 ? (
+                <span className="manual-timer__label">
+                  {t("manual.away", { time: formatDuration(timer.afkMs, locale) })}
+                </span>
+              ) : null}
             </>
           ) : (
             <span className="manual-timer__label">

@@ -38,6 +38,9 @@ pub struct TrackerCapability {
     pub reason: Option<String>,
     /// Whether the user has automatic tracking switched on.
     pub enabled: bool,
+    /// How detected time is measured: `auto` (focus-aware) or `always` (wall clock
+    /// while the game process runs). See `tracking::mode`.
+    pub mode: String,
     /// Poll interval in milliseconds, for honesty about granularity.
     pub poll_interval_ms: i64,
 }
@@ -50,9 +53,26 @@ pub async fn tracking_capability(state: State<'_, AppState>) -> CommandResult<Tr
         available: status.available,
         reason: status.unavailable_reason.clone(),
         enabled: state.tracker().is_enabled().await,
+        mode: state.tracker().mode().await.as_str().to_owned(),
         poll_interval_ms: i64::try_from(crate::tracking::POLL_INTERVAL.as_millis())
             .unwrap_or(2_000),
     })
+}
+
+/// Choose how detected playtime is measured.
+///
+/// `auto` keeps the focus-aware measurement. `always` counts every second the game
+/// process runs, away time included, and ends the run when the process exits. The
+/// choice is stored locally, like the title format.
+#[tauri::command]
+pub async fn tracking_set_mode(
+    state: State<'_, AppState>,
+    mode: String,
+) -> CommandResult<TrackerCapability> {
+    let parsed = crate::tracking::mode::TrackingMode::parse(&mode);
+    state.tracker().set_mode(parsed).await;
+    crate::tracking::mode::save(state.db().pool(), parsed).await;
+    tracking_capability(state).await
 }
 
 /// Android usage-access state, and where the user can grant it.
@@ -205,6 +225,7 @@ pub async fn tracking_set_enabled(
         available: status.available,
         reason: status.unavailable_reason.clone(),
         enabled,
+        mode: state.tracker().mode().await.as_str().to_owned(),
         poll_interval_ms: i64::try_from(crate::tracking::POLL_INTERVAL.as_millis())
             .unwrap_or(2_000),
     })
@@ -320,8 +341,12 @@ pub struct ManualTimerView {
     pub route_id: Option<String>,
     /// What is being timed, chapter or route name, so the UI needs no second lookup.
     pub chapter_name: Option<String>,
-    /// Milliseconds accumulated, excluding paused time.
+    /// Milliseconds accumulated, excluding paused time, plus the open window.
     pub elapsed_ms: i64,
+    /// Counted time only (the clock minus the open window).
+    pub active_ms: i64,
+    /// Time filed as away, which a detected session reports separately too.
+    pub afk_ms: i64,
     /// Whether time is currently accumulating.
     pub running: bool,
 }
@@ -335,6 +360,8 @@ pub async fn tracking_manual_status(state: State<'_, AppState>) -> CommandResult
             chapter_id: None,
             route_id: None,
             elapsed_ms: 0,
+            active_ms: 0,
+            afk_ms: 0,
             chapter_name: None,
             running: false,
         });
@@ -364,7 +391,11 @@ pub async fn tracking_manual_status(state: State<'_, AppState>) -> CommandResult
         chapter_id: run.chapter_id.map(|id| id.to_string()),
         route_id: run.route_id.map(|id| id.to_string()),
         chapter_name: name,
-        elapsed_ms: run.elapsed_at(now()?),
+        // Projected: the clock keeps moving between polls, while the recorded
+        // total only grows when a sample is classified.
+        elapsed_ms: run.projected_total(now()?),
+        active_ms: run.active_ms,
+        afk_ms: run.afk_ms,
         running: run.is_running(),
     })
 }
@@ -443,15 +474,16 @@ pub async fn tracking_manual_resume(state: State<'_, AppState>) -> CommandResult
 /// exactly like detected time.
 #[tauri::command]
 pub async fn tracking_manual_stop(state: State<'_, AppState>) -> CommandResult<ManualTimerView> {
-    let run = state
+    let mut run = state
         .tracker()
         .manual_stop()
         .await
         .map_err(|err| CommandError::new("manual", err.to_string()))?;
 
     let finished = now()?;
-    let elapsed = run.finish(finished);
-    if elapsed > 0 {
+    let afk = state.tracker().afk_config().await;
+    let (active, away) = run.finish(finished, afk);
+    if active + away > 0 {
         let segment = vn_core::tracker::Segment {
             session_id: EntityId::new(),
             game_id: run.game_id,
@@ -459,8 +491,8 @@ pub async fn tracking_manual_stop(state: State<'_, AppState>) -> CommandResult<M
             route_id: run.route_id,
             started_at: run.started_at,
             ended_at: finished,
-            active_ms: elapsed,
-            afk_ms: 0,
+            active_ms: active,
+            afk_ms: away,
             checkpoint: false,
         };
         mapping::promote_pending_session(state.db().pool(), &segment, state.device(), finished)
@@ -967,8 +999,8 @@ fn start_epoch(now: Timestamp, active_ms: i64) -> i64 {
 
 /// A running manual timer, if there is one.
 ///
-/// Elapsed time comes from [`crate::tracking::manual::ManualRun::elapsed_at`]. The
-/// `elapsed_ms` field only holds time up to the last pause, so reading it
+/// Elapsed time comes from [`crate::tracking::manual::ManualRun::projected_total`],
+/// which adds the open window to the counted total. Reading a stored field
 /// directly froze the shown time at zero while the timer ran, and anchoring on
 /// `started_at` counted paused time as played.
 fn target_from_manual(
@@ -976,7 +1008,7 @@ fn target_from_manual(
     now: Timestamp,
 ) -> Option<ActivePresenceTarget> {
     manual.is_running().then(|| {
-        let elapsed = manual.elapsed_at(now);
+        let elapsed = manual.projected_total(now);
         ActivePresenceTarget {
             game_id: manual.game_id,
             chapter_id: manual.chapter_id,
@@ -1229,9 +1261,10 @@ mod presence_target_tests {
     #[test]
     fn a_running_manual_timer_shows_its_live_elapsed_time() {
         let run = ManualRun::start(EntityId::new(), EntityId::new(), at(100));
-        // 60 s into the stretch. `elapsed_ms` itself is still 0 here.
+        // 60 s into the stretch. The counted total itself is still 0 here; the
+        // projection is what the clock shows between samples.
         let target = target_from_manual(&run, at(160)).expect("running timer");
-        assert_eq!(run.elapsed_ms, 0);
+        assert_eq!(run.total_ms(), 0);
         assert_eq!(target.active_ms, 60_000);
         assert_eq!(target.start_epoch, Some(100));
     }

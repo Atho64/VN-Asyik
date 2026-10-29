@@ -57,6 +57,10 @@ impl AppState {
         let tracker = TrackingService::new(now);
         let afk = queries::load_afk_config(db.pool()).await?;
         tracker.set_afk_config(afk).await;
+        // How time is measured is the user's choice, and it is read here so the
+        // first poll already respects it rather than starting in the default.
+        let mode = crate::tracking::mode::load(db.pool()).await;
+        tracker.set_mode(mode).await;
         let recovered = crate::tracking::recover(db.pool(), &device, now).await?;
         if recovered > 0 {
             queries::record_recovery(db.pool(), recovered, now).await?;

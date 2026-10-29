@@ -434,6 +434,9 @@ export const trackerCapabilitySchema = z.object({
   available: z.boolean(),
   reason: z.string().nullable(),
   enabled: z.boolean(),
+  /* `auto` counts only while the game window is in front; `always` counts every
+     second the game process runs, away time included. */
+  mode: z.string(),
   poll_interval_ms: z.number(),
 });
 export type TrackerCapability = z.infer<typeof trackerCapabilitySchema>;
@@ -588,6 +591,9 @@ export const manualTimerViewSchema = z.object({
   routeId: z.string().nullable(),
   chapterName: z.string().nullable(),
   elapsedMs: z.number(),
+  /* Counted play, and the away part the timer filed, mirroring a detected session. */
+  activeMs: z.number(),
+  afkMs: z.number(),
   running: z.boolean(),
 });
 export type ManualTimerView = z.infer<typeof manualTimerViewSchema>;

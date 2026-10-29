@@ -806,3 +806,181 @@ async fn a_desktop_session_records_when_the_game_was_started() {
         .expect("row");
     assert!(started.is_some(), "a tracked session must set started_at");
 }
+
+#[tokio::test]
+async fn wall_clock_mode_counts_a_game_that_is_not_in_front() {
+    // `Always` exists for the reader who keeps the game behind a guide. The
+    // automatic mode is the control: same probe, same polls, no counted time.
+    let (db, device, game, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", false)],
+        Some(1),
+        0,
+    );
+    service.set_mode(mode::TrackingMode::Always).await;
+    poll_range(&service, &db, &device, 0, 3).await;
+    service
+        .send(db.pool(), &device, Event::Stop, t(8_000))
+        .await
+        .expect("stop");
+    let counted = queries::tracked_playtime_ms(db.pool(), game)
+        .await
+        .expect("total");
+    assert!(counted > 0, "wall-clock mode counts it, got {counted}");
+
+    let (db, device, game, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", false)],
+        Some(1),
+        0,
+    );
+    poll_range(&service, &db, &device, 0, 3).await;
+    service
+        .send(db.pool(), &device, Event::Stop, t(8_000))
+        .await
+        .expect("stop");
+    assert_eq!(
+        queries::tracked_playtime_ms(db.pool(), game)
+            .await
+            .expect("total"),
+        0,
+        "automatic mode never counts a game that is not in front"
+    );
+}
+
+#[tokio::test]
+async fn a_wall_clock_run_ends_when_the_process_does() {
+    // "Stops when the window closes and does not continue": the run is closed at
+    // process exit, and a later launch is a new session, not more of the old one.
+    let (db, device, game, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", false)],
+        Some(1),
+        0,
+    );
+    service.set_mode(mode::TrackingMode::Always).await;
+    poll_range(&service, &db, &device, 0, 2).await;
+
+    probe.set(vec![], None, 0);
+    service
+        .poll(db.pool(), &device, t(6_000))
+        .await
+        .expect("poll");
+    let first = queries::tracked_playtime_ms(db.pool(), game)
+        .await
+        .expect("total");
+    assert!(first > 0, "the first run was recorded");
+
+    // Nothing running: later polls must not keep the closed run alive.
+    for step in 4..8 {
+        service
+            .poll(db.pool(), &device, t(step * 2_000))
+            .await
+            .expect("poll");
+    }
+    assert_eq!(
+        queries::tracked_playtime_ms(db.pool(), game)
+            .await
+            .expect("total"),
+        first,
+        "a closed run is not extended by later polls"
+    );
+    assert_eq!(service.status(db.pool()).await.phase, "idle");
+}
+
+#[tokio::test]
+async fn a_manual_timer_counts_like_playtime() {
+    let (db, device, game, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .manual_start(EntityId::new(), game, t(0))
+        .await
+        .expect("start timer");
+
+    poll_range(&service, &db, &device, 0, 3).await;
+    let run = service.manual_state().await.expect("timer");
+    assert!(run.total_ms() > 0, "present samples count");
+    assert_eq!(run.afk_ms, 0, "a present reader is play, not away");
+
+    // The window stays focused but the user stops touching anything: the part past
+    // the grace threshold is away, exactly as it is for a detected session.
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        300_000,
+    );
+    poll_range(&service, &db, &device, 4, 2).await;
+    let run = service.manual_state().await.expect("timer");
+    assert!(
+        run.afk_ms > 0,
+        "idle time is filed as away, like a detected session"
+    );
+}
+
+#[tokio::test]
+async fn a_manual_timer_does_not_count_while_another_window_is_in_front() {
+    let (db, device, game, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .manual_start(EntityId::new(), game, t(0))
+        .await
+        .expect("start timer");
+    poll_range(&service, &db, &device, 0, 2).await;
+    let before = service.manual_state().await.expect("timer").total_ms();
+
+    // The terminal takes the foreground, which is where automatic playtime pauses.
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", false)],
+        Some(1),
+        0,
+    );
+    poll_range(&service, &db, &device, 3, 3).await;
+    let after = service.manual_state().await.expect("timer").total_ms();
+    assert_eq!(after, before, "an unfocused game buys no manual minutes");
+}
+
+#[tokio::test]
+async fn a_manual_timer_ends_when_the_game_closes() {
+    let (db, device, game, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    // A real chapter row: the session it writes carries a foreign key to it.
+    let chapter =
+        mapping::insert_manual_chapter(db.pool(), game, "Prologue", None, None, &device, t(0))
+            .await
+            .expect("chapter");
+    service
+        .manual_start(chapter, game, t(0))
+        .await
+        .expect("start timer");
+    poll_range(&service, &db, &device, 0, 2).await;
+
+    probe.set(vec![], None, 0);
+    service
+        .poll(db.pool(), &device, t(10_000))
+        .await
+        .expect("poll");
+
+    assert!(
+        service.manual_state().await.is_none(),
+        "the timer ends with the game instead of counting a closed window"
+    );
+    assert!(
+        queries::tracked_playtime_ms(db.pool(), game)
+            .await
+            .expect("total")
+            > 0,
+        "and its time is written, not dropped"
+    );
+}

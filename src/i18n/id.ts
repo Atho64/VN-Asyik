@@ -100,11 +100,18 @@ export const id: Messages = {
   "tracking.unavailable": "Tidak tersedia di perangkat ini",
   "tracking.unavailableReason":
     "Build ini tidak bisa membaca fokus proses di sini, jadi waktu hanya bisa diisi manual.",
-  "tracking.enable": "Lacak otomatis",
+  "tracking.enable": "Pelacakan",
   "tracking.on": "Aktif",
   "tracking.off": "Mati",
   "tracking.enableHint":
     "Mati berarti aplikasi tidak pernah melihat proses yang berjalan.",
+  "tracking.auto": "Lacak otomatis",
+  "tracking.autoOn": "Aktif",
+  "tracking.autoOff": "Mati",
+  "tracking.autoOnHint":
+    "Hanya waktu saat jendela game di depan yang dihitung. Waktu diam dipisah sebagai AFK sesuai pengaturan Deteksi diam.",
+  "tracking.autoOffHint":
+    "Semua waktu selama game berjalan dihitung sebagai waktu main, termasuk AFK. Sesi berhenti saat gamenya ditutup dan tidak dilanjutkan saat dibuka lagi.",
   "tracking.poll": "Diperiksa tiap {{seconds}} detik",
 
   "tracking.executables": "Eksekusi game",
@@ -194,7 +201,8 @@ export const id: Messages = {
 
   "manual.title": "Timer chapter",
   "manual.intro":
-    "Mulai timer saat mulai chapter dan hentikan saat selesai. Berlaku untuk semua engine, termasuk yang tidak bisa dideteksi.",
+    "Timer menghitung dengan aturan yang sama seperti waktu main: hanya berjalan saat jendela game di depan, dan waktu diam dipisah sebagai AFK. Saat Lacak otomatis dimatikan, semua waktu dihitung. Timer berhenti sendiri ketika gamenya ditutup.",
+  "manual.away": "{{time}} pergi",
   "manual.startNamed": "Mulai: {{name}}",
   "manual.start": "Mulai",
   "manual.pause": "Jeda",

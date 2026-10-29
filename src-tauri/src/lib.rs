@@ -125,6 +125,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::tracking::tracking_capability,
         commands::tracking::tracking_status,
         commands::tracking::tracking_set_enabled,
+        commands::tracking::tracking_set_mode,
         commands::tracking::tracking_map_executable,
         commands::tracking::tracking_map_runner_target,
         commands::tracking::tracking_list_executables,

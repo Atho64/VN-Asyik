@@ -19,10 +19,12 @@ pub mod hook;
 pub mod luna;
 pub mod manual;
 pub mod mapping;
+pub mod mode;
 pub mod title_config;
 
 use std::sync::Arc;
 
+use self::mode::TrackingMode;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use tokio::sync::{Mutex, RwLock};
@@ -121,6 +123,9 @@ pub struct TrackingService {
     snapshot: RwLock<RunSnapshot>,
     /// Whether automatic tracking is enabled by the user.
     enabled: RwLock<bool>,
+    /// How detected time is measured: focus-aware, or every second the game
+    /// process runs. See `tracking::mode`.
+    mode: RwLock<TrackingMode>,
     /// A chapter the user is timing by hand, when there is one.
     ///
     /// Held here rather than in the tracker because it is driven by the user, not
@@ -200,6 +205,7 @@ impl TrackingService {
             unavailable_reason: reason,
             snapshot: RwLock::new(RunSnapshot::default()),
             enabled: RwLock::new(true),
+            mode: RwLock::new(TrackingMode::Auto),
             manual: RwLock::new(None),
             manual_paused: RwLock::new(false),
             launched: RwLock::new(None),
@@ -216,6 +222,7 @@ impl TrackingService {
             unavailable_reason: None,
             snapshot: RwLock::new(RunSnapshot::default()),
             enabled: RwLock::new(true),
+            mode: RwLock::new(TrackingMode::Auto),
             manual: RwLock::new(None),
             manual_paused: RwLock::new(false),
             launched: RwLock::new(None),
@@ -329,6 +336,12 @@ impl TrackingService {
         self.tracker.lock().await.set_afk_config(afk);
     }
 
+    /// The AFK configuration in force, so a manual stop classifies its last window
+    /// with the same rule detection uses.
+    pub async fn afk_config(&self) -> AfkConfig {
+        self.tracker.lock().await.afk_config()
+    }
+
     /// Turn automatic tracking on or off.
     pub async fn set_enabled(&self, enabled: bool) {
         *self.enabled.write().await = enabled;
@@ -337,6 +350,16 @@ impl TrackingService {
     /// Whether automatic tracking is enabled.
     pub async fn is_enabled(&self) -> bool {
         *self.enabled.read().await
+    }
+
+    /// Choose how time is measured.
+    pub async fn set_mode(&self, mode: TrackingMode) {
+        *self.mode.write().await = mode;
+    }
+
+    /// The measurement in force.
+    pub async fn mode(&self) -> TrackingMode {
+        *self.mode.read().await
     }
 
     /// Current status for the UI.
@@ -416,19 +439,27 @@ impl TrackingService {
 
         let mut tracker = self.tracker.lock().await;
         let mut events: Vec<(Event, Timestamp)> = Vec::new();
+        let mut exited_game: Option<EntityId> = None;
 
         // Is the tracked process still alive?
         if let Some(target) = tracker.target().cloned() {
             let alive = self.probe.is_running(target.pid).unwrap_or(false);
             if !alive {
+                exited_game = Some(target.game_id);
                 events.push((Event::ProcessExited, now));
                 *self.launched.write().await = None;
             }
         }
 
         if tracker.target().is_none() {
-            // Look for a mapped, focused process to start tracking.
-            if let Some(process) = self.focused_mapped_process(pool).await? {
+            // Automatic mode starts when a mapped game takes the foreground.
+            // Wall-clock mode starts when a mapped game starts running, because
+            // playing it behind another window is the case it exists for.
+            let next = match self.mode().await {
+                TrackingMode::Auto => self.focused_mapped_process(pool).await?,
+                TrackingMode::Always => self.running_mapped_process(pool).await?,
+            };
+            if let Some(process) = next {
                 let game_id = EntityId::parse(&process.1)?;
                 tracker.start(
                     TrackTarget {
@@ -477,6 +508,17 @@ impl TrackingService {
         let mut segments = Vec::new();
         for (event, at) in events {
             segments.extend(tracker.apply(event, at));
+        }
+
+        // The manual timer consumes the same samples as detection, so a hand-
+        // timed chapter and a detected session split an idle stretch identically.
+        self.tick_manual(&tracker, now).await;
+        // A timer for a game that just closed ends with it. Leaving it running
+        // would bill wall-clock minutes to a chapter nobody is reading, and the
+        // user asked for a run that stops when the window does.
+        if let Some(game_id) = exited_game {
+            self.finish_manual_for(pool, device, game_id, now, tracker.afk_config())
+                .await?;
         }
 
         // Publish a snapshot for status reads.
@@ -676,10 +718,16 @@ impl TrackingService {
     ///
     /// A manual timer owns the stretch it is timing, so detected accrual hands off
     /// rather than recording the same wall-clock minutes twice.
+    ///
+    /// In wall-clock mode focus is not consulted at all: a game behind the browser
+    /// still counts, which is the whole point of that mode.
     async fn focus_event(&self, tracker: &Tracker, target: &TrackTarget) -> Option<Event> {
-        let is_focused = self.probe.focused_pid().unwrap_or(None) == Some(target.pid);
-        if !is_focused {
-            return matches!(tracker.phase(), Phase::Tracking).then_some(Event::FocusLost);
+        let mode = self.mode().await;
+        if mode == TrackingMode::Auto {
+            let is_focused = self.probe.focused_pid().unwrap_or(None) == Some(target.pid);
+            if !is_focused {
+                return matches!(tracker.phase(), Phase::Tracking).then_some(Event::FocusLost);
+            }
         }
 
         let manual_owns = {
@@ -704,13 +752,162 @@ impl TrackingService {
             // its phase was already Paused before any timer existed.
             Phase::Paused if resume_from_manual => Event::Resume,
             Phase::Tracking => Event::Tick {
-                idle_for_ms: self
-                    .probe
-                    .presence()
-                    .map_or(0, |presence| presence.idle_for_ms),
+                idle_for_ms: if mode == TrackingMode::Always {
+                    // Every second counts, so nothing is reported as idle.
+                    0
+                } else {
+                    self.probe
+                        .presence()
+                        .map_or(0, |presence| presence.idle_for_ms)
+                },
             },
             _ => Event::FocusGained,
         })
+    }
+
+    /// Feed one sample into the manual timer, using the same rule as playtime.
+    async fn tick_manual(&self, tracker: &Tracker, now: Timestamp) {
+        let mode = self.mode().await;
+        let afk = tracker.afk_config();
+        let target = tracker.target().cloned();
+        let focused = self.probe.focused_pid().unwrap_or(None);
+        let idle = self
+            .probe
+            .presence()
+            .map_or(0, |presence| presence.idle_for_ms);
+
+        let mut slot = self.manual.write().await;
+        let Some(run) = slot.as_mut() else {
+            return;
+        };
+        if !run.is_running() {
+            return;
+        }
+
+        let sample = if mode == TrackingMode::Always {
+            // Wall clock: nothing is away, so the idle reading cannot remove time.
+            manual::ManualSample::Count {
+                idle_for_ms: 0,
+                all_active: true,
+                threshold_ms: afk.threshold_ms,
+            }
+        } else if let Some(target) = target {
+            if target.game_id != run.game_id || focused != Some(target.pid) {
+                // Another game, or this one behind a browser. Automatic playtime
+                // pauses here, so the manual timer pauses with it instead of
+                // billing minutes nobody read.
+                manual::ManualSample::Skip
+            } else {
+                manual::ManualSample::Count {
+                    idle_for_ms: idle,
+                    all_active: false,
+                    threshold_ms: afk.threshold_ms,
+                }
+            }
+        } else {
+            // A game nothing can detect: there is no window to watch, so the OS
+            // idle reading is the only honest sample.
+            manual::ManualSample::Count {
+                idle_for_ms: idle,
+                all_active: false,
+                threshold_ms: afk.threshold_ms,
+            }
+        };
+        run.tick(now, sample);
+    }
+
+    /// End a manual timer when the game it times stops running.
+    ///
+    /// `afk` is passed in because `poll` already holds the tracker lock; taking
+    /// it again here would deadlock the loop.
+    async fn finish_manual_for(
+        &self,
+        pool: &SqlitePool,
+        device: &DeviceId,
+        game_id: EntityId,
+        now: Timestamp,
+        afk: AfkConfig,
+    ) -> Result<(), TrackingError> {
+        let finished = {
+            let mut slot = self.manual.write().await;
+            match slot.as_ref() {
+                Some(run) if run.game_id == game_id => slot.take(),
+                _ => None,
+            }
+        };
+        let Some(mut run) = finished else {
+            return Ok(());
+        };
+        let (active, away) = run.finish(now, afk);
+        if active + away <= 0 {
+            return Ok(());
+        }
+        let segment = vn_core::tracker::Segment {
+            session_id: EntityId::new(),
+            game_id: run.game_id,
+            chapter_id: run.chapter_id,
+            route_id: run.route_id,
+            started_at: run.started_at,
+            ended_at: now,
+            active_ms: active,
+            afk_ms: away,
+            checkpoint: false,
+        };
+        mapping::promote_pending_session(pool, &segment, device, now).await?;
+        Ok(())
+    }
+
+    /// A running process mapped to a game, whether or not it owns the foreground.
+    ///
+    /// Wall-clock mode counts a game that is open behind another window, so the
+    /// focus requirement that starts an automatic run would leave it uncounted
+    /// until the user looked at it. The focused game wins when there is one, then
+    /// the process launched from the app, then the first mapped process.
+    async fn running_mapped_process(
+        &self,
+        pool: &SqlitePool,
+    ) -> Result<Option<(u32, String, String)>, TrackingError> {
+        let focused_pid = self.probe.focused_pid()?;
+        let focused_win = self.probe.focused_window().ok().flatten();
+        let binding = self.launched.read().await.clone();
+        let mut fallback: Option<(u32, String, String)> = None;
+        for process in self.probe.list_processes()? {
+            if process.pid == std::process::id() {
+                continue;
+            }
+            let win_title = focused_win
+                .as_ref()
+                .filter(|window| window.pid == process.pid)
+                .map(|window| window.title.as_str());
+            let game_id = match mapping::game_for_executable_with_title(
+                pool,
+                process.exe_path.as_deref(),
+                &process.exe_name,
+                win_title,
+            )
+            .await?
+            {
+                Some(mapped) => mapped.game_id,
+                // The launch binding is the only thing that can attribute an
+                // executable no game claims, and only for that exact process.
+                None => match &binding {
+                    Some(bound) if bound.pid == process.pid => bound.game_id.to_string(),
+                    _ => continue,
+                },
+            };
+            let entry = (
+                process.pid,
+                game_id,
+                process.exe_path.clone().unwrap_or_default(),
+            );
+            if focused_pid == Some(process.pid) {
+                return Ok(Some(entry));
+            }
+            if fallback.is_none() {
+                fallback = Some(entry);
+            }
+        }
+        Ok(fallback)
     }
 
     /// Send an explicit event to the machine, e.g. from a Pause button.

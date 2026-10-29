@@ -102,10 +102,17 @@ export const en = {
   "tracking.unavailable": "Not available on this device",
   "tracking.unavailableReason":
     "This build cannot read process focus here, so playtime is manual only.",
-  "tracking.enable": "Track automatically",
+  "tracking.enable": "Tracking",
   "tracking.on": "On",
   "tracking.off": "Off",
   "tracking.enableHint": "Off means the app never looks at running processes.",
+  "tracking.auto": "Automatic tracking",
+  "tracking.autoOn": "On",
+  "tracking.autoOff": "Off",
+  "tracking.autoOnHint":
+    "Counts only while the game window is in front. Idle time is filed as away, per the idle detection setting.",
+  "tracking.autoOffHint":
+    "Every second the game runs counts as play, away time included. The session stops when the game closes and is not continued when it opens again.",
   "tracking.poll": "Checked every {{seconds}} s",
 
   "tracking.executables": "Game executables",
@@ -194,7 +201,8 @@ export const en = {
 
   "manual.title": "Timer a chapter",
   "manual.intro":
-    "Start a timer when you begin a chapter and stop it when you finish. Works with any engine, even ones we cannot detect.",
+    "The timer counts the way playtime does: it runs only while the game window is in front, and idle time is filed as away. With automatic tracking off, every second counts. It stops by itself when the game closes.",
+  "manual.away": "{{time}} away",
   "manual.startNamed": "Start: {{name}}",
   "manual.start": "Start",
   "manual.pause": "Pause",
