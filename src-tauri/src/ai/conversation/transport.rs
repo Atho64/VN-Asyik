@@ -11,6 +11,11 @@ pub async fn complete(
     online: bool,
     on_delta: &mut impl FnMut(String),
 ) -> Result<CompletionStream, String> {
+    // The profile says which shape the endpoint speaks; the loop above only sees
+    // the accumulated completion either way.
+    if config.provider == crate::ai::chat::Provider::Anthropic {
+        return super::anthropic::complete(client, config, key, messages, online, on_delta).await;
+    }
     let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
     let mut body = json!({"model":config.model,"messages":messages,"tools":tool_definitions(online),"tool_choice":"auto","stream":true});
     // OpenAI's current API uses max_completion_tokens; compatible local servers
@@ -117,6 +122,7 @@ mod tests {
             socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{data}",data.len()).as_bytes()).await.unwrap();
         });
         let config = ChatConfig {
+            provider: crate::ai::chat::Provider::OpenAi,
             base_url: base,
             model: "test".into(),
         };

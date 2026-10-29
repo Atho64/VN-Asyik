@@ -153,6 +153,25 @@ tengah jalan lalu kembali lagi akan melanjutkan, bukan mengulang dari nol.
 Digest ditahan kecuali tingkat spoiler obrolan disetel ke _All_. Teks langsung
 tidak ditahan, karena kamu memang sudah membacanya.
 
+### Penyedia
+
+Pengaturan menyimpan daftar penyedia, bukan satu endpoint saja: masing-masing
+berisi nama, base URL yang kompatibel dengan OpenAI, dan model. Kuncinya tinggal
+di credential store sistem, satu slot per penyedia, tidak pernah di database atau
+file konfigurasi, dan berpindah penyedia tidak berarti mengetik ulang kunci.
+Setelan tunggal yang ada sebelum daftar ini otomatis jadi satu profil saat
+pertama dijalankan, lengkap dengan kuncinya.
+
+Dua endpoint yang sudah terbukti jalan lewat lapisan kompatibilitas:
+
+| Penyedia | Endpoint | Contoh model |
+| --- | --- | --- |
+| Google AI Studio | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` |
+| Runtime lokal | `http://127.0.0.1:11434/v1` (Ollama) | `qwen3` |
+
+`http` biasa hanya diterima di localhost, karena di tempat lain kuncinya akan
+terkirim tanpa enkripsi.
+
 ## Yang tidak akan dilakukan
 
 Sebagian karena batas platform, sebagian karena memang diputuskan begitu — tapi

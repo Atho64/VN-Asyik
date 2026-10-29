@@ -53,12 +53,10 @@ pub async fn script_compact(
     rebuild: Option<bool>,
 ) -> CommandResult<script::CompactionInfo> {
     let pool = state.db().pool().clone();
-    let config = crate::commands::ai::read_settings(&pool).await;
-    // Android's credential bridge must not block the UI thread.
-    let key = tauri::async_runtime::spawn_blocking(crate::secrets::load_chat_key)
-        .await
-        .map_err(|_| error("key_unavailable".into()))?
-        .ok();
+    let chat = crate::ai::profiles::resolve(&pool).await;
+    let config = chat.config;
+    // The active saved profile already resolved its key, off the UI thread.
+    let key = chat.key;
     if key.is_none() && !crate::commands::ai::is_local_endpoint(&config.base_url) {
         return Err(error("chat_key_missing".into()));
     }

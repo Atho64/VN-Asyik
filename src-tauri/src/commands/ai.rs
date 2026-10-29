@@ -99,23 +99,11 @@ pub(crate) fn is_local_endpoint(base: &str) -> bool {
     })
 }
 
-/// Chat provider settings, without the key.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatSettingsView {
-    /// Base URL of an OpenAI-compatible endpoint.
-    pub base_url: String,
-    /// Model name.
-    pub model: String,
-    /// Whether a key is stored, and where it is stored.
-    pub has_key: bool,
-    /// A masked hint of the key, when one is stored.
-    pub key_hint: Option<String>,
-    /// Whether this platform can store a key at all.
-    pub supported: bool,
-}
-
-pub(crate) async fn read_settings(pool: &sqlx::SqlitePool) -> crate::ai::chat::ChatConfig {
+/// The single chat setting that existed before saved profiles.
+///
+/// Read once, to migrate an installation: every other caller goes through
+/// [`crate::ai::profiles::resolve`], which knows about the saved list.
+pub(crate) async fn read_legacy_config(pool: &sqlx::SqlitePool) -> crate::ai::chat::ChatConfig {
     // Stored as a plain JSON blob in `sync_state`: it holds no secrets, and a
     // separate table for two strings would be noise.
     let defaults = crate::ai::chat::ChatConfig::default();
@@ -129,98 +117,210 @@ pub(crate) async fn read_settings(pool: &sqlx::SqlitePool) -> crate::ai::chat::C
     }
 }
 
-/// Report chat settings and whether a key is stored.
+/// One saved endpoint as the settings screen shows it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileView {
+    /// Stable id used by the edit and delete commands.
+    pub id: String,
+    /// Display name.
+    pub name: String,
+    /// Wire format the profile speaks.
+    pub provider: crate::ai::chat::Provider,
+    /// Base URL, without the trailing endpoint.
+    pub base_url: String,
+    /// Model name.
+    pub model: String,
+    /// Whether a key is stored for this profile.
+    pub has_key: bool,
+    /// A masked hint of that key, when one is stored.
+    pub key_hint: Option<String>,
+}
+
+/// The saved list, which profile is live, and whether keys can be stored here.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfilesView {
+    /// Id of the profile in use, absent while the list is empty.
+    pub active: Option<String>,
+    /// Saved endpoints in the order they were added.
+    pub profiles: Vec<ProfileView>,
+    /// Whether this platform can store a key at all.
+    pub supported: bool,
+}
+
+/// Build the view, reading each profile's key hint.
 ///
-/// # Errors
-/// Database failures.
-#[tauri::command]
-pub async fn ai_chat_settings(state: State<'_, AppState>) -> CommandResult<ChatSettingsView> {
-    let config = read_settings(state.db().pool()).await;
-    let key = crate::secrets::load_chat_key().ok();
-    Ok(ChatSettingsView {
-        base_url: config.base_url,
-        model: config.model,
-        has_key: key.is_some(),
-        key_hint: key.as_ref().map(crate::secrets::ChatApiKey::masked),
+/// One credential-store read per profile: the list is capped at ten and this runs
+/// only when the panel opens or a profile changes.
+async fn profiles_view(state: &AppState) -> CommandResult<ProfilesView> {
+    let saved = crate::ai::profiles::load(state.db().pool()).await;
+    let rows: Vec<_> = saved
+        .profiles
+        .iter()
+        .map(|profile| {
+            (
+                profile.id.clone(),
+                profile.name.clone(),
+                profile.provider,
+                profile.base_url.clone(),
+                profile.model.clone(),
+            )
+        })
+        .collect();
+    let checked = tauri::async_runtime::spawn_blocking(move || {
+        rows.into_iter()
+            .map(|(id, name, provider, base_url, model)| {
+                let key = crate::secrets::load_chat_key(crate::ai::profiles::key_slot(&id)).ok();
+                ProfileView {
+                    id,
+                    name,
+                    provider,
+                    base_url,
+                    model,
+                    has_key: key.is_some(),
+                    key_hint: key.as_ref().map(crate::secrets::ChatApiKey::masked),
+                }
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|err| CommandError::new("store_failed", err.to_string()))?;
+    Ok(ProfilesView {
+        active: saved.active,
+        profiles: checked,
         supported: crate::secrets::is_supported(),
     })
 }
 
-/// Payload for saving chat settings. A `None` key leaves the stored one alone,
-/// so editing the model does not require re-entering the key.
+/// List the saved LLM provider profiles.
+///
+/// # Errors
+/// Database failures.
+#[tauri::command]
+pub async fn ai_llm_profiles(state: State<'_, AppState>) -> CommandResult<ProfilesView> {
+    profiles_view(&state).await
+}
+
+/// One profile as the settings screen submits it. A missing id means "add".
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatSettingsInput {
-    /// Base URL of an OpenAI-compatible endpoint.
+pub struct ProfileInput {
+    /// Existing profile to edit.
+    pub id: Option<String>,
+    /// Display name.
+    pub name: String,
+    /// Wire format: `openai` or `anthropic`.
+    pub provider: String,
+    /// Base URL, without the trailing endpoint.
     pub base_url: String,
     /// Model name.
     pub model: String,
-    /// New key, when the user entered one.
+    /// New key, when the user entered one. Empty keeps the stored key, so
+    /// editing a model does not require re-entering it.
     pub key: Option<String>,
 }
 
-/// Save chat settings and, when supplied, the key.
+/// Save a profile and, when supplied, its key.
 ///
 /// # Errors
-/// `invalid` for a malformed URL or key, `unsupported` where no credential store
-/// exists.
+/// `name_required`, `url_insecure`, `model_required`, `unknown_profile`,
+/// `too_many_profiles`, `invalid_key` or `store_failed`.
 #[tauri::command]
-pub async fn ai_save_chat_settings(
+pub async fn ai_llm_save_profile(
     state: State<'_, AppState>,
-    input: ChatSettingsInput,
-) -> CommandResult<ChatSettingsView> {
-    let base = input.base_url.trim().trim_end_matches('/').to_owned();
-    if !base.starts_with("https://") && !is_local_endpoint(&base) {
-        // Plain http would send the key in clear text over a network. A loopback
-        // address is allowed because a local model runtime is the offline case.
-        return Err(CommandError::new(
-            "invalid",
-            "the endpoint must use https, or http on localhost",
-        ));
-    }
-    if input.model.trim().is_empty() {
-        return Err(CommandError::new("invalid", "model must not be empty"));
-    }
-
+    input: ProfileInput,
+) -> CommandResult<ProfilesView> {
+    let pool = state.db().pool();
+    let mut saved = crate::ai::profiles::load(pool).await;
+    let provider = crate::ai::chat::Provider::parse(&input.provider)
+        .map_err(|msg| CommandError::new("invalid_provider", msg))?;
+    let id = saved.upsert(&crate::ai::profiles::Input {
+        id: input.id,
+        name: input.name,
+        provider,
+        base_url: input.base_url,
+        model: input.model,
+    })?;
     if let Some(raw) = input.key.as_deref().filter(|text| !text.trim().is_empty()) {
         let key = crate::secrets::ChatApiKey::parse(raw)
-            .map_err(|err| CommandError::new("invalid", err))?;
-        crate::secrets::store_chat_key(&key).map_err(|err| match err {
-            crate::secrets::SecretError::Unsupported => {
-                CommandError::new("unsupported", "this platform cannot store the key securely")
-            }
-            other => CommandError::new("store_failed", other.to_string()),
-        })?;
+            .map_err(|msg| CommandError::new("invalid_key", msg))?;
+        let slot = crate::ai::profiles::key_slot(&id).to_owned();
+        tauri::async_runtime::spawn_blocking(move || crate::secrets::store_chat_key(&slot, &key))
+            .await
+            .map_err(|err| CommandError::new("store_failed", err.to_string()))?
+            .map_err(|err| match err {
+                crate::secrets::SecretError::Unsupported => {
+                    CommandError::new("unsupported", err.to_string())
+                }
+                other => CommandError::new("store_failed", other.to_string()),
+            })?;
     }
-
-    let config = crate::ai::chat::ChatConfig {
-        base_url: base,
-        model: input.model.trim().to_owned(),
-    };
-    let json = serde_json::to_string(&config)
-        .map_err(|err| CommandError::new("invalid", err.to_string()))?;
-    sqlx::query(
-        "INSERT INTO sync_state (key, value) VALUES ('chat.config', ?)          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    )
-    .bind(json)
-    .execute(state.db().pool())
-    .await
-    .map_err(|err| CommandError::new("db", err.to_string()))?;
-
-    ai_chat_settings(state).await
+    crate::ai::profiles::store(pool, &saved).await?;
+    profiles_view(&state).await
 }
 
-/// Remove the stored chat key.
+/// Make a saved profile the live one.
 ///
 /// # Errors
-/// `remove_failed` when the credential store refuses.
+/// `unknown_profile` when the id is gone, or a database failure.
 #[tauri::command]
-pub async fn ai_clear_chat_key(state: State<'_, AppState>) -> CommandResult<ChatSettingsView> {
-    match crate::secrets::clear_chat_key() {
-        Ok(()) | Err(crate::secrets::SecretError::NotFound) => {}
-        Err(err) => return Err(CommandError::new("remove_failed", err.to_string())),
+pub async fn ai_llm_activate_profile(
+    state: State<'_, AppState>,
+    id: String,
+) -> CommandResult<ProfilesView> {
+    let pool = state.db().pool();
+    let mut saved = crate::ai::profiles::load(pool).await;
+    saved.activate(&id)?;
+    crate::ai::profiles::store(pool, &saved).await?;
+    profiles_view(&state).await
+}
+
+/// Delete a profile and its stored key.
+///
+/// # Errors
+/// `unknown_profile` when the id is gone, or a database failure.
+#[tauri::command]
+pub async fn ai_llm_delete_profile(
+    state: State<'_, AppState>,
+    id: String,
+) -> CommandResult<ProfilesView> {
+    let pool = state.db().pool();
+    let mut saved = crate::ai::profiles::load(pool).await;
+    saved.remove(&id)?;
+    crate::ai::profiles::store(pool, &saved).await?;
+    // No profile can reach that key any more, so deleting the profile really
+    // deletes the credential instead of orphaning it in the store.
+    let slot = crate::ai::profiles::key_slot(&id).to_owned();
+    let _ =
+        tauri::async_runtime::spawn_blocking(move || crate::secrets::clear_chat_key(&slot)).await;
+    profiles_view(&state).await
+}
+
+/// Remove one profile's stored key, keeping the profile.
+///
+/// # Errors
+/// `unknown_profile` when the id is gone, `store_failed` when the store refuses.
+#[tauri::command]
+pub async fn ai_llm_clear_key(
+    state: State<'_, AppState>,
+    id: String,
+) -> CommandResult<ProfilesView> {
+    let saved = crate::ai::profiles::load(state.db().pool()).await;
+    if saved.find(&id).is_none() {
+        return Err(crate::ai::profiles::Invalid::UNKNOWN.into());
     }
-    ai_chat_settings(state).await
+    let slot = crate::ai::profiles::key_slot(&id).to_owned();
+    match tauri::async_runtime::spawn_blocking(move || crate::secrets::clear_chat_key(&slot)).await
+    {
+        Ok(Err(err)) if !matches!(err, crate::secrets::SecretError::NotFound) => {
+            return Err(CommandError::new("store_failed", err.to_string()));
+        }
+        Err(err) => return Err(CommandError::new("store_failed", err.to_string())),
+        // Clearing a key that was never stored is the state the caller asked for.
+        _ => {}
+    }
+    profiles_view(&state).await
 }
 
 // Recommendations
@@ -241,29 +341,46 @@ pub struct RecommendSettingsView {
     pub chat_model: String,
 }
 
+/// Build the recommendation view from the live state.
+///
+/// The "a key is stored" flag is reported for the active profile only: a key on
+/// an endpoint that would never be used is not a usable answer.
+async fn recommend_settings(
+    pool: &sqlx::SqlitePool,
+    has_tavily_key: bool,
+    tavily_key_hint: Option<String>,
+) -> CommandResult<RecommendSettingsView> {
+    let chat = crate::ai::profiles::resolve(pool).await;
+    Ok(RecommendSettingsView {
+        has_tavily_key,
+        tavily_key_hint,
+        has_chat_key: chat.key.is_some(),
+        supported: crate::secrets::is_supported(),
+        chat_model: chat.config.model,
+    })
+}
+
 /// Report what the recommendation screen can do.
+///
+/// # Errors
+/// `store_failed` when the credential store cannot be read.
 #[tauri::command]
 pub async fn ai_recommend_settings(
     state: State<'_, AppState>,
 ) -> CommandResult<RecommendSettingsView> {
     // Android Keystore resolves through the UI's native plugin bridge. Never
     // wait for that bridge from a synchronous command on the UI thread.
-    let (tavily, has_chat_key) = tauri::async_runtime::spawn_blocking(|| {
-        (
-            crate::secrets::load_tavily_key().ok(),
-            crate::secrets::load_chat_key().is_ok(),
-        )
-    })
-    .await
-    .map_err(|err| CommandError::new("store_failed", err.to_string()))?;
-    let config = read_settings(state.db().pool()).await;
-    Ok(RecommendSettingsView {
-        has_tavily_key: tavily.is_some(),
-        tavily_key_hint: tavily.as_ref().map(crate::secrets::TavilyApiKey::masked),
-        has_chat_key,
-        supported: crate::secrets::is_supported(),
-        chat_model: config.model,
-    })
+    let tavily = tauri::async_runtime::spawn_blocking(crate::secrets::load_tavily_key)
+        .await
+        .map_err(|err| CommandError::new("store_failed", err.to_string()))?
+        .ok();
+    let view = recommend_settings(
+        state.db().pool(),
+        tavily.is_some(),
+        tavily.as_ref().map(crate::secrets::TavilyApiKey::masked),
+    )
+    .await?;
+    Ok(view)
 }
 
 /// Store a Tavily API key in the OS credential store.
@@ -271,26 +388,24 @@ pub async fn ai_recommend_settings(
 /// # Errors
 /// A message describing an invalid key, or that this platform cannot store one.
 #[tauri::command]
-pub async fn ai_save_tavily_key(key: String) -> CommandResult<RecommendSettingsView> {
+pub async fn ai_save_tavily_key(
+    state: State<'_, AppState>,
+    key: String,
+) -> CommandResult<RecommendSettingsView> {
     let parsed = crate::secrets::TavilyApiKey::parse(&key)
         .map_err(|msg| CommandError::new("bad_key", msg))?;
+    let hint = parsed.masked();
     tauri::async_runtime::spawn_blocking(move || {
         crate::secrets::store_tavily_key(&parsed).map_err(|err| match err {
             crate::secrets::SecretError::Unsupported => {
                 CommandError::new("unsupported", err.to_string())
             }
             other => CommandError::new("store_failed", other.to_string()),
-        })?;
-        Ok(RecommendSettingsView {
-            has_tavily_key: true,
-            tavily_key_hint: Some(parsed.masked()),
-            has_chat_key: crate::secrets::load_chat_key().is_ok(),
-            supported: crate::secrets::is_supported(),
-            chat_model: crate::ai::chat::ChatConfig::default().model,
         })
     })
     .await
-    .map_err(|err| CommandError::new("store_failed", err.to_string()))?
+    .map_err(|err| CommandError::new("store_failed", err.to_string()))??;
+    recommend_settings(state.db().pool(), true, Some(hint)).await
 }
 
 /// Remove the stored Tavily key.
@@ -298,22 +413,16 @@ pub async fn ai_save_tavily_key(key: String) -> CommandResult<RecommendSettingsV
 /// # Errors
 /// A message when the store refuses.
 #[tauri::command]
-pub async fn ai_clear_tavily_key() -> CommandResult<RecommendSettingsView> {
-    tauri::async_runtime::spawn_blocking(|| {
-        match crate::secrets::clear_tavily_key() {
-            Ok(()) | Err(crate::secrets::SecretError::NotFound) => {}
-            Err(err) => return Err(CommandError::new("store_failed", err.to_string())),
-        }
-        Ok(RecommendSettingsView {
-            has_tavily_key: false,
-            tavily_key_hint: None,
-            has_chat_key: crate::secrets::load_chat_key().is_ok(),
-            supported: crate::secrets::is_supported(),
-            chat_model: crate::ai::chat::ChatConfig::default().model,
-        })
+pub async fn ai_clear_tavily_key(
+    state: State<'_, AppState>,
+) -> CommandResult<RecommendSettingsView> {
+    tauri::async_runtime::spawn_blocking(|| match crate::secrets::clear_tavily_key() {
+        Ok(()) | Err(crate::secrets::SecretError::NotFound) => Ok(()),
+        Err(err) => Err(CommandError::new("store_failed", err.to_string())),
     })
     .await
-    .map_err(|err| CommandError::new("store_failed", err.to_string()))?
+    .map_err(|err| CommandError::new("store_failed", err.to_string()))??;
+    recommend_settings(state.db().pool(), false, None).await
 }
 
 /// Ask what to read next.
@@ -393,7 +502,8 @@ pub async fn ai_recommend(
 
     // Naming games needs a chat model. Without one the search results are still
     // useful, so this degrades rather than failing.
-    let Ok(chat_key) = crate::secrets::load_chat_key() else {
+    let chat = crate::ai::profiles::resolve(pool).await;
+    let Some(chat_key) = chat.key else {
         outcome.note = Some(if search.results.is_empty() {
             "The search returned nothing. Add a commentary key in Settings to name games."
                 .to_owned()
@@ -404,11 +514,10 @@ pub async fn ai_recommend(
         return Ok(outcome);
     };
 
-    let config = read_settings(pool).await;
     let prompt = recommend::user_prompt(&request, &library, &search);
     match crate::ai::chat::complete(
         &client,
-        &config,
+        &chat.config,
         Some(&chat_key),
         recommend::system_prompt(),
         &prompt,

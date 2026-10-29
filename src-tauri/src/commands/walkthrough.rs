@@ -239,13 +239,12 @@ pub async fn walkthrough_translate(
             .await
             .map_err(error)?
     } else {
-        // AI translation
-        let chat_config = crate::commands::ai::read_settings(state.db().pool()).await;
-        let chat_key = crate::secrets::load_chat_key().ok();
+        // AI translation, through the active saved profile.
+        let chat = crate::ai::profiles::resolve(state.db().pool()).await;
         translate_batch_ai(
             &http,
-            &chat_config,
-            chat_key.as_ref(),
+            &chat.config,
+            chat.key.as_ref(),
             &texts_to_translate,
             &target_lang,
             &glossary,

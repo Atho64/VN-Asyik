@@ -335,7 +335,26 @@ pub fn tool_definitions(online: bool) -> Vec<Value> {
         ));
         specs.push(("search_web", "Search public VN information with Tavily, billed to the user's key. Only for needed public story/recommendation sources; never include private library notes or history in queries. Snippets can be incomplete or wrong.", json!({"query":text()}), vec!["query"]));
     }
-    specs.into_iter().map(|(name, description, properties, required)| json!({"type":"function","function":{"name":name,"description":description,"parameters":{"type":"object","properties":properties,"required":required,"additionalProperties":false}}})).collect()
+    specs
+        .into_iter()
+        .map(|(name, description, properties, required)| {
+            let mut function = json!({"name":name,"description":description});
+            // A tool with no arguments declares no parameter object at all.
+            //
+            // `parameters` is optional, and Gemini's OpenAI-compatible layer
+            // rejects an empty one with a bare 400 INVALID_ARGUMENT, which fails
+            // the whole request before the model ever sees it. Omitting the
+            // field is what OpenAI's own clients do for a zero-argument tool.
+            if properties.as_object().is_none_or(|map| !map.is_empty()) {
+                // `additionalProperties` is deliberately not sent: it has no
+                // effect without strict mode, and the compatibility layer refuses
+                // schemas whose parameter object is empty or unrecognised.
+                function["parameters"] =
+                    json!({"type":"object","properties":properties,"required":required});
+            }
+            json!({"type":"function","function":function})
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -350,6 +369,14 @@ pub struct ToolCall {
     #[serde(rename = "type")]
     pub kind: String,
     pub function: FunctionCall,
+    /// Provider data that must travel back unchanged and means nothing here.
+    ///
+    /// Gemini 3 signs each function call and rejects the next request when the
+    /// signature is missing, but the OpenAI-compatible layer carries it in an
+    /// `extra_content` field rather than a documented argument. The value is
+    /// echoed verbatim and never read, so it stays an opaque `Value`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_content: Option<Value>,
 }
 
 /// Bounded SSE decoding across arbitrary UTF-8 and TCP chunk boundaries.
@@ -434,10 +461,7 @@ impl CompletionStream {
                 .flatten()
                 .enumerate()
             {
-                let index = call["index"]
-                    .as_u64()
-                    .and_then(|n| usize::try_from(n).ok())
-                    .unwrap_or(position);
+                let index = self.tool_slot(position, call);
                 if index >= MAX_CALLS {
                     return Err("tool_limit".into());
                 }
@@ -445,14 +469,37 @@ impl CompletionStream {
                     id: String::new(),
                     kind: "function".into(),
                     function: FunctionCall::default(),
+                    extra_content: None,
                 });
-                if let Some(id) = call["id"].as_str() {
+                if entry.extra_content.is_none()
+                    && call["extra_content"].as_object().is_some_and(|_| {
+                        serde_json::to_string(&call["extra_content"])
+                            .is_ok_and(|text| text.len() <= 4096)
+                    })
+                {
+                    entry.extra_content = Some(call["extra_content"].clone());
+                }
+                // Set once. OpenAI sends the id and the name in the first fragment
+                // only, and a provider that repeats them on every fragment would
+                // otherwise build `search_librarysearch_library`.
+                if let Some(id) = call["id"].as_str()
+                    && entry.id.is_empty()
+                {
                     entry.id.push_str(id);
                 }
-                if call["type"].as_str().is_some_and(|kind| kind != "function") {
+                // `tool_call` is what Gemini's OpenAI-compatible layer writes where
+                // the specification says `function`. Rejecting it failed the whole
+                // reply with "tool not allowed" before the call could run, so both
+                // spellings name a function and anything else is still refused.
+                if call["type"]
+                    .as_str()
+                    .is_some_and(|kind| !matches!(kind, "function" | "tool_call"))
+                {
                     return Err("tool_not_allowed".into());
                 }
-                if let Some(name) = call["function"]["name"].as_str() {
+                if let Some(name) = call["function"]["name"].as_str()
+                    && entry.function.name.is_empty()
+                {
                     entry.function.name.push_str(name);
                 }
                 if let Some(args) = call["function"]["arguments"].as_str() {
@@ -470,6 +517,28 @@ impl CompletionStream {
             return Err("provider_response_too_large".into());
         }
         Ok(deltas)
+    }
+
+    /// Which accumulated call a streamed `tool_calls` entry belongs to.
+    ///
+    /// `OpenAI` numbers the entries with `index` and splits one call across several
+    /// chunks, so the index is the identity. Gemini's compatibility layer omits
+    /// it and sends each complete call in its own chunk with a distinct id: with
+    /// position-in-chunk as the key, three parallel calls landed in slot 0 and
+    /// their names and arguments were concatenated into one unusable call.
+    fn tool_slot(&self, position: usize, call: &Value) -> usize {
+        if let Some(index) = call["index"].as_u64().and_then(|n| usize::try_from(n).ok()) {
+            return index;
+        }
+        if let Some(id) = call["id"].as_str() {
+            if let Some((slot, _)) = self.calls.iter().find(|(_, held)| held.id == id) {
+                return *slot;
+            }
+            // A new id with no index is a new call, whatever the chunk position.
+            return self.calls.keys().next_back().map_or(0, |last| last + 1);
+        }
+        // No id and no index: another fragment of the call already in flight.
+        self.calls.keys().next_back().copied().unwrap_or(position)
     }
 
     pub fn validate_finished(&self) -> Result<(), String> {
@@ -608,6 +677,174 @@ mod tests {
         assert!(ToolArgs::parse("script_digest", "{}", &options()).is_ok());
         assert!(ToolArgs::parse("recent_game_text", r#"{"query":"x"}"#, &options()).is_err());
         assert!(ToolArgs::parse("script_digest", r#"{"game_id":"x"}"#, &options()).is_err());
+    }
+    #[test]
+    fn a_zero_argument_tool_declares_no_parameters_object() {
+        // Gemini's OpenAI-compatible layer answers a bare 400 to an empty
+        // `parameters` object, so the field is left out entirely and the schema
+        // stays portable across providers.
+        for online in [false, true] {
+            for tool in tool_definitions(online) {
+                let function = &tool["function"];
+                let has_properties = function["parameters"]["properties"]
+                    .as_object()
+                    .is_some_and(|map| !map.is_empty());
+                assert_eq!(
+                    function.get("parameters").is_some(),
+                    has_properties,
+                    "{} declares parameters only when it takes arguments",
+                    function["name"]
+                );
+                assert!(
+                    function.get("parameters").is_none_or(|parameters| {
+                        parameters.get("additionalProperties").is_none()
+                    }),
+                    "{} must not send additionalProperties",
+                    function["name"]
+                );
+            }
+        }
+        let argumentless: Vec<_> = tool_definitions(false)
+            .into_iter()
+            .filter(|tool| tool["function"].get("parameters").is_none())
+            .map(|tool| {
+                tool["function"]["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned()
+            })
+            .collect();
+        assert_eq!(
+            argumentless,
+            [
+                "library_stats",
+                "taste_profile",
+                "recent_game_text",
+                "script_digest"
+            ]
+        );
+    }
+    #[test]
+    fn parallel_calls_without_an_index_stay_separate_calls() {
+        // Captured from Gemini: no `index`, one complete call per chunk, repeated
+        // name. Merged into one slot they became a single call with the name
+        // `search_librarysearch_library` and two objects as its arguments, which
+        // the tool layer rejected as JSON.
+        let raw = concat!(
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"tool_call\",\"function\":{\"name\":\"search_library\",\"arguments\":\"{\\\"status\\\":\\\"playing\\\"}\"}}]}}]}
+
+",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_2\",\"type\":\"tool_call\",\"function\":{\"name\":\"search_library\",\"arguments\":\"{\\\"status\\\":\\\"on_hold\\\"}\"}}]}}]}
+
+",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_3\",\"type\":\"tool_call\",\"function\":{\"name\":\"search_library\",\"arguments\":\"{\\\"status\\\":\\\"wishlist\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}
+
+",
+            "data: [DONE]
+
+"
+        );
+        let mut stream = CompletionStream::default();
+        stream.push(raw.as_bytes()).unwrap();
+        stream.validate_finished().unwrap();
+        assert_eq!(stream.calls.len(), 3);
+        let calls: Vec<_> = stream.calls.values().collect();
+        assert_eq!(calls[0].id, "call_1");
+        assert_eq!(calls[1].id, "call_2");
+        assert_eq!(calls[2].id, "call_3");
+        for call in &calls {
+            assert_eq!(call.function.name, "search_library");
+        }
+        assert_eq!(calls[2].function.arguments, r#"{"status":"wishlist"}"#);
+        // Every one of them parses as the tool schema intends.
+        for call in &calls {
+            assert!(
+                ToolArgs::parse("search_library", &call.function.arguments, &options()).is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn a_repeated_index_still_merges_fragments() {
+        // The OpenAI shape, kept working: one call, arguments split over chunks.
+        let mut stream = CompletionStream::default();
+        for chunk in [
+            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search_library","arguments":"{\"query\":"}}]}}]}),
+            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"CLANNAD\"}"}}]},"finish_reason":"tool_calls"}]}),
+        ] {
+            stream.chunk(&chunk).unwrap();
+        }
+        stream.validate_finished().unwrap();
+        assert_eq!(stream.calls.len(), 1);
+        assert_eq!(stream.calls[&0].function.name, "search_library");
+        assert_eq!(
+            stream.calls[&0].function.arguments,
+            r#"{"query":"CLANNAD"}"#
+        );
+    }
+
+    #[test]
+    fn gemini_spells_the_call_type_tool_call_and_the_call_still_runs() {
+        // Observed from https://generativelanguage.googleapis.com/v1beta/openai:
+        // `"type": "tool_call"` where the specification says `"function"`.
+        let mut stream = CompletionStream::default();
+        stream
+            .chunk(&json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"tool_call","function":{"name":"search_library","arguments":"{\"status\":\"playing\"}"}}]},"finish_reason":"tool_calls"}]}))
+            .unwrap();
+        stream.validate_finished().unwrap();
+        assert_eq!(stream.calls[&0].function.name, "search_library");
+        assert_eq!(
+            stream.calls[&0].function.arguments,
+            r#"{"status":"playing"}"#
+        );
+        // The call goes back with the spelling every provider accepts.
+        assert_eq!(
+            serde_json::to_value(&stream.calls[&0]).unwrap()["type"],
+            "function"
+        );
+
+        // Anything that is not a function call is still refused.
+        let mut other = CompletionStream::default();
+        assert_eq!(
+            other
+                .chunk(&json!({"choices":[{"delta":{"tool_calls":[{"index":0,"type":"image"}]}}]}))
+                .unwrap_err(),
+            "tool_not_allowed"
+        );
+    }
+
+    #[test]
+    fn a_signed_tool_call_round_trips_its_extra_content() {
+        // Gemini 3 signs every function call; the signature has to come back on
+        // the next request or the whole conversation is refused.
+        let mut stream = CompletionStream::default();
+        stream
+            .chunk(&json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"library_stats","arguments":"{}"},"extra_content":{"google":{"thought_signature":"c2ln"}}}]},"finish_reason":"tool_calls"}]}))
+            .unwrap();
+        stream.validate_finished().unwrap();
+        let sent = serde_json::to_value(&stream.calls[&0]).unwrap();
+        assert_eq!(sent["extra_content"]["google"]["thought_signature"], "c2ln");
+        // A provider that sends nothing keeps the field out of the request.
+        let plain = ToolCall {
+            id: "call_2".into(),
+            kind: "function".into(),
+            function: FunctionCall::default(),
+            extra_content: None,
+        };
+        assert!(
+            serde_json::to_value(plain)
+                .unwrap()
+                .get("extra_content")
+                .is_none()
+        );
+    }
+    #[test]
+    fn an_unsigned_or_oversized_extra_content_is_dropped() {
+        let mut stream = CompletionStream::default();
+        stream
+            .chunk(&json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"library_stats","arguments":"{}"},"extra_content":"not an object"}]}}]}))
+            .unwrap();
+        assert!(stream.calls[&0].extra_content.is_none());
     }
     #[test]
     fn spoilers_are_removed_even_nested_or_unclosed() {

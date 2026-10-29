@@ -376,13 +376,16 @@ fn tavily_entry() -> Result<keyring::Entry, SecretError> {
     keyring::Entry::new(SERVICE, TAVILY_KEY_USER).map_err(|err| SecretError::Store(err.to_string()))
 }
 
-/// Write the chat key to the OS credential store.
+/// Write a chat key to the OS credential store, in the slot of one profile.
+///
+/// An empty slot is the entry used before saved profiles existed, so a key
+/// stored by an older build is still found by the migrated profile.
 ///
 /// # Errors
 /// [`SecretError::Unsupported`] where no store exists, or the store error.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-pub fn store_chat_key(key: &ChatApiKey) -> Result<(), SecretError> {
-    let entry = chat_entry()?;
+pub fn store_chat_key(slot: &str, key: &ChatApiKey) -> Result<(), SecretError> {
+    let entry = chat_entry(slot)?;
     entry
         .set_password(key.expose())
         .map_err(|err| SecretError::Store(err.to_string()))
@@ -394,7 +397,7 @@ pub fn store_chat_key(key: &ChatApiKey) -> Result<(), SecretError> {
     target_os = "linux",
     target_os = "android"
 )))]
-pub fn store_chat_key(_key: &ChatApiKey) -> Result<(), SecretError> {
+pub fn store_chat_key(_slot: &str, _key: &ChatApiKey) -> Result<(), SecretError> {
     Err(SecretError::Unsupported)
 }
 
@@ -404,8 +407,8 @@ pub fn store_chat_key(_key: &ChatApiKey) -> Result<(), SecretError> {
 /// [`SecretError::NotFound`] when nothing is stored, or
 /// [`SecretError::Unsupported`] on platforms without a store.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-pub fn load_chat_key() -> Result<ChatApiKey, SecretError> {
-    let entry = chat_entry()?;
+pub fn load_chat_key(slot: &str) -> Result<ChatApiKey, SecretError> {
+    let entry = chat_entry(slot)?;
     match entry.get_password() {
         Ok(raw) => ChatApiKey::parse(&raw).map_err(SecretError::Store),
         Err(err) => Err(map_store_error(&err)),
@@ -418,7 +421,7 @@ pub fn load_chat_key() -> Result<ChatApiKey, SecretError> {
     target_os = "linux",
     target_os = "android"
 )))]
-pub fn load_chat_key() -> Result<ChatApiKey, SecretError> {
+pub fn load_chat_key(_slot: &str) -> Result<ChatApiKey, SecretError> {
     Err(SecretError::Unsupported)
 }
 
@@ -427,8 +430,8 @@ pub fn load_chat_key() -> Result<ChatApiKey, SecretError> {
 /// # Errors
 /// The store error, or [`SecretError::NotFound`] when there was nothing.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-pub fn clear_chat_key() -> Result<(), SecretError> {
-    let entry = chat_entry()?;
+pub fn clear_chat_key(slot: &str) -> Result<(), SecretError> {
+    let entry = chat_entry(slot)?;
     entry
         .delete_credential()
         .map_err(|err| map_store_error(&err))
@@ -440,16 +443,21 @@ pub fn clear_chat_key() -> Result<(), SecretError> {
     target_os = "linux",
     target_os = "android"
 )))]
-pub fn clear_chat_key() -> Result<(), SecretError> {
+pub fn clear_chat_key(_slot: &str) -> Result<(), SecretError> {
     Err(SecretError::Unsupported)
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn chat_entry() -> Result<keyring::Entry, SecretError> {
+fn chat_entry(slot: &str) -> Result<keyring::Entry, SecretError> {
     if keyring::Entry::store_status().is_err() {
         return Err(SecretError::Unsupported);
     }
-    keyring::Entry::new(SERVICE, CHAT_KEY_USER).map_err(|err| SecretError::Store(err.to_string()))
+    let user = if slot.is_empty() {
+        CHAT_KEY_USER.to_owned()
+    } else {
+        format!("{CHAT_KEY_USER}.{slot}")
+    };
+    keyring::Entry::new(SERVICE, &user).map_err(|err| SecretError::Store(err.to_string()))
 }
 
 /// A Discord user token for connecting to the Discord Gateway on Android.
@@ -750,18 +758,32 @@ pub fn clear_vndb_token() -> Result<(), SecretError> {
 }
 
 #[cfg(target_os = "android")]
-pub fn store_chat_key(key: &ChatApiKey) -> Result<(), SecretError> {
-    crate::platform::storage::write_secret("chat", key.expose()).map_err(SecretError::Store)
+pub fn store_chat_key(slot: &str, key: &ChatApiKey) -> Result<(), SecretError> {
+    crate::platform::storage::write_secret(&android_name("chat", slot), key.expose())
+        .map_err(SecretError::Store)
 }
 
 #[cfg(target_os = "android")]
-pub fn load_chat_key() -> Result<ChatApiKey, SecretError> {
-    ChatApiKey::parse(&android_secret("chat")?).map_err(SecretError::Store)
+pub fn load_chat_key(slot: &str) -> Result<ChatApiKey, SecretError> {
+    ChatApiKey::parse(&android_secret(&android_name("chat", slot))?).map_err(SecretError::Store)
 }
 
 #[cfg(target_os = "android")]
-pub fn clear_chat_key() -> Result<(), SecretError> {
-    crate::platform::storage::remove_secret("chat").map_err(SecretError::Store)
+pub fn clear_chat_key(slot: &str) -> Result<(), SecretError> {
+    crate::platform::storage::remove_secret(&android_name("chat", slot)).map_err(SecretError::Store)
+}
+
+/// Vault entry name for one credential slot.
+///
+/// The vault stores each secret as `<name>.enc` in a private directory, so the
+/// slot is restricted to characters that cannot climb out of it.
+#[cfg(target_os = "android")]
+fn android_name(kind: &str, slot: &str) -> String {
+    if slot.is_empty() {
+        kind.to_owned()
+    } else {
+        format!("{kind}.{slot}")
+    }
 }
 
 #[cfg(target_os = "android")]

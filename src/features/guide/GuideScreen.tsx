@@ -54,6 +54,8 @@ export function GuideScreen() {
               <li>{t(`guide.${key}.p1`)}</li>
               <li>{t(`guide.${key}.p2`)}</li>
               <li>{t(`guide.${key}.p3`)}</li>
+              {/* Only the chat section has a fourth point: saved providers. */}
+              {key === "chat" ? <li>{t("guide.chat.p4")}</li> : null}
             </ul>
           </div>
         </article>

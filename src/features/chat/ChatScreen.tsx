@@ -13,7 +13,7 @@ import {
   type ChatThread,
 } from "@/lib/ipc/chat";
 import { hookApi, type HookStatusView } from "@/lib/ipc/hook";
-import type { ChatSettings } from "@/lib/ipc/types";
+import type { LlmProfiles } from "@/lib/ipc/types";
 import { ChatMessageView } from "./ChatMessageView";
 
 /** The companion's personalities, mirroring `vn_core::chat::Persona::ALL`. */
@@ -66,7 +66,7 @@ export function ChatScreen() {
   const [current, setCurrent] = useState<ChatThread | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [live, setLive] = useState<ChatMessage | null>(null);
-  const [settings, setSettings] = useState<ChatSettings | null>(null);
+  const [provider, setProvider] = useState<LlmProfiles | null>(null);
   const [hookStatus, setHookStatus] = useState<HookStatusView | null>(null);
   const [options, setOptions] = useState<ChatOptions>({
     gameId: params.get("game"),
@@ -122,11 +122,11 @@ export function ChatScreen() {
     fetchHook();
     const hookTimer = setInterval(fetchHook, 3000);
 
-    void Promise.all([chatApi.list(), api.aiChatSettings()])
-      .then(([list, provider]) => {
+    void Promise.all([chatApi.list(), api.aiLlmProfiles()])
+      .then(([list, profiles]) => {
         if (mounted.current) {
           setThreads(list);
-          setSettings(provider);
+          setProvider(profiles);
           setLoading(false);
         }
       })
@@ -202,8 +202,7 @@ export function ChatScreen() {
       busy ||
       loading ||
       (!retry && !draft.trim()) ||
-      !settings ||
-      (!settings.hasKey && !localEndpoint(settings.baseUrl))
+      !usable
     )
       return;
     operation.current = true;
@@ -322,7 +321,16 @@ export function ChatScreen() {
     }
   }
 
-  const configured = settings && (settings.hasKey || localEndpoint(settings.baseUrl));
+  /* The composer needs an endpoint that can answer: the active profile, with a
+   * stored key or a local runtime that does not need one. A saved profile that
+   * is not the active one does not count. */
+  const activeProfile =
+    provider?.profiles.find((profile) => profile.id === provider.active) ?? null;
+  const usable = Boolean(
+    activeProfile &&
+    (activeProfile.hasKey || localEndpoint(activeProfile.baseUrl)),
+  );
+  const configured = provider !== null && usable;
   const locked = messages.length > 0 || busy;
   const last = messages.at(-1);
   return (
@@ -549,7 +557,9 @@ export function ChatScreen() {
 
           <div className="vnchat__provider">
             <span>{t("vnchat.provider")}</span>
-            <strong title={settings?.model ?? undefined}>{settings?.model ?? "…"}</strong>
+            <strong title={activeProfile?.model ?? undefined}>
+              {activeProfile?.model ?? "…"}
+            </strong>
             <Link to="/settings">{t("vnchat.configure")}</Link>
           </div>
         </aside>

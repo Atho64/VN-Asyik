@@ -41,11 +41,61 @@ impl std::fmt::Display for ChatError {
 
 impl std::error::Error for ChatError {}
 
+/// Which wire format a saved endpoint speaks.
+///
+/// Gemini's OpenAI-compatible layer is `openai`: the difference that matters is
+/// the request and response *shape*, not who runs the server. Anthropic's Messages
+/// API is its own shape, so it gets its own variant.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Provider {
+    /// `POST {base}/chat/completions`, `Authorization: Bearer`.
+    ///
+    /// Spelled out because `snake_case` turns the variant name into `open_ai`:
+    /// the UI and every stored profile say `openai`, and the alias keeps a blob
+    /// written by a build that sent the split spelling readable.
+    #[default]
+    #[serde(rename = "openai", alias = "open_ai")]
+    OpenAi,
+    /// `POST {base}/messages`, `x-api-key` plus `anthropic-version`.
+    Anthropic,
+}
+
+impl Provider {
+    /// Every provider the app can speak to.
+    pub const ALL: [Self; 2] = [Self::OpenAi, Self::Anthropic];
+
+    /// The key the UI and the stored profile use.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::OpenAi => "openai",
+            Self::Anthropic => "anthropic",
+        }
+    }
+
+    /// Read the id the UI sends.
+    ///
+    /// # Errors
+    /// The unknown id, so the caller can report it instead of guessing.
+    pub fn parse(raw: &str) -> Result<Self, String> {
+        match raw.trim() {
+            "openai" | "" => Ok(Self::OpenAi),
+            "anthropic" => Ok(Self::Anthropic),
+            other => Err(format!("unknown provider: {other}")),
+        }
+    }
+}
+
 /// Where the chat provider lives.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatConfig {
-    /// Base URL, without the trailing `/chat/completions`.
+    /// Which wire format this endpoint speaks. Older stored configs have no
+    /// field and read as `openai`.
+    #[serde(default)]
+    pub provider: Provider,
+    /// Base URL, without the trailing `/chat/completions` (or `/messages`).
     pub base_url: String,
     /// Model name as the provider spells it.
     pub model: String,
@@ -57,6 +107,7 @@ impl Default for ChatConfig {
         // self-hosted and local runtimes. Defaulting to an OpenAI URL would push
         // users toward the one option that is not offline.
         Self {
+            provider: Provider::OpenAi,
             base_url: "https://api.openai.com/v1".to_owned(),
             model: "gpt-4o-mini".to_owned(),
         }
@@ -165,6 +216,9 @@ async fn request(
     user: &str,
     max_tokens: u32,
 ) -> Result<String, ChatError> {
+    if config.provider == Provider::Anthropic {
+        return request_anthropic(client, config, key, system, user, max_tokens).await;
+    }
     let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
     let body = ChatRequest {
         model: &config.model,
@@ -241,9 +295,92 @@ async fn request(
     }
 }
 
+/// Anthropic's Messages API, in the shape this app sends (`system` at the top
+/// level, one user turn, no tools).
+async fn request_anthropic(
+    client: &reqwest::Client,
+    config: &ChatConfig,
+    key: Option<&ChatApiKey>,
+    system: &str,
+    user: &str,
+    max_tokens: u32,
+) -> Result<String, ChatError> {
+    let url = format!("{}/messages", config.base_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": config.model,
+        "max_tokens": max_tokens,
+        "temperature": 0.3,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+    });
+    let mut request = client
+        .post(&url)
+        .header("anthropic-version", ANTHROPIC_VERSION)
+        .json(&body);
+    if let Some(key) = key {
+        request = request.header("x-api-key", key.expose());
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|err| ChatError::Offline(err.to_string()))?;
+    match response.status().as_u16() {
+        200..=299 => {}
+        401 | 403 => return Err(ChatError::Unauthorized),
+        429 => return Err(ChatError::Throttled),
+        other => return Err(ChatError::BadResponse(format!("HTTP {other}"))),
+    }
+    let parsed: AnthropicResponse = response
+        .json()
+        .await
+        .map_err(|err| ChatError::BadResponse(err.to_string()))?;
+    let text: String = parsed
+        .content
+        .iter()
+        .filter(|block| block.kind == "text")
+        .map(|block| block.text.as_str())
+        .collect::<String>();
+    let truncated = parsed.stop_reason.as_deref() == Some("max_tokens");
+    if text.trim().is_empty() {
+        return Err(ChatError::BadResponse(if truncated {
+            "the reply hit the token limit before finishing".to_owned()
+        } else {
+            "empty response".to_owned()
+        }));
+    }
+    Ok(if truncated {
+        clean_truncated_tail(&text)
+    } else {
+        text
+    })
+}
+
+/// The `anthropic-version` header this app sends. Pinned, because a moving
+/// version would change the response shape without a code change here.
+pub const ANTHROPIC_VERSION: &str = "2023-06-01";
+
+#[derive(Debug, Deserialize)]
+struct AnthropicBlock {
+    /// `text` for an answer, `thinking` for reasoning, `tool_use` for a call.
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    text: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicResponse {
+    #[serde(default)]
+    content: Vec<AnthropicBlock>,
+    /// Why the model stopped: `end_turn`, `max_tokens`, `tool_use`.
+    #[serde(default)]
+    stop_reason: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn the_default_config_points_at_a_configurable_endpoint() {
@@ -252,6 +389,22 @@ mod tests {
         let config = ChatConfig::default();
         assert!(config.base_url.starts_with("https://"));
         assert!(!config.model.is_empty(), "a default config names a model");
+    }
+
+    #[test]
+    fn a_provider_serializes_as_the_id_the_ui_sends() {
+        // `snake_case` alone spells this variant `open_ai`, which the settings
+        // schema rejects: the panel showed a contract error instead of the list.
+        assert_eq!(json!(Provider::OpenAi), json!("openai"));
+        assert_eq!(json!(Provider::Anthropic), json!("anthropic"));
+        for spelling in ["openai", "open_ai"] {
+            assert_eq!(
+                serde_json::from_value::<Provider>(json!(spelling)).expect("parse"),
+                Provider::OpenAi
+            );
+        }
+        assert_eq!(Provider::parse("openai"), Ok(Provider::OpenAi));
+        assert!(Provider::parse("gemini").is_err());
     }
 
     #[test]

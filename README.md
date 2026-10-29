@@ -146,6 +146,24 @@ back resumes where it stopped instead of starting over.
 Digests are withheld unless the chat's spoiler level is set to _All_. Live text
 is not, because you already read it.
 
+### Providers
+
+Settings keeps a list of saved providers rather than one endpoint: a name, an
+OpenAI-compatible base URL and a model each. The keys live in the OS credential
+store, one slot per provider, never in the database or a config file, and
+switching provider does not mean retyping a key. The one setting that existed
+before this list is migrated into a profile on first run, key included.
+
+Two endpoints are known to work through the compatibility layer:
+
+| Provider | Endpoint | Example model |
+| --- | --- | --- |
+| Google AI Studio | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` |
+| Local runtime | `http://127.0.0.1:11434/v1` (Ollama) | `qwen3` |
+
+Plain `http` is accepted only on localhost, because anywhere else it would send
+the key in clear text.
+
 ## What it will not do
 
 Some of this is a platform limit and some is a decision, but either way the app

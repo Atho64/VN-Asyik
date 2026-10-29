@@ -363,15 +363,40 @@ export const usageAccessViewSchema = z.object({
 export type UsageAccessView = z.infer<typeof usageAccessViewSchema>;
 
 /** Device-to-device sync status. */
-/** Chat provider settings, without the key. */
-export const chatSettingsSchema = z.object({
+/** One saved LLM provider profile, without its key. */
+export const llmProviderSchema = z.enum(["openai", "anthropic"]);
+export type LlmProvider = z.infer<typeof llmProviderSchema>;
+
+export const llmProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** Which wire format the endpoint speaks. */
+  provider: llmProviderSchema,
   baseUrl: z.string(),
   model: z.string(),
   hasKey: z.boolean(),
   keyHint: z.string().nullable(),
+});
+export type LlmProfile = z.infer<typeof llmProfileSchema>;
+
+/** The saved provider profiles and which one is live. */
+export const llmProfilesSchema = z.object({
+  active: z.string().nullable(),
+  profiles: z.array(llmProfileSchema),
   supported: z.boolean(),
 });
-export type ChatSettings = z.infer<typeof chatSettingsSchema>;
+export type LlmProfiles = z.infer<typeof llmProfilesSchema>;
+
+/** One profile as the panel submits it. A missing id adds a new one. */
+export interface LlmProfileInput {
+  id?: string;
+  name: string;
+  provider: LlmProvider;
+  baseUrl: string;
+  model: string;
+  /** Omit to keep the stored key. */
+  key?: string;
+}
 
 /** One tag the library carries, with the games behind it. */
 export const tasteThemeSchema = z.object({

@@ -29,7 +29,7 @@ import {
   syncOutcomeSchema,
   conflictViewSchema,
   tasteViewSchema,
-  chatSettingsSchema,
+  llmProfilesSchema,
   recommendSettingsSchema,
   recommendOutcomeSchema,
   launchCapabilitySchema,
@@ -79,7 +79,8 @@ import {
   type SyncOutcome,
   type ConflictView,
   type TasteView,
-  type ChatSettings,
+  type LlmProfileInput,
+  type LlmProfiles,
   type RecommendSettings,
   type RecommendOutcome,
   type LaunchCapability,
@@ -312,13 +313,11 @@ export interface Api {
   syncRun(folder: string): Promise<SyncOutcome>;
   syncConflicts(limit: number): Promise<ConflictView[]>;
   aiTasteProfile(): Promise<TasteView>;
-  aiChatSettings(): Promise<ChatSettings>;
-  aiSaveChatSettings(input: {
-    baseUrl: string;
-    model: string;
-    key?: string;
-  }): Promise<ChatSettings>;
-  aiClearChatKey(): Promise<ChatSettings>;
+  aiLlmProfiles(): Promise<LlmProfiles>;
+  aiLlmSaveProfile(input: LlmProfileInput): Promise<LlmProfiles>;
+  aiLlmActivateProfile(id: string): Promise<LlmProfiles>;
+  aiLlmDeleteProfile(id: string): Promise<LlmProfiles>;
+  aiLlmClearKey(id: string): Promise<LlmProfiles>;
   aiRecommendSettings(): Promise<RecommendSettings>;
   aiSaveTavilyKey(key: string): Promise<RecommendSettings>;
   aiClearTavilyKey(): Promise<RecommendSettings>;
@@ -607,10 +606,13 @@ export const api: Api = {
     call("tracking_android_session", androidSessionViewSchema),
   trackingAndroidStop: () => call("tracking_android_stop", androidSessionViewSchema),
   aiTasteProfile: () => call("ai_taste_profile", tasteViewSchema),
-  aiChatSettings: () => call("ai_chat_settings", chatSettingsSchema),
-  aiSaveChatSettings: (input) =>
-    call("ai_save_chat_settings", chatSettingsSchema, { input }),
-  aiClearChatKey: () => call("ai_clear_chat_key", chatSettingsSchema),
+  aiLlmProfiles: () => call("ai_llm_profiles", llmProfilesSchema),
+  aiLlmSaveProfile: (input) =>
+    call("ai_llm_save_profile", llmProfilesSchema, { input }),
+  aiLlmActivateProfile: (id) =>
+    call("ai_llm_activate_profile", llmProfilesSchema, { id }),
+  aiLlmDeleteProfile: (id) => call("ai_llm_delete_profile", llmProfilesSchema, { id }),
+  aiLlmClearKey: (id) => call("ai_llm_clear_key", llmProfilesSchema, { id }),
   aiRecommendSettings: () => call("ai_recommend_settings", recommendSettingsSchema),
   aiSaveTavilyKey: (key) => call("ai_save_tavily_key", recommendSettingsSchema, { key }),
   aiClearTavilyKey: () => call("ai_clear_tavily_key", recommendSettingsSchema),

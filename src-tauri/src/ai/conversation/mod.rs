@@ -1,4 +1,5 @@
 //! Persistent chat with a bounded, read-only tool loop and cancellation.
+mod anthropic;
 pub mod store;
 pub mod tools;
 mod transport;
@@ -117,12 +118,11 @@ pub async fn send(
 ) -> Result<ChatMessage, String> {
     let (_lease, mut cancelled) = state.chat().enter(id)?;
     let thread = store::get(state.db().pool(), id).await?;
-    let config = crate::commands::ai::read_settings(state.db().pool()).await;
-    // Android's credential bridge must not block the UI thread.
-    let key = tauri::async_runtime::spawn_blocking(crate::secrets::load_chat_key)
-        .await
-        .map_err(|_| "key_unavailable")?
-        .ok();
+    // The active saved profile supplies the endpoint, the model and its key.
+    // Android's credential bridge must not block the UI thread, which `resolve`
+    // already handles.
+    let chat = crate::ai::profiles::resolve(state.db().pool()).await;
+    let (config, key) = (chat.config, chat.key);
     if key.is_none() && !crate::commands::ai::is_local_endpoint(&config.base_url) {
         return Err("chat_key_missing".into());
     }
@@ -367,6 +367,19 @@ async fn run_request(
     run_loop(ctx, config, key, &mut history, message, channel).await
 }
 
+/// The `content` of a replayed assistant turn that only asked for tools.
+///
+/// `OpenAI` and its clones accept `null` there; an empty
+/// string is not the same message. Gemini's compatibility layer rejects the
+/// empty form outright, which broke the second round of every tool call.
+fn assistant_content(text: &str) -> serde_json::Value {
+    if text.trim().is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::String(text.to_owned())
+    }
+}
+
 async fn run_loop(
     ctx: &tools::ToolContext<'_>,
     config: &crate::ai::chat::ChatConfig,
@@ -404,7 +417,7 @@ async fn run_loop(
         if message.tools.len() + calls.len() > MAX_CALLS {
             return Err("tool_limit".into());
         }
-        history.push(json!({"role":"assistant","content":completion.content,"tool_calls":calls}));
+        history.push(json!({"role":"assistant","content":assistant_content(&completion.content),"tool_calls":calls}));
         if !message.content.is_empty() {
             message.content.push_str("\n\n");
             let _ = channel.send(ChatEvent::Delta {
