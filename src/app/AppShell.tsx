@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
@@ -23,6 +23,7 @@ interface NavEntry {
     | "nav.recommend"
     | "vnchat.title"
     | "nav.settings"
+    | "nav.presence"
     | "nav.guide";
   icon: IconName;
 }
@@ -38,6 +39,7 @@ const navEntries: NavEntry[] = [
   { to: "/stats", labelKey: "nav.stats", icon: "stats" },
   { to: "/recommend", labelKey: "nav.recommend", icon: "spark" },
   { to: "/chat", labelKey: "vnchat.title", icon: "chat" },
+  { to: "/presence", labelKey: "nav.presence", icon: "gamepad" },
   { to: "/guide", labelKey: "nav.guide", icon: "guide" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ];
@@ -49,10 +51,12 @@ const moreEntries = navEntries.filter((entry) => !mobilePaths.has(entry.to));
 export function AppShell() {
   const { t } = useI18n();
   const paletteOpen = useAppStore((state) => state.paletteOpen);
+  const appearance = useAppStore((state) => state.appearance);
   const setPaletteOpen = useAppStore((state) => state.setPaletteOpen);
   const [moreOpen, setMoreOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const moreActive = moreEntries.some((entry) => entry.to === pathname);
   const settingsActive =
     pathname === "/settings" || pathname === "/sync" || pathname === "/devices";
@@ -74,14 +78,36 @@ export function AppShell() {
         e.preventDefault();
         void api.toggleWindow();
       }
+      // Big Picture is the one mode worth a global shortcut: it is opened from a
+      // sofa, where reaching the toolbar is the awkward part.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "B" || e.key === "b")) {
+        e.preventDefault();
+        void navigate("/big-picture");
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="app">
-      <Backdrop />
+      {/* A chosen wallpaper replaces the living artwork wash: a wallpaper is a
+       * deliberate choice, and two full-screen images fighting over the same
+       * pixels is a blur, not a backdrop. */}
+      {appearance?.background ? (
+        <div
+          className="app-backdrop"
+          aria-hidden
+          style={{ backgroundImage: `url(${appearance.background})` }}
+        >
+          <div
+            className="backdrop__scrim"
+            style={{ opacity: appearance.backgroundDim }}
+          />
+        </div>
+      ) : (
+        <Backdrop />
+      )}
 
       <nav className="rail" aria-label={t("app.name")}>
         <div className="rail__brand">

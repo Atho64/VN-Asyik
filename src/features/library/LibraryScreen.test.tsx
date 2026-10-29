@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
 
 import { LibraryScreen } from "./LibraryScreen";
 import { useAppStore } from "@/app/store";
@@ -67,9 +68,11 @@ const cards: GameCard[] = [
 
 function renderScreen() {
   return render(
-    <main className="app__main">
-      <LibraryScreen />
-    </main>,
+    <MemoryRouter>
+      <main className="app__main">
+        <LibraryScreen />
+      </main>
+    </MemoryRouter>,
   );
 }
 

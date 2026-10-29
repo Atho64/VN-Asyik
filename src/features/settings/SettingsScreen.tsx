@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
+import { Card, CardHeader } from "@/components/Card";
 import { Chip } from "@/components/Chip";
 import { Icon } from "@/components/Icon";
+import { AppearancePanel } from "@/features/settings/AppearancePanel";
 import { ChatPanel } from "@/features/settings/ChatPanel";
 import { LocalePanel } from "@/features/settings/LocalePanel";
 import { LunaPanel } from "@/features/settings/LunaPanel";
-import { PresencePanel } from "@/features/settings/PresencePanel";
 import { TitleParsingPanel } from "@/features/settings/TitleParsingPanel";
+import { UpdatePanel } from "@/features/update/UpdatePanel";
 import { SyncScreen } from "@/features/sync/SyncScreen";
 import { DeviceSyncScreen } from "@/features/sync/DeviceSyncScreen";
 import { api, IpcError } from "@/lib/ipc/client";
@@ -275,12 +278,36 @@ export default function SettingsScreen({ initialTab }: { initialTab?: SettingsTa
           ) : null}
 
           <section className="settings__group">
+            <h2 className="settings__group-title">{t("appearance.group")}</h2>
+            <AppearancePanel />
+          </section>
+
+          <section className="settings__group">
+            <h2 className="settings__group-title">{t("settings.updates")}</h2>
+            <UpdatePanel />
+          </section>
+
+          <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.languageTools")}</h2>
             <ChatPanel />
             <LunaPanel />
             {isWindows ? <LocalePanel /> : null}
             {isWindows ? <TitleParsingPanel /> : null}
-            {canUsePresence ? <PresencePanel /> : null}
+            {/* The panel outgrew this screen: preview, image host, templates and a
+                rotation list. It has its own page now, and this is the way in. */}
+            {canUsePresence ? (
+              <Card>
+                <CardHeader
+                  title={t("settings.presence")}
+                  aside={
+                    <Link className="btn btn--secondary" to="/presence">
+                      {t("common.open")}
+                    </Link>
+                  }
+                />
+                <p className="card__intro">{t("settings.presenceHint")}</p>
+              </Card>
+            ) : null}
           </section>
 
           {syncSettings ? (

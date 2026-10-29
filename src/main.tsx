@@ -95,6 +95,24 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: "big-picture",
+        lazy: async () => {
+          const { BigPictureScreen } = await import(
+            "@/features/bigpicture/BigPictureScreen"
+          );
+          return { Component: BigPictureScreen };
+        },
+      },
+      {
+        path: "presence",
+        lazy: async () => {
+          const { PresenceScreen } = await import(
+            "@/features/presence/PresenceScreen"
+          );
+          return { Component: PresenceScreen };
+        },
+      },
+      {
         path: "chat",
         lazy: async () => {
           const { ChatScreen } = await import("@/features/chat/ChatScreen");

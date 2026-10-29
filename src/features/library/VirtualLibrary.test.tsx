@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
 
 import { VirtualLibrary, type LibraryView } from "./VirtualLibrary";
 import { LibraryScreen } from "./LibraryScreen";
@@ -380,9 +381,11 @@ describe("virtual library", () => {
   it("LibraryScreen resets the real main scroller for search and sort changes", () => {
     useAppStore.setState({ cards, libraryLoaded: true, libraryError: null });
     const result = render(
-      <main className="app__main">
-        <LibraryScreen />
-      </main>,
+      <MemoryRouter>
+        <main className="app__main">
+          <LibraryScreen />
+        </main>
+      </MemoryRouter>,
     );
     const main = result.container.querySelector<HTMLElement>("main")!;
     act(() => {

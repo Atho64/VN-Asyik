@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
@@ -6,6 +7,7 @@ import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
+import { UpdateBanner } from "@/features/update/UpdatePanel";
 import { api } from "@/lib/ipc/client";
 import { filterCards, sortCards, statusOrder, type SortKey } from "@/lib/library";
 import type { GameStatus } from "@/lib/ipc/types";
@@ -22,6 +24,7 @@ import { VirtualLibrary } from "./VirtualLibrary";
  */
 export function LibraryScreen() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const cards = useAppStore((state) => state.cards);
   const loaded = useAppStore((state) => state.libraryLoaded);
   const error = useAppStore((state) => state.libraryError);
@@ -122,6 +125,8 @@ export function LibraryScreen() {
 
   return (
     <>
+      <UpdateBanner />
+
       <div className="library__bar">
         <div className="search">
           <span className="search__icon">
@@ -136,6 +141,16 @@ export function LibraryScreen() {
             aria-label={t("library.searchLabel")}
           />
         </div>
+
+        <Button
+          variant="ghost"
+          onClick={() => navigate("/big-picture")}
+          title={t("bp.entryHint")}
+          aria-label={t("bp.title")}
+        >
+          <Icon name="screen" />
+          <span className="bp-entry__label">{t("bp.entry")}</span>
+        </Button>
 
         <div className="tabs" role="tablist" aria-label={t("library.view")}>
           {(

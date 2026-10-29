@@ -32,6 +32,8 @@ export type IconName =
   | "play"
   | "image"
   | "guide"
+  | "gamepad"
+  | "screen"
   | "trash";
 
 interface IconProps {
@@ -71,6 +73,20 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <path d="M12 6.8C10 5 7.4 4.4 4 4.7v13.4c3.4-.3 6 .4 8 2.2 2-1.8 4.6-2.5 8-2.2V4.7c-3.4-.3-6 .3-8 2.1z" />
       <path d="M12 6.8v13.5" />
+    </>
+  ),
+  screen: (
+    <>
+      <path d="M3 5.5h18v11H3z" />
+      <path d="M9 20.5h6M12 16.5v4" />
+    </>
+  ),
+  gamepad: (
+    <>
+      <path d="M7.5 8.5h9a4.5 4.5 0 0 1 4.4 5.4l-.8 3.4a2.6 2.6 0 0 1-4.4 1.2l-1.6-1.6H9.9l-1.6 1.6a2.6 2.6 0 0 1-4.4-1.2l-.8-3.4a4.5 4.5 0 0 1 4.4-5.4z" />
+      <path d="M7.7 11.4v3M6.2 12.9h3" />
+      <circle cx="16" cy="12.1" r=".9" />
+      <circle cx="17.8" cy="13.9" r=".9" />
     </>
   ),
   settings: (

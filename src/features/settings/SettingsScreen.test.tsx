@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { AppContext } from "@/app/AppProvider";
 import { useAppStore } from "@/app/store";
 import { createTranslator } from "@/i18n";
@@ -53,7 +54,10 @@ function renderSettings(
     <AppContext.Provider
       value={{ t: createTranslator(locale), locale, ready: true, bootError: null }}
     >
-      <SettingsScreen initialTab={initialTab ?? "general"} />
+      {/* Settings links out to the Discord presence page, so a router must exist. */}
+      <MemoryRouter>
+        <SettingsScreen initialTab={initialTab ?? "general"} />
+      </MemoryRouter>
     </AppContext.Provider>,
   );
 }

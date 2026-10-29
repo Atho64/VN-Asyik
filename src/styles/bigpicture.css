@@ -1,0 +1,213 @@
+/*
+ * Big Picture: a screen meant to be read from a sofa.
+ *
+ * Type is larger, targets are bigger, and the surface is opaque: it replaces the
+ * shell rather than sitting inside it, so the rail, the backdrop and the library
+ * toolbar are all gone. Everything reads from the same tokens as the rest of the
+ * app, so a custom accent carries over.
+ */
+.bp {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  overflow: hidden;
+  background: var(--bg, #0b1113);
+  color: var(--text);
+}
+
+.bp__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.bp__heading {
+  margin: 0;
+  font-size: clamp(1.6rem, 2.4vw, 2.4rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.bp__hint,
+.bp__empty {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-s);
+  color: var(--text-muted);
+}
+
+.bp__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+  gap: var(--space-5);
+  min-height: 0;
+  flex: 1;
+}
+
+.bp__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  grid-auto-rows: min-content;
+  gap: var(--space-4);
+  align-content: start;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-1) var(--space-6);
+  scrollbar-width: thin;
+}
+
+/* The focused cover is marked by a ring *and* a lift, so it is obvious from three
+ * metres away and still visible to someone who cannot tell colours apart. */
+.bp-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+  color: inherit;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast, 140ms) var(--ease, ease),
+    border-color var(--dur-fast, 140ms) var(--ease, ease);
+}
+
+.bp-card__art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.bp-card__art--empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.bp-card__veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-3);
+  font-size: var(--text-s);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.bp-card__label {
+  /* Two lines, then cut: a long title must not resize the whole row. The
+   * `-webkit-box` clamp does the ellipsis; the max-height is the guarantee for a
+   * webview that ignores it. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* `lh` is the computed line height, so this clips exactly two lines whatever
+   * the button's font rules resolve to, and hides the sliver of a third. */
+  max-height: calc(2lh + 2 * var(--space-2));
+  padding: var(--space-2) var(--space-2);
+  font-size: var(--text-s);
+  font-weight: 600;
+  text-align: left;
+  line-height: 1.25;
+}
+
+.bp-card--focused {
+  border-color: var(--accent);
+  transform: scale(1.04);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+}
+
+.bp__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+  overflow-y: auto;
+}
+
+.bp__status {
+  margin: 0;
+  font-size: var(--text-s);
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bp__title {
+  margin: 0;
+  font-size: clamp(1.3rem, 1.8vw, 1.8rem);
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.bp__alt,
+.bp__meta {
+  margin: 0;
+  font-size: var(--text-s);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.bp__notes {
+  margin: 0;
+  font-size: var(--text-s);
+  color: var(--text);
+  /* Notes are private and can be long; this is a preview, not the game page. */
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bp__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.bp__actions .btn {
+  min-height: 3rem;
+  font-size: var(--text-s);
+}
+
+/* A phone or a small tablet: one column of covers and the panel underneath. */
+@media (max-width: 899px) {
+  .bp {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  .bp__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .bp__grid {
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+/* The toolbar entry keeps its icon on a phone: the bar has a search box, three
+ * view tabs and this button, and the label is the part that fits worst. */
+@media (max-width: 599px) {
+  .bp-entry__label {
+    display: none;
+  }
+}

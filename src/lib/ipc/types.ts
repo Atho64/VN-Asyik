@@ -363,6 +363,36 @@ export const usageAccessViewSchema = z.object({
 export type UsageAccessView = z.infer<typeof usageAccessViewSchema>;
 
 /** Device-to-device sync status. */
+/** Accent colour and background image. */
+export const appearanceViewSchema = z.object({
+  accent: z.string().nullable(),
+  backgroundName: z.string().nullable(),
+  background: z.string().nullable(),
+  backgroundDim: z.number(),
+});
+export type AppearanceView = z.infer<typeof appearanceViewSchema>;
+
+/** One downloadable file attached to a release. */
+export const updateAssetSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  size: z.number().nullable(),
+});
+export type UpdateAsset = z.infer<typeof updateAssetSchema>;
+
+/** Whether this build is behind the newest published release. */
+export const updateViewSchema = z.object({
+  current: z.string(),
+  latest: z.string().nullable(),
+  available: z.boolean(),
+  url: z.string().nullable(),
+  asset: updateAssetSchema.nullable(),
+  checkedAt: z.number().nullable(),
+  error: z.string().nullable(),
+  canInstall: z.boolean(),
+});
+export type UpdateView = z.infer<typeof updateViewSchema>;
+
 /** One saved LLM provider profile, without its key. */
 export const llmProviderSchema = z.enum(["openai", "anthropic"]);
 export type LlmProvider = z.infer<typeof llmProviderSchema>;

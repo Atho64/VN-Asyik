@@ -9,7 +9,14 @@
 
 import { create } from "zustand";
 import { initialLibraryBrowse, type LibraryBrowse } from "@/lib/library";
-import type { DetailPayload, GameCard, PlatformInfo, Prefs } from "@/lib/ipc/types";
+import type {
+  AppearanceView,
+  DetailPayload,
+  GameCard,
+  PlatformInfo,
+  Prefs,
+  UpdateView,
+} from "@/lib/ipc/types";
 
 export type ToastKind = "info" | "success" | "error";
 
@@ -79,6 +86,15 @@ interface AppState {
   setRefreshingVndb: (gameId: string, refreshing: boolean) => void;
   /** Remember a fetched VNDB detail payload. */
   cacheVndbDetail: (vnId: string, detail: DetailPayload | null) => void;
+  /**
+   * The last update answer. Kept in the store because two screens read it: the
+   * library shows the button, Settings shows the version detail.
+   */
+  update: UpdateView | null;
+  setUpdate: (update: UpdateView | null) => void;
+  /** Accent colour and background image, applied by the provider. */
+  appearance: AppearanceView | null;
+  setAppearance: (appearance: AppearanceView | null) => void;
 }
 
 const defaultPrefs: Prefs = {
@@ -101,6 +117,11 @@ export const useAppStore = create<AppState>((set) => ({
   paletteOpen: false,
   refreshingVndb: [],
   vndbDetails: {},
+  update: null,
+  appearance: null,
+
+  setUpdate: (update) => set({ update }),
+  setAppearance: (appearance) => set({ appearance }),
 
   setPrefs: (prefs) => set({ prefs }),
   setPlatform: (platform) => set({ platform }),

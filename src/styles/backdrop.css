@@ -105,3 +105,17 @@
 :root[data-reduce-effects="true"] .backdrop__scrim {
   background: var(--bg);
 }
+
+/* A wallpaper the user picked. Same stacking as the living backdrop so it sits
+ * behind every screen, and the same scrim on top so body text stays readable
+ * over an image nobody could have checked for contrast. */
+.app-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}

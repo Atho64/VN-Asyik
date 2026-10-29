@@ -11,6 +11,56 @@
 
 /* library */
 
+/* Accent choices: swatches wrap like chips, and the native colour input is sized
+ * to something a finger can hit. */
+.appearance__accents {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  max-width: 26rem;
+}
+
+.appearance__swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: var(--space-1);
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.appearance__picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.appearance__color {
+  width: var(--touch-target);
+  min-height: var(--touch-target);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: none;
+}
+
+/* One line above the library toolbar, only while a newer build exists. Deliberately
+ * quieter than the toolbar itself: it is news, not navigation. */
+.update-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-s);
+  background: var(--accent-soft);
+}
+
 .library__bar {
   display: flex;
   flex-wrap: wrap;
@@ -943,6 +993,80 @@
   flex-direction: column;
   gap: var(--space-1);
   margin-top: var(--space-2);
+}
+
+/* Saved provider profiles: one block per endpoint.
+ *
+ * A `settings__row` would put the name and five controls on one line, which on a
+ * phone becomes a column of thumb-sized targets with the endpoint name squeezed
+ * out. The block keeps the identity on its own line and lets the actions wrap.
+ */
+.llm-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.llm-profile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--surface-1);
+}
+
+/* The live profile is marked by its border as well as its chip, so the answer to
+ * "which endpoint is in use" is visible without reading. */
+.llm-profile--active {
+  border-color: var(--accent);
+}
+
+.llm-profile__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.llm-profile__name {
+  font-weight: 600;
+  /* A name is one unbroken word more often than not; it wraps rather than spills. */
+  overflow-wrap: anywhere;
+}
+
+.llm-profile__meta {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  /* A long endpoint breaks anywhere instead of widening the card. */
+  overflow-wrap: anywhere;
+}
+
+.llm-profile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.llm-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.llm-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 /* Collapsed provenance. The text is worth keeping and not worth six lines above

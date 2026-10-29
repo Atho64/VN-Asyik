@@ -29,7 +29,9 @@ import {
   syncOutcomeSchema,
   conflictViewSchema,
   tasteViewSchema,
+  appearanceViewSchema,
   llmProfilesSchema,
+  updateViewSchema,
   recommendSettingsSchema,
   recommendOutcomeSchema,
   launchCapabilitySchema,
@@ -79,7 +81,9 @@ import {
   type SyncOutcome,
   type ConflictView,
   type TasteView,
+  type AppearanceView,
   type LlmProfileInput,
+  type UpdateView,
   type LlmProfiles,
   type RecommendSettings,
   type RecommendOutcome,
@@ -313,6 +317,15 @@ export interface Api {
   syncRun(folder: string): Promise<SyncOutcome>;
   syncConflicts(limit: number): Promise<ConflictView[]>;
   aiTasteProfile(): Promise<TasteView>;
+  appearanceGet(): Promise<AppearanceView>;
+  appearanceSet(input: {
+    accent: string | null;
+    backgroundPath: string | null;
+    clearBackground: boolean;
+    backgroundDim: number;
+  }): Promise<AppearanceView>;
+  updateCheck(force: boolean): Promise<UpdateView>;
+  updateInstall(): Promise<string>;
   aiLlmProfiles(): Promise<LlmProfiles>;
   aiLlmSaveProfile(input: LlmProfileInput): Promise<LlmProfiles>;
   aiLlmActivateProfile(id: string): Promise<LlmProfiles>;
@@ -606,6 +619,16 @@ export const api: Api = {
     call("tracking_android_session", androidSessionViewSchema),
   trackingAndroidStop: () => call("tracking_android_stop", androidSessionViewSchema),
   aiTasteProfile: () => call("ai_taste_profile", tasteViewSchema),
+  appearanceGet: () => call("appearance_get", appearanceViewSchema),
+  appearanceSet: (input) =>
+    call("appearance_set", appearanceViewSchema, {
+      accent: input.accent,
+      backgroundPath: input.backgroundPath,
+      clearBackground: input.clearBackground,
+      backgroundDim: input.backgroundDim,
+    }),
+  updateCheck: (force) => call("update_check", updateViewSchema, { force }),
+  updateInstall: () => call("update_install", z.string()),
   aiLlmProfiles: () => call("ai_llm_profiles", llmProfilesSchema),
   aiLlmSaveProfile: (input) =>
     call("ai_llm_save_profile", llmProfilesSchema, { input }),

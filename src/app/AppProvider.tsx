@@ -33,6 +33,23 @@ async function loadLibrary(os: string | undefined): Promise<GameCard[]> {
   return api.listGames();
 }
 
+/**
+ * Text colour that stays readable on top of a custom accent.
+ *
+ * The token sheet pairs the default accent with one `--on-accent`; a user-picked
+ * colour breaks that pairing, and white label text on a pale yellow button is the
+ * common result. The luminance threshold is the usual sRGB approximation.
+ */
+function readableOn(hex: string): string {
+  const value = hex.replace("#", "");
+  const channel = (offset: number): number => {
+    const part = Number.parseInt(value.slice(offset, offset + 2), 16) / 255;
+    return part <= 0.03928 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+  return luminance > 0.45 ? "#102125" : "#08110f";
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const prefs = useAppStore((state) => state.prefs);
   const setPrefs = useAppStore((state) => state.setPrefs);
@@ -40,6 +57,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const platform = useAppStore((state) => state.platform);
   const setCards = useAppStore((state) => state.setCards);
   const setLibraryError = useAppStore((state) => state.setLibraryError);
+  const setUpdate = useAppStore((state) => state.setUpdate);
+  const appearance = useAppStore((state) => state.appearance);
+  const setAppearance = useAppStore((state) => state.setAppearance);
   const libraryLoaded = useAppStore((state) => state.libraryLoaded);
   const bootError = useAppStore((state) => state.libraryError);
 
@@ -137,6 +157,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Platforms without a tray have nothing to relabel.
       });
   }, [t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .appearanceGet()
+      .then((result) => {
+        if (!cancelled) setAppearance(result);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [setAppearance]);
+
+  /* The accent is a CSS variable override rather than a class per colour: the
+   * token set already reads `--accent` everywhere, so one property recolours
+   * buttons, chips, focus rings and charts together. Clearing it removes the
+   * override and the theme's own accent comes back. */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (appearance?.accent) {
+      root.style.setProperty("--accent", appearance.accent);
+      root.style.setProperty(
+        "--accent-soft",
+        `color-mix(in srgb, ${appearance.accent} 15%, transparent)`,
+      );
+      root.style.setProperty("--accent-strong", appearance.accent);
+    } else {
+      root.style.removeProperty("--accent");
+      root.style.removeProperty("--accent-soft");
+      root.style.removeProperty("--accent-strong");
+    }
+    // `--on-accent` is the text colour on top of the accent; a light accent needs
+    // dark text and a dark accent needs light text, which luminance decides.
+    if (appearance?.accent) {
+      root.style.setProperty("--on-accent", readableOn(appearance.accent));
+    } else {
+      root.style.removeProperty("--on-accent");
+    }
+  }, [appearance?.accent]);
+
+  /* Ask GitHub once per launch; the answer is cached for six hours server-side,
+   * so this is one request a day in practice. A failure is silent on purpose: a
+   * library screen must not show an error because a release feed was unreachable. */
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .updateCheck(false)
+      .then((result) => {
+        if (!cancelled) setUpdate(result);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [setUpdate]);
 
   useLayoutEffect(() => {
     // The focused card can leave the virtual range while its artwork remains

@@ -13,6 +13,26 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/ipc/client", () => ({
   api: {
+    // Appearance and the update check both load on boot; both are optional, but
+    // the methods have to exist.
+    appearanceGet: vi.fn().mockResolvedValue({
+      accent: null,
+      backgroundName: null,
+      background: null,
+      backgroundDim: 0.45,
+    }),
+    // The provider asks GitHub for a newer build on every boot; a rejected
+    // promise is the documented silent path, but the method must exist.
+    updateCheck: vi.fn().mockResolvedValue({
+      current: "0.1.6",
+      latest: null,
+      available: false,
+      url: null,
+      asset: null,
+      checkedAt: null,
+      error: null,
+      canInstall: false,
+    }),
     getPrefs: vi.fn().mockResolvedValue({
       theme: "dark",
       language: "en",
