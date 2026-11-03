@@ -1,6 +1,7 @@
 //! Real `SQLite` coverage for journal persistence, provenance and portable data.
 
 use vn_core::model::{Chapter, Game, GameStatus, PlaySession, Route, SessionSource};
+use vn_core::reading::ReadingEntry;
 use vn_core::{DeviceId, EntityId, Timestamp};
 use vn_tracker_lib::commands::{backup, data};
 use vn_tracker_lib::db::{Db, queries, reading};
@@ -349,7 +350,7 @@ async fn session_details_hide_missing_foreign_and_deleted_parents() {
     let page = queries::game_sessions_page(db.pool(), game.meta.id, 50)
         .await
         .unwrap();
-    assert!(page.sessions.is_empty());
+    assert_eq!(page.sessions, Vec::<PlaySession>::new());
     assert_eq!(page.total_sessions, 0);
     assert_eq!(page.counted_ms, 0);
 }
@@ -513,12 +514,12 @@ async fn editing_and_deleting_checkpoints_preserves_sessions_and_detects_stale_e
     )
     .await
     .unwrap();
-    assert!(
+    assert_eq!(
         reading::context(db.pool(), game.meta.id, 0)
             .await
             .unwrap()
-            .entries
-            .is_empty()
+            .entries,
+        Vec::<ReadingEntry>::new()
     );
     assert!(
         reading::list_all(db.pool(), game.meta.id).await.unwrap()[0]
@@ -573,12 +574,12 @@ async fn manual_checkpoints_work_without_sessions_and_cannot_reference_another_g
             .await
             .is_err()
     );
-    assert!(
+    assert_eq!(
         reading::context(db.pool(), game.meta.id, 0)
             .await
             .unwrap()
-            .entries
-            .is_empty()
+            .entries,
+        Vec::<ReadingEntry>::new()
     );
 }
 
@@ -637,12 +638,12 @@ async fn entries_and_tombstones_roundtrip_and_legacy_payloads_leave_them_alone()
     sync::merge_library_snapshot(peer.pool(), &payload)
         .await
         .unwrap();
-    assert!(
+    assert_eq!(
         reading::context(peer.pool(), game.meta.id, 0)
             .await
             .unwrap()
-            .entries
-            .is_empty()
+            .entries,
+        Vec::<ReadingEntry>::new()
     );
 }
 
@@ -696,11 +697,11 @@ async fn library_export_preview_merge_and_restore_keep_the_journal() {
     };
     let mut old = serde_json::to_value(&backup).unwrap();
     old.as_object_mut().unwrap().remove("reading_entries");
-    assert!(
+    assert_eq!(
         serde_json::from_value::<backup::BackupFile>(old)
             .unwrap()
-            .reading_entries
-            .is_empty()
+            .reading_entries,
+        Vec::<ReadingEntry>::new()
     );
 }
 
@@ -723,7 +724,10 @@ async fn invalid_journal_reference_rolls_back_the_entire_peer() {
             .await
             .is_err()
     );
-    assert!(queries::list_games(target.pool()).await.unwrap().is_empty());
+    assert_eq!(
+        queries::list_games(target.pool()).await.unwrap(),
+        Vec::<Game>::new()
+    );
 }
 
 #[tokio::test]
@@ -760,12 +764,12 @@ async fn upgrading_from_schema_28_keeps_existing_data_and_foreign_keys() {
             vec![session.clone()]
         );
     }
-    assert!(
+    assert_eq!(
         reading::context(db.pool(), game.meta.id, 0)
             .await
             .unwrap()
-            .entries
-            .is_empty()
+            .entries,
+        Vec::<ReadingEntry>::new()
     );
 }
 
@@ -800,10 +804,10 @@ async fn pagination_has_no_gaps_and_hidden_parents_do_not_leak_into_reads() {
         .execute(&mut *connection)
         .await
         .unwrap();
-    assert!(
+    assert_eq!(
         reading::list_all(&mut *connection, game.meta.id)
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        Vec::<ReadingEntry>::new()
     );
 }
