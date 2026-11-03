@@ -6,7 +6,7 @@ Rust dan Tauri di sisi belakang, React di sisi depan.
 
 [English](README.md) · **Bahasa Indonesia**
 
-![Kisi pustaka, menampilkan gim yang sudah diimpor beserta kover dan waktu bacanya](docs/screenshot-library.jpg)
+![Kisi pustaka, menampilkan gim yang sudah diimpor beserta kover dan waktu bacanya](src/assets/guide/library.jpg)
 
 ## Yang bisa dilakukan
 
@@ -21,6 +21,20 @@ dianggap berjalan selama jendela gim ada di depanmu; jeda yang melewati ambang
 tertentu dicatat terpisah sebagai waktu pergi, bukan waktu baca, dan keduanya
 bisa kamu lihat sendiri-sendiri. Sesi ditulis tiap 20 detik, jadi crash atau
 reboot paksa kehilangan hitungan detik, bukan sepanjang malam.
+
+**Jurnal baca.** Kartu **Terakhir sampai mana?** di halaman gim menampilkan sesi
+baca terakhir dan posisi bab/rute yang tercatat. Simpan catatan per sesi serta
+penanda save slot manual, edit atau hapus entri, serta akses pintasan ke panduan.
+Buka sesi mana pun di riwayat untuk melihat waktu, rute/bab yang tercatat, dan
+semua penandanya, atau menambahkan catatan ke sesi lama tersebut. Tombol sesi
+lebih lama/baru membuka seluruh riwayat per 50 sesi, dengan cuplikan catatan pada setiap sesi.
+Jurnal ikut backup dan sinkronisasi pustaka. Save slot hanya pengingat; aplikasi
+tidak memuat atau mengubah save game.
+
+**Big Picture.** Peluncur layar penuh dengan judul dan artwork gim terpilih serta
+deretan kover yang ringkas. Klik kover untuk memilih, lalu Mainkan atau Enter
+untuk meluncurkan. Keyboard dan stik menjangkau seluruh koleksi; hanya kelompok
+kover yang terlihat yang dirender. Buka dari library atau dengan Ctrl+Shift+B.
 
 **Rute dan ending.** Rute sepenuhnya milikmu: kamu yang memberi nama, dan ending
 menggantung padanya. Deteksi bab membaca judul jendela game saat engine-nya
@@ -297,3 +311,6 @@ kewajiban apa pun.
 ## Lisensi
 
 GPL-3.0-only. Lihat [LICENSE](LICENSE).
+
+Font Inter Tight memakai SIL Open Font License 1.1. Teks hak cipta dan lisensi
+lengkap tersedia di [README Inggris](README.md#inter-tight-license).

@@ -36,22 +36,42 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          RELEASE_NOTES: |
+            ## What's new
+
+            - Reading journal with editable session notes and manual save-slot reminders.
+            - Session details, older/newer history pages, and short note previews.
+            - Journal entries included in library sync and backups.
+            - Redesigned Big Picture with a selected-game hero, bounded cover pages,
+              clearer keyboard navigation, and corrected controller input handling.
+
+            ## Downloads
+
+            - **Windows:** use the `.exe` or `.msi` installer. These builds are unsigned;
+              Windows SmartScreen may display a warning.
+            - **Android:** use `app-universal-release.apk`. The official build uses the
+              existing release signing key and package `com.atho.vnasyik`.
+
+            ## Notes
+
+            - Save-slot reminders never load or modify game saves.
+            - Automatic chapters still depend on supported window titles; other chapters
+              are manual. Live text uses LunaTranslator's network service.
+            - Mobile/light-theme Big Picture checks and physical-controller testing
+              remain part of prerelease testing.
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release already exists"
             exit 0
           fi
-          # The heading is filled from the tag, never typed by hand: the v0.1.2
-          # release shipped with "v0.1.0" in its body because the template
-          # carried a literal version.
-          sed "s/\$TAG/${TAG}/g" .github/release-notes/body.md > "$RUNNER_TEMP/notes.md"
-          head -1 "$RUNNER_TEMP/notes.md"
+          # Release metadata lives here; README is the only published documentation.
+          printf '%s\n' "$RELEASE_NOTES" > "$RUNNER_TEMP/notes.md"
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "VN Asyik $TAG" \
             --prerelease \
+            --verify-tag --latest=false \
             --notes-file "${{ runner.temp }}/notes.md"
-
 
   windows:
     needs: create-release
@@ -79,7 +99,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Windows has no code-signing certificate, so these bundles are unsigned
-      # and SmartScreen will warn. .github/release-notes/body.md says so; the
+      # and SmartScreen will warn. The release notes above say so; the
       # Android APK, by contrast, is signed with the release keystore.
       - name: build installers
         run: pnpm tauri build

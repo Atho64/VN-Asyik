@@ -61,3 +61,20 @@ desktop.ini
 .gemini
 .agents
 AGENTS.md
+
+# Publishing keeps documentation in the two root READMEs only.
+docs/
+*.md
+*.markdown
+*.rst
+*.adoc
+*.pdf
+*.doc
+*.docx
+*.odt
+*.rtf
+*.tex
+!/README.md
+!/README.id.md
+# The complete font copyright notice and license now live in README.md.
+src/styles/fonts/OFL-InterTight.txt
