@@ -460,6 +460,7 @@ export function DeviceSyncScreen() {
                 </div>
               ))}
             </dl>
+            <p className="caption">{t("reading.history")}: {preview.readingEntries ?? 0}</p>
             <p className="data-preview-hint">
               {t(restore ? "data.importBehavior.backup" : "data.importBehavior.transfer")}
             </p>

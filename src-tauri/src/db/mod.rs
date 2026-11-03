@@ -6,5 +6,6 @@
 pub mod models;
 pub mod pool;
 pub mod queries;
+pub mod reading;
 
 pub use pool::{Db, DbError};

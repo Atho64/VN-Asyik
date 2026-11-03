@@ -206,12 +206,22 @@ pub async fn list_sessions(
 /// the totals beside them cover every session, so the summary stays exact.
 pub const SESSION_PAGE: i64 = 50;
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionCursor {
+    pub started_at: i64,
+    pub id: EntityId,
+}
+
 /// The newest sessions of a game plus exact totals over all of them.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameSessionsPage {
     /// Newest first.
     pub sessions: Vec<PlaySession>,
+    /// Latest nonempty journal note per visible session, at most 240 chars + ellipsis.
+    /// Presentation data only; never part of the synced session.
+    pub note_previews: std::collections::BTreeMap<String, String>,
     /// Every live session, including the ones not in `sessions`.
     pub total_sessions: i64,
     /// Sum of counted time over every live session, ms.
@@ -229,9 +239,10 @@ pub struct GameSessionsPage {
 pub async fn list_game_sessions(
     state: State<'_, AppState>,
     game_id: String,
+    before: Option<SessionCursor>,
 ) -> CommandResult<GameSessionsPage> {
     let id = EntityId::parse(&game_id)?;
-    Ok(queries::game_sessions_page(state.db().pool(), id, SESSION_PAGE).await?)
+    Ok(queries::game_sessions_before(state.db().pool(), id, SESSION_PAGE, before).await?)
 }
 
 /// Endings belonging to a game.

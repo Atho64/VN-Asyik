@@ -112,13 +112,14 @@ export const playSessionSchema = z.object({
 export type PlaySession = z.infer<typeof playSessionSchema>;
 
 /**
- * Newest sessions for the game page, with totals over the whole history.
+ * A page of sessions, newest first, with totals over the whole history.
  *
  * The list is bounded (50 rows); the totals are not, so the figure beside the
  * heading still covers every session the game has.
  */
 export const gameSessionsPageSchema = z.object({
   sessions: playSessionSchema.array(),
+  notePreviews: z.record(z.string(), z.string()).default({}),
   totalSessions: z.number(),
   countedMs: z.number(),
   afkMs: z.number(),
@@ -801,6 +802,7 @@ export const platformInfoSchema = z.object({
 export type PlatformInfo = z.infer<typeof platformInfoSchema>;
 
 export const importSummarySchema = z.object({
+  reading_entries: z.number().optional(),
   games: z.number(),
   chapters: z.number(),
   sessions: z.number(),
@@ -811,6 +813,7 @@ export type ImportSummary = z.infer<typeof importSummarySchema>;
 
 /** A native file remains in Rust until this short-lived preview is confirmed. */
 export const dataImportPreviewSchema = z.object({
+  readingEntries: z.number().int().nonnegative().optional(),
   id: z.string(),
   kind: z.enum(["library", "backup", "transfer"]),
   createdAtMs: z.number(),

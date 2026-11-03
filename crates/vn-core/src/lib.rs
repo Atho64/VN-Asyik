@@ -15,6 +15,7 @@ pub mod locale_emulator;
 pub mod migration;
 pub mod model;
 pub mod presence;
+pub mod reading;
 pub mod scan_rank;
 pub mod scene;
 pub mod script;

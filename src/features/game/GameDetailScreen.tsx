@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -17,6 +17,8 @@ import { Card, CardHeader } from "@/components/Card";
 import { RoutesCard } from "@/features/game/RoutesCard";
 import { ScriptCard } from "@/features/game/ScriptCard";
 import { WalkthroughCard } from "@/features/game/WalkthroughCard";
+import { ReadingCard } from "@/features/game/ReadingCard";
+import { SessionHistory } from "@/features/game/SessionHistory";
 import { Chip, StatusChip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
@@ -28,7 +30,6 @@ import { statusOrder } from "@/lib/library";
 import { fallbackPalette } from "@/lib/palette";
 import { stripFormatting } from "@/lib/vndbText";
 import {
-  formatDateTime,
   formatDuration,
   formatDurationLong,
   localDateTimeToMs,
@@ -105,6 +106,7 @@ const placeholderGame: Game = {
 const MAX_NOTES_CHARS = 20_000;
 
 export function GameDetailScreen() {
+  const walkthroughRef = useRef<HTMLDivElement>(null);
   const { id } = useParams<{ id: string }>();
   const { t, locale } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
@@ -140,6 +142,9 @@ export function GameDetailScreen() {
 
   const [card, setCard] = useState<GameCard | null>(cachedCard ?? null);
   const [sessions, setSessions] = useState<PlaySession[]>([]);
+  const [sessionNotePreviews, setSessionNotePreviews] = useState<Record<string, string>>({});
+  const [readingVersion, setReadingVersion] = useState(0);
+  const refreshSessionNotes = useCallback(() => setReadingVersion((version) => version + 1), []);
   // Exact totals over every session, not just the visible page.
   const [sessionTotals, setSessionTotals] = useState({ total: 0, countedMs: 0 });
   const [executables, setExecutables] = useState<GameExecutable[]>([]);
@@ -158,6 +163,8 @@ export function GameDetailScreen() {
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<{ gameId: string; id: string } | null>(null);
+  const closeSessionDetails = useCallback(() => setSelectedSession(null), []);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
@@ -185,6 +192,7 @@ export function GameDetailScreen() {
           setNotes(loaded.game.notes ?? "");
         }
         setSessions(loadedSessions?.sessions ?? []);
+        setSessionNotePreviews(loadedSessions?.notePreviews ?? {});
         setSessionTotals({
           total: loadedSessions?.totalSessions ?? 0,
           countedMs: loadedSessions?.countedMs ?? 0,
@@ -241,6 +249,7 @@ export function GameDetailScreen() {
           upsertCard(nextCard);
         }
         setSessions(nextSessions.sessions);
+        setSessionNotePreviews(nextSessions.notePreviews);
         setSessionTotals({
           total: nextSessions.totalSessions,
           countedMs: nextSessions.countedMs,
@@ -637,6 +646,19 @@ export function GameDetailScreen() {
         </div>
       </header>
 
+      {id && <ReadingCard
+        key={id}
+        gameId={id}
+        sessionVersion={sessions[0]?.meta.updated_at}
+        selectedSessionId={selectedSession?.gameId === id ? selectedSession.id : null}
+        onCloseSession={closeSessionDetails}
+        onEntriesChange={refreshSessionNotes}
+        onWalkthrough={() => {
+          walkthroughRef.current?.scrollIntoView({ block: "start" });
+          walkthroughRef.current?.focus({ preventScroll: true });
+        }}
+      />}
+
       <div className="detail__columns">
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
           <Card>
@@ -803,7 +825,9 @@ export function GameDetailScreen() {
               for the companion chat, and neither is required to play. */}
           {id ? <ScriptCard gameId={id} /> : null}
 
-          {id ? <WalkthroughCard gameId={id} vnId={game.vndb_id} /> : null}
+          {id ? <div ref={walkthroughRef} tabIndex={-1} aria-label={t("walkthrough.title")}>
+            <WalkthroughCard gameId={id} vnId={game.vndb_id} />
+          </div> : null}
 
           <Card>
             <CardHeader
@@ -814,50 +838,15 @@ export function GameDetailScreen() {
                 </span>
               }
             />
-            {sessions.length === 0 ? (
-              <p className="body">{t("detail.sessionsEmpty")}</p>
-            ) : (
-              <ul className="stats__rows" aria-describedby="detail-sessions-count">
-                {sessions.map((session) => (
-                  <li
-                    key={session.meta.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      padding: "6px 0",
-                      borderBottom: "1px solid var(--border)",
-                    }}
-                  >
-                    <span className="caption">
-                      {formatDateTime(session.started_at, locale)}
-                    </span>
-                    <span className="tnum" style={{ fontSize: "var(--text-s)" }}>
-                      {formatDurationLong(session.counted_ms, locale)}
-                      {session.afk_ms > 0 ? (
-                        <span
-                          className="caption"
-                          style={{ marginLeft: 8 }}
-                          title={t("detail.away")}
-                        >
-                          +{formatDurationLong(session.afk_ms, locale)}
-                        </span>
-                      ) : null}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {/* The list is capped, so it says how many sessions exist in total
-                instead of quietly looking complete. */}
-            {sessionTotals.total > sessions.length ? (
-              <p className="caption" id="detail-sessions-count">
-                {t("detail.sessionsOlder", {
-                  count: sessionTotals.total - sessions.length,
-                  total: sessionTotals.total,
-                })}
-              </p>
-            ) : null}
+            <SessionHistory
+              key={`${game.meta.id}:${sessions[0]?.meta.id}:${sessions[0]?.meta.updated_at}:${sessionTotals.total}`}
+              gameId={game.meta.id}
+              sessions={sessions}
+              notePreviews={sessionNotePreviews}
+              noteVersion={readingVersion}
+              total={sessionTotals.total}
+              onSelect={(sessionId) => setSelectedSession({ gameId: game.meta.id, id: sessionId })}
+            />
           </Card>
         </div>
 
@@ -880,6 +869,7 @@ export function GameDetailScreen() {
           }
           const page = await api.listGameSessions(game.meta.id);
           setSessions(page.sessions);
+          setSessionNotePreviews(page.notePreviews);
           setSessionTotals({ total: page.totalSessions, countedMs: page.countedMs });
         }}
       />

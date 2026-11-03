@@ -42,6 +42,7 @@ fn fixture() -> BackupFile {
         chapters: vec![chapter],
         sessions: vec![session],
         endings: vec![ending],
+        reading_entries: vec![],
         prefs: PrefsSnapshot {
             theme: "light".to_owned(),
             language: "id".to_owned(),
@@ -62,6 +63,7 @@ fn transfer(file: &BackupFile, device: &str) -> SyncPayload {
         chapters: file.chapters.clone(),
         sessions: file.sessions.clone(),
         endings: file.endings.clone(),
+        reading_entries: file.reading_entries.clone(),
     }
 }
 

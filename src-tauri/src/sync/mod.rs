@@ -36,6 +36,7 @@ use vn_core::clock::Timestamp;
 use vn_core::ids::DeviceId;
 use vn_core::migration::SCHEMA_VERSION;
 use vn_core::model::{Chapter, Ending, Game, PlaySession, Route};
+use vn_core::reading::ReadingEntry;
 use vn_core::sync::{self, Conflict, MetaFields, Reason, Side};
 
 use crate::db::{DbError, queries};
@@ -70,6 +71,9 @@ pub struct SyncPayload {
     pub sessions: Vec<PlaySession>,
     /// Live and deleted endings.
     pub endings: Vec<Ending>,
+    /// User-written checkpoints; absent in pre-journal payloads.
+    #[serde(default)]
+    pub reading_entries: Vec<ReadingEntry>,
 }
 
 /// What one sync run did.
@@ -162,11 +166,13 @@ pub async fn collect_local(pool: &SqlitePool, device: &DeviceId) -> Result<SyncP
     let mut chapters = Vec::new();
     let mut sessions = Vec::new();
     let mut endings = Vec::new();
+    let mut reading_entries = Vec::new();
     for game in &games {
         routes.extend(queries::list_routes_including_deleted(pool, game.meta.id).await?);
         chapters.extend(queries::list_chapters_including_deleted(pool, game.meta.id).await?);
         sessions.extend(queries::list_sessions_including_deleted(pool, game.meta.id).await?);
         endings.extend(queries::list_endings_including_deleted(pool, game.meta.id).await?);
+        reading_entries.extend(crate::db::reading::list_all(pool, game.meta.id).await?);
     }
 
     Ok(SyncPayload {
@@ -179,6 +185,7 @@ pub async fn collect_local(pool: &SqlitePool, device: &DeviceId) -> Result<SyncP
         chapters,
         sessions,
         endings,
+        reading_entries,
     })
 }
 
@@ -432,6 +439,23 @@ async fn apply_payload(
     for ending in &endings {
         if should_write(&local_endings, ending) {
             queries::upsert_ending(&mut *tx, ending).await?;
+            delta.pulled += 1;
+        }
+    }
+
+    let mut local_entries = Vec::new();
+    for game in &games {
+        local_entries.extend(crate::db::reading::list_all(&mut *tx, game.meta.id).await?);
+    }
+    for entry in &payload.reading_entries {
+        entry.validate().map_err(DbError::Corrupt)?;
+    }
+    let (entries, conflicts) =
+        sync::merge_rows("reading_entries", &local_entries, &payload.reading_entries);
+    record(&mut delta, conflicts);
+    for entry in &entries {
+        if should_write(&local_entries, entry) {
+            crate::db::reading::upsert(&mut *tx, entry).await?;
             delta.pulled += 1;
         }
     }

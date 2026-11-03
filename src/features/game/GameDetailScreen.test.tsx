@@ -48,6 +48,7 @@ vi.mock("@/features/tracking/MapExecutable", () => ({ MapExecutable: () => null 
 vi.mock("@/features/game/RoutesCard", () => ({ RoutesCard: () => null }));
 vi.mock("@/features/game/ScriptCard", () => ({ ScriptCard: () => null }));
 vi.mock("@/features/game/WalkthroughCard", () => ({ WalkthroughCard: () => null }));
+vi.mock("@/features/game/ReadingCard", () => ({ ReadingCard: () => null }));
 vi.mock("@/features/game/PlayButton", () => ({ PlayButton: () => null }));
 
 const { GameDetailScreen } = await import("./GameDetailScreen");
@@ -288,7 +289,7 @@ describe("returning to a game", () => {
     renderDetail();
 
     expect(
-      await screen.findByText(/121 older of 122 sessions/),
+      await screen.findByText(/Showing 1 of 122 sessions/),
     ).toBeInTheDocument();
   });
 

@@ -76,6 +76,7 @@ async fn populated() -> (Db, BackupFile) {
         endings: queries::list_endings(pool, game.meta.id)
             .await
             .expect("endings"),
+        reading_entries: Vec::new(),
         prefs: PrefsSnapshot {
             theme: "light".to_owned(),
             language: "en".to_owned(),

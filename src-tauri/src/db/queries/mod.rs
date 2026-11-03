@@ -683,26 +683,71 @@ pub async fn game_sessions_page(
     game_id: EntityId,
     limit: i64,
 ) -> Result<crate::commands::library::GameSessionsPage, DbError> {
+    game_sessions_before(pool, game_id, limit, None).await
+}
+
+/// Keyset paging keeps older sessions reachable even while new ones arrive.
+pub async fn game_sessions_before(
+    pool: &SqlitePool,
+    game_id: EntityId,
+    limit: i64,
+    before: Option<crate::commands::library::SessionCursor>,
+) -> Result<crate::commands::library::GameSessionsPage, DbError> {
+    #[derive(sqlx::FromRow)]
+    struct PageRow {
+        #[sqlx(flatten)]
+        session: SessionRow,
+        note_preview: Option<String>,
+    }
     let game = game_id.to_string();
-    let rows: Vec<SessionRow> = sqlx::query_as(
-        "SELECT id, game_id, chapter_id, route_id, started_at, ended_at, counted_ms, afk_ms, \
-                source, updated_at, device_id, deleted \
-         FROM play_sessions WHERE game_id = ? AND deleted = 0 \
-         ORDER BY started_at DESC, id DESC LIMIT ?",
+    let before_at = before.as_ref().map(|cursor| cursor.started_at);
+    let before_id = before.map(|cursor| cursor.id.to_string());
+    let rows: Vec<PageRow> = sqlx::query_as(
+        "SELECT s.id, s.game_id, s.chapter_id, s.route_id, s.started_at, s.ended_at,
+                s.counted_ms, s.afk_ms, s.source, s.updated_at, s.device_id, s.deleted,
+                (SELECT substr(e.note, 1, 241) FROM reading_entries e
+                 WHERE e.game_id = s.game_id AND e.session_id = s.id AND e.deleted = 0
+                   AND trim(e.note, char(9, 10, 13, 32)) <> ''
+                 ORDER BY e.created_at DESC, e.id DESC LIMIT 1) AS note_preview
+         FROM play_sessions s JOIN games g ON g.id = s.game_id AND g.deleted = 0
+         WHERE s.game_id = ? AND s.deleted = 0
+           AND (? IS NULL OR s.started_at < ? OR (s.started_at = ? AND s.id < ?))
+         ORDER BY s.started_at DESC, s.id DESC LIMIT ?",
     )
     .bind(&game)
+    .bind(before_at)
+    .bind(before_at)
+    .bind(before_at)
+    .bind(before_id)
     .bind(limit.max(1))
     .fetch_all(pool)
     .await?;
     let (total_sessions, counted_ms, afk_ms): (i64, i64, i64) = sqlx::query_as(
-        "SELECT COUNT(*), COALESCE(SUM(counted_ms),0), COALESCE(SUM(afk_ms),0) \
-         FROM play_sessions WHERE game_id = ? AND deleted = 0",
+        "SELECT COUNT(*), COALESCE(SUM(s.counted_ms),0), COALESCE(SUM(s.afk_ms),0)
+         FROM play_sessions s JOIN games g ON g.id = s.game_id AND g.deleted = 0
+         WHERE s.game_id = ? AND s.deleted = 0",
     )
     .bind(&game)
     .fetch_one(pool)
     .await?;
+    let mut note_previews = std::collections::BTreeMap::new();
+    let sessions = rows
+        .into_iter()
+        .map(|row| {
+            if let Some(note) = row.note_preview {
+                let mut chars = note.chars();
+                let mut preview: String = chars.by_ref().take(240).collect();
+                if chars.next().is_some() {
+                    preview.push('…');
+                }
+                note_previews.insert(row.session.id.clone(), preview);
+            }
+            row.session
+        })
+        .collect();
     Ok(crate::commands::library::GameSessionsPage {
-        sessions: sessions_from(rows)?,
+        sessions: sessions_from(sessions)?,
+        note_previews,
         total_sessions,
         counted_ms,
         afk_ms,

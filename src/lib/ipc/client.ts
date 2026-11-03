@@ -232,8 +232,8 @@ export interface Api {
   deleteGame(id: string): Promise<void>;
   listChapters(gameId: string): Promise<Chapter[]>;
   listSessions(gameId: string): Promise<PlaySession[]>;
-  /** Newest sessions plus exact totals over all of them. */
-  listGameSessions(gameId: string): Promise<GameSessionsPage>;
+  /** A bounded session page plus exact totals over all sessions. */
+  listGameSessions(gameId: string, before?: { startedAt: number; id: string }): Promise<GameSessionsPage>;
   listEndings(gameId: string): Promise<Ending[]>;
   gameRoutes(gameId: string): Promise<RouteView[]>;
   createRoute(gameId: string, name: string): Promise<string>;
@@ -501,8 +501,8 @@ export const api: Api = {
   deleteGame: (id) => call("delete_game", voidSchema, { id }),
   listChapters: (gameId) => call("list_chapters", chapterSchema.array(), { gameId }),
   listSessions: (gameId) => call("list_sessions", playSessionSchema.array(), { gameId }),
-  listGameSessions: (gameId) =>
-    call("list_game_sessions", gameSessionsPageSchema, { gameId }),
+  listGameSessions: (gameId, before) =>
+    call("list_game_sessions", gameSessionsPageSchema, { gameId, before: before ?? null }),
   listEndings: (gameId) => call("list_endings", endingSchema.array(), { gameId }),
   gameRoutes: (gameId) => call("game_routes", routeViewSchema.array(), { gameId }),
   createRoute: (gameId, name) => call("create_route", z.string(), { gameId, name }),

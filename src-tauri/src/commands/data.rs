@@ -39,6 +39,7 @@ pub struct DataImportPreview {
     pub chapters: usize,
     pub sessions: usize,
     pub endings: usize,
+    pub reading_entries: usize,
     pub same_device: bool,
     pub can_restore: bool,
 }
@@ -225,6 +226,7 @@ fn parse_file(contents: &str) -> CommandResult<ImportPayload> {
             &payload.chapters,
             &payload.sessions,
             &payload.endings,
+            &payload.reading_entries,
         )?;
         Ok(ImportPayload::Backup(payload))
     } else if transfer_marker && !backup_marker {
@@ -259,6 +261,7 @@ fn validate_transfer(payload: &SyncPayload) -> CommandResult<()> {
         &payload.chapters,
         &payload.sessions,
         &payload.endings,
+        &payload.reading_entries,
     )
 }
 
@@ -276,12 +279,17 @@ fn validate_rows(
     chapters: &[Chapter],
     sessions: &[PlaySession],
     endings: &[Ending],
+    reading_entries: &[vn_core::reading::ReadingEntry],
 ) -> CommandResult<()> {
     unique_ids(games.iter().map(|row| row.meta.id))?;
     unique_ids(routes.iter().map(|row| row.meta.id))?;
     unique_ids(chapters.iter().map(|row| row.meta.id))?;
     unique_ids(sessions.iter().map(|row| row.meta.id))?;
     unique_ids(endings.iter().map(|row| row.meta.id))?;
+    unique_ids(reading_entries.iter().map(|row| row.meta.id))?;
+    for entry in reading_entries {
+        entry.validate().map_err(|_| invalid_file())?;
+    }
     for game in games {
         // Mirror existing storage constraints; do not invent stricter limits
         // for historical exports that the legacy importer can already read.
@@ -370,39 +378,75 @@ pub async fn prepare_import(
     contents: &str,
 ) -> CommandResult<DataImportPreview> {
     let payload = parse_file(contents)?;
-    let (kind, at, same_device, games, routes, chapters, sessions, endings) = match &payload {
-        ImportPayload::Library(file) => (
-            DataImportKind::Library,
-            file.payload.written_at_ms,
-            file.payload.device_id == device.as_str(),
-            &file.payload.games,
-            &file.payload.routes,
-            &file.payload.chapters,
-            &file.payload.sessions,
-            &file.payload.endings,
-        ),
-        ImportPayload::Backup(file) => (
-            DataImportKind::Backup,
-            file.header.created_at_ms,
-            false,
-            &file.games,
-            &file.routes,
-            &file.chapters,
-            &file.sessions,
-            &file.endings,
-        ),
-        ImportPayload::Transfer(file) => (
-            DataImportKind::Transfer,
-            file.written_at_ms,
-            file.device_id == device.as_str(),
-            &file.games,
-            &file.routes,
-            &file.chapters,
-            &file.sessions,
-            &file.endings,
-        ),
-    };
+    let (kind, at, same_device, games, routes, chapters, sessions, endings, reading_entries) =
+        match &payload {
+            ImportPayload::Library(file) => (
+                DataImportKind::Library,
+                file.payload.written_at_ms,
+                file.payload.device_id == device.as_str(),
+                &file.payload.games,
+                &file.payload.routes,
+                &file.payload.chapters,
+                &file.payload.sessions,
+                &file.payload.endings,
+                &file.payload.reading_entries,
+            ),
+            ImportPayload::Backup(file) => (
+                DataImportKind::Backup,
+                file.header.created_at_ms,
+                false,
+                &file.games,
+                &file.routes,
+                &file.chapters,
+                &file.sessions,
+                &file.endings,
+                &file.reading_entries,
+            ),
+            ImportPayload::Transfer(file) => (
+                DataImportKind::Transfer,
+                file.written_at_ms,
+                file.device_id == device.as_str(),
+                &file.games,
+                &file.routes,
+                &file.chapters,
+                &file.sessions,
+                &file.endings,
+                &file.reading_entries,
+            ),
+        };
     validate_references(pool, games, routes, chapters, sessions, endings).await?;
+    // Journal parent validation happens at preview time as well as during writes.
+    for entry in reading_entries {
+        let game_exists = games.iter().any(|game| game.meta.id == entry.game_id)
+            || queries::get_game_including_deleted(pool, entry.game_id)
+                .await?
+                .is_some();
+        if !game_exists {
+            return Err(invalid_file());
+        }
+        if let Some(session_id) = entry.session_id {
+            if let Some(session) = sessions
+                .iter()
+                .find(|session| session.meta.id == session_id)
+            {
+                if session.game_id != entry.game_id {
+                    return Err(invalid_file());
+                }
+            } else {
+                let exists: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM play_sessions WHERE id = ? AND game_id = ?)",
+                )
+                .bind(session_id.to_string())
+                .bind(entry.game_id.to_string())
+                .fetch_one(pool)
+                .await
+                .map_err(DbError::from)?;
+                if !exists {
+                    return Err(invalid_file());
+                }
+            }
+        }
+    }
     let preview = DataImportPreview {
         id: id.to_owned(),
         kind,
@@ -412,6 +456,7 @@ pub async fn prepare_import(
         chapters: chapters.len(),
         sessions: sessions.len(),
         endings: endings.len(),
+        reading_entries: reading_entries.len(),
         same_device,
         can_restore: !matches!(payload, ImportPayload::Transfer(_)),
     };
@@ -452,6 +497,7 @@ pub async fn apply_import_with_mode(
                 chapters: file.chapters,
                 sessions: file.sessions,
                 endings: file.endings,
+                reading_entries: file.reading_entries,
             },
             Some(file.prefs),
         ),
@@ -475,6 +521,7 @@ pub async fn apply_import_with_mode(
             chapters: snapshot.chapters,
             sessions: snapshot.sessions,
             endings: snapshot.endings,
+            reading_entries: snapshot.reading_entries,
             prefs,
         };
         return backup::import_payload(pool, &file)

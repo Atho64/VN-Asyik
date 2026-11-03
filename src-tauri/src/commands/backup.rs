@@ -31,6 +31,9 @@ pub struct BackupFile {
     pub sessions: Vec<vn_core::model::PlaySession>,
     /// Every live ending.
     pub endings: Vec<vn_core::model::Ending>,
+    /// Reading checkpoints, including tombstones so deleted notes stay deleted.
+    #[serde(default)]
+    pub reading_entries: Vec<vn_core::reading::ReadingEntry>,
     /// Preferences at export time.
     pub prefs: PrefsSnapshot,
 }
@@ -48,11 +51,13 @@ pub async fn export_backup(state: State<'_, AppState>) -> CommandResult<BackupFi
     let mut chapters = Vec::new();
     let mut sessions = Vec::new();
     let mut endings = Vec::new();
+    let mut reading_entries = Vec::new();
     for game in &games {
         routes.extend(queries::list_routes(pool, game.meta.id).await?);
         chapters.extend(queries::list_chapters(pool, game.meta.id).await?);
         sessions.extend(queries::list_sessions(pool, game.meta.id).await?);
         endings.extend(queries::list_endings(pool, game.meta.id).await?);
+        reading_entries.extend(crate::db::reading::list_all(pool, game.meta.id).await?);
     }
 
     let created_at = Timestamp::now()?;
@@ -68,6 +73,7 @@ pub async fn export_backup(state: State<'_, AppState>) -> CommandResult<BackupFi
         chapters,
         sessions,
         endings,
+        reading_entries,
         prefs: queries::load_prefs(pool).await?,
     })
 }
@@ -85,6 +91,7 @@ pub struct ImportSummary {
     pub sessions: usize,
     /// Endings written.
     pub endings: usize,
+    pub reading_entries: usize,
     /// Sessions skipped because their id already existed (append-only rule).
     pub sessions_skipped: usize,
 }
@@ -175,6 +182,7 @@ pub async fn import_payload(
         chapters: 0,
         sessions: 0,
         endings: 0,
+        reading_entries: 0,
         sessions_skipped: 0,
     };
 
@@ -205,6 +213,11 @@ pub async fn import_payload(
             Ok(false) => summary.sessions_skipped += 1,
             Err(other) => return Err(other.into()),
         }
+    }
+
+    for entry in &payload.reading_entries {
+        crate::db::reading::upsert(&mut *tx, entry).await?;
+        summary.reading_entries += 1;
     }
 
     queries::set_pref(&mut *tx, "theme", theme.as_str()).await?;
