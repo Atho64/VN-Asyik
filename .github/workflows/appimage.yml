@@ -1,0 +1,93 @@
+name: Linux AppImage
+
+on:
+  workflow_dispatch:
+
+# This build only stores a short-lived Actions artifact. It cannot publish a release.
+permissions:
+  contents: read
+
+concurrency:
+  group: appimage-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  appimage:
+    name: AppImage (x86_64)
+    # Build against glibc 2.35 so the bundle can also run on Ubuntu 22.04.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: always
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev build-essential curl wget file patchelf \
+            libfuse2 xvfb dbus-x11
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          key: appimage-ubuntu-22.04
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build AppImage
+        run: pnpm tauri build --ci --bundles appimage -- --locked
+
+      - name: Check the bundle and start it on a virtual display
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(target/release/bundle/appimage/*.AppImage)
+          if [ ${#files[@]} -ne 1 ]; then
+            echo "::error::expected exactly one AppImage"
+            exit 1
+          fi
+          appimage="$(realpath "${files[0]}")"
+          test -s "$appimage"
+          chmod +x "$appimage"
+          file "$appimage"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/appimage-smoke/config"
+          export XDG_DATA_HOME="$RUNNER_TEMP/appimage-smoke/data"
+          export XDG_CACHE_HOME="$RUNNER_TEMP/appimage-smoke/cache"
+          export GDK_BACKEND=x11
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
+          set +e
+          timeout 20s dbus-run-session -- xvfb-run -a "$appimage" \
+            > "$RUNNER_TEMP/appimage-smoke.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/appimage-smoke.log"
+          if [ "$status" -ne 124 ]; then
+            echo "::error::AppImage exited before the startup check completed (status $status)"
+            exit 1
+          fi
+          cd target/release/bundle/appimage
+          sha256sum -- *.AppImage > SHA256SUMS
+
+      - name: Store the temporary build
+        uses: actions/upload-artifact@v4
+        with:
+          name: vn-asyik-appimage-x86_64
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          path: |
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/appimage/SHA256SUMS
