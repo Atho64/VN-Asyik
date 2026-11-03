@@ -90,7 +90,7 @@ export function AppShell() {
   }, [navigate]);
 
   return (
-    <div className="app">
+    <div className={pathname === "/big-picture" ? "app app--big-picture" : "app"}>
       {/* A chosen wallpaper replaces the living artwork wash: a wallpaper is a
        * deliberate choice, and two full-screen images fighting over the same
        * pixels is a blur, not a backdrop. */}

@@ -127,6 +127,14 @@
   --touch-target: 44px;
   --focus-ring: 2px solid var(--accent-strong);
   --focus-offset: 2px;
+  /* Big Picture: cover size follows available screen height. */
+  --bp-content-width: 1680px;
+  --bp-cover-width: clamp(108px, 16vh, 184px);
+  --bp-title-size: 64px;
+  --bp-hero-cover-height: 440px;
+  --bp-compact-hero-height: 300px;
+  --bp-action-height: 52px;
+  --bp-action-width: 160px;
 }
 
 /* Light theme: same token names, mirrored values. Not a tint of the dark theme. */

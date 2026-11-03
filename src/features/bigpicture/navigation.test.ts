@@ -15,7 +15,7 @@ describe("big picture movement", () => {
     expect(moveFor("Escape")).toBeNull();
   });
 
-  it("stops at the ends of a row instead of wrapping into the next one", () => {
+  it("walks into the next cover group and stops at the ends of the collection", () => {
     // Five columns, ten games: the last item of row 0 is index 4.
     expect(nextIndex({ kind: "step", delta: 1 }, 4, 10, 5)).toBe(5);
     // A single step from the very end stays on the last game.
@@ -41,8 +41,8 @@ describe("big picture movement", () => {
   it("jumps to the ends and by a screenful", () => {
     expect(nextIndex({ kind: "edge", to: "last" }, 0, 10, 5)).toBe(9);
     expect(nextIndex({ kind: "edge", to: "first" }, 9, 10, 5)).toBe(0);
-    expect(nextIndex({ kind: "page", direction: 1 }, 0, 20, 5)).toBe(15);
-    expect(nextIndex({ kind: "page", direction: -1 }, 18, 20, 5)).toBe(3);
+    expect(nextIndex({ kind: "page", direction: 1 }, 0, 20, 5)).toBe(5);
+    expect(nextIndex({ kind: "page", direction: -1 }, 18, 20, 5)).toBe(13);
   });
 
   it("survives an empty library", () => {
@@ -77,6 +77,9 @@ describe("gamepad reading", () => {
     // The poll runs every frame; a held direction must not repeat.
     expect(readPad([pad([13])], "down").move).toBeNull();
     expect(readPad([pad([13])], "up").move).toBe("down");
+    const released = readPad([pad([])], "down");
+    expect(released.held).toBeNull();
+    expect(readPad([pad([13])], released.held).move).toBe("down");
   });
 
   it("reads A and B, and nothing when no pad is connected", () => {

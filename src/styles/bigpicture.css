@@ -1,213 +1,390 @@
-/*
- * Big Picture: a screen meant to be read from a sofa.
- *
- * Type is larger, targets are bigger, and the surface is opaque: it replaces the
- * shell rather than sitting inside it, so the rail, the backdrop and the library
- * toolbar are all gone. Everything reads from the same tokens as the rest of the
- * app, so a custom accent carries over.
- */
+/* A selected novel above a bounded cover rail. Shared tokens handle both themes. */
+.app--big-picture > .rail,
+.app--big-picture > .bottomnav,
+.app--big-picture .nowplaying {
+  visibility: hidden;
+}
 .bp {
   position: fixed;
   inset: 0;
   z-index: 40;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5) var(--space-6);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: var(--space-5);
+  padding: var(--space-5) max(var(--space-6), calc((100vw - var(--bp-content-width)) / 2));
   overflow: hidden;
-  background: var(--bg, #0b1113);
+  background: var(--bg);
   color: var(--text);
 }
-
-.bp__bar {
+.bp__bar,
+.bp__brand,
+.bp__collection-bar,
+.bp__paging,
+.bp__controls,
+.bp__controls > span {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
+  align-items: center;
 }
-
+.bp__bar,
+.bp__collection-bar {
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.bp__brand {
+  gap: var(--space-3);
+  min-width: 0;
+  font-weight: 600;
+}
+.bp__brand img {
+  width: var(--brand-mark-size);
+  height: var(--brand-mark-size);
+}
 .bp__heading {
   margin: 0;
-  font-size: clamp(1.6rem, 2.4vw, 2.4rem);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.bp__hint,
-.bp__empty {
-  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-4);
+  border-inline-start: 1px solid var(--border-strong);
   font-size: var(--text-s);
+  font-weight: 400;
   color: var(--text-muted);
 }
-
-.bp__layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
-  gap: var(--space-5);
-  min-height: 0;
-  flex: 1;
+.bp__exit {
+  flex-shrink: 0;
 }
-
-.bp__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  grid-auto-rows: min-content;
-  gap: var(--space-4);
-  align-content: start;
-  overflow-y: auto;
-  padding: var(--space-1) var(--space-1) var(--space-6);
-  scrollbar-width: thin;
+.bp kbd {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  min-width: var(--space-5);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  line-height: var(--leading-tight);
+  text-align: center;
 }
-
-/* The focused cover is marked by a ring *and* a lift, so it is obvious from three
- * metres away and still visible to someone who cannot tell colours apart. */
-.bp-card {
+.bp__hero {
   position: relative;
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: var(--radius-m);
-  background: var(--surface-1);
-  color: inherit;
-  overflow: hidden;
-  cursor: pointer;
-  transition:
-    transform var(--dur-fast, 140ms) var(--ease, ease),
-    border-color var(--dur-fast, 140ms) var(--ease, ease);
-}
-
-.bp-card__art {
-  display: block;
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
-  background: var(--surface-2);
-}
-
-.bp-card__art--empty {
+  isolation: isolate;
   display: grid;
-  place-items: center;
-  color: var(--text-muted);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.6fr);
+  align-items: center;
+  gap: var(--space-7);
+  min-height: 0;
 }
-
-.bp-card__veil {
+.bp__backdrop {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  padding: var(--space-3);
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.3;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, transparent, black 20%, black 70%, transparent);
+}
+.bp__hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    to right,
+    var(--bg),
+    color-mix(in srgb, var(--bg) 88%, transparent) 45%,
+    transparent
+  );
+  pointer-events: none;
+}
+.bp__hero-copy {
+  min-width: 0;
+  padding-block: var(--space-3);
+}
+.bp__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
   font-size: var(--text-s);
-  text-align: center;
+  font-weight: 500;
   color: var(--text-muted);
 }
-
-.bp-card__label {
-  /* Two lines, then cut: a long title must not resize the whole row. The
-   * `-webkit-box` clamp does the ellipsis; the max-height is the guarantee for a
-   * webview that ignores it. */
+.bp__status::before {
+  content: "";
+  width: var(--space-5);
+  height: var(--space-half);
+  background: var(--accent);
+}
+.bp__title {
+  margin: 0;
+  max-width: 25ch;
+  font-family: var(--font-display);
+  font-size: clamp(var(--text-xl), 3.5vw, var(--bp-title-size));
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.bp__alt {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-m);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bp__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-5);
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+.bp__meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.bp__notes {
+  max-width: 52ch;
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-s);
+  line-height: var(--leading-normal);
+  color: var(--text-muted);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  /* `lh` is the computed line height, so this clips exactly two lines whatever
-   * the button's font rules resolve to, and hides the sliver of a third. */
-  max-height: calc(2lh + 2 * var(--space-2));
-  padding: var(--space-2) var(--space-2);
-  font-size: var(--text-s);
-  font-weight: 600;
-  text-align: left;
-  line-height: 1.25;
-}
-
-.bp-card--focused {
-  border-color: var(--accent);
-  transform: scale(1.04);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
-}
-
-.bp__panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  background: var(--surface-1);
-  overflow-y: auto;
-}
-
-.bp__status {
-  margin: 0;
-  font-size: var(--text-s);
-  font-weight: 600;
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.bp__title {
-  margin: 0;
-  font-size: clamp(1.3rem, 1.8vw, 1.8rem);
-  font-weight: 700;
-  line-height: 1.15;
   overflow-wrap: anywhere;
 }
-
-.bp__alt,
-.bp__meta {
-  margin: 0;
-  font-size: var(--text-s);
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-
-.bp__notes {
-  margin: 0;
-  font-size: var(--text-s);
-  color: var(--text);
-  /* Notes are private and can be long; this is a preview, not the game page. */
-  display: -webkit-box;
-  -webkit-line-clamp: 6;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 .bp__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
+  gap: var(--space-3);
+  margin-top: var(--space-5);
 }
-
 .bp__actions .btn {
-  min-height: 3rem;
-  font-size: var(--text-s);
+  min-height: var(--bp-action-height);
+  padding-inline: var(--space-5);
+  font-size: var(--text-m);
+  border-radius: var(--radius-s);
 }
-
-/* A phone or a small tablet: one column of covers and the panel underneath. */
+.bp__actions .btn--primary {
+  min-width: var(--bp-action-width);
+}
+.bp__hero-cover {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  height: 100%;
+  max-height: var(--bp-hero-cover-height);
+  max-width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  color: var(--text-faint);
+  background: var(--surface-1);
+  border-radius: var(--radius-xs);
+}
+.bp__hero-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.bp__collection {
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+.bp__collection-bar {
+  margin-bottom: var(--space-3);
+}
+.bp__collection-bar h2 {
+  margin: 0;
+  font-size: var(--text-m);
+  font-weight: 600;
+}
+.bp__paging {
+  gap: var(--space-2);
+}
+.bp__position {
+  color: var(--text-muted);
+  font-size: var(--text-s);
+  margin-inline-end: var(--space-3);
+}
+.bp__next-icon {
+  transform: rotate(180deg);
+}
+.bp__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--bp-cover-width), 100%), 1fr));
+  align-items: start;
+  gap: var(--space-4);
+}
+.bp-card {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 0;
+  color: var(--text-muted);
+  text-align: start;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+.bp-card__cover {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  width: 100%;
+  overflow: hidden;
+  background: var(--surface-1);
+  border-radius: var(--radius-xs);
+  outline: 2px solid transparent;
+  outline-offset: var(--space-1);
+  transition: outline-color var(--dur-fast) var(--ease);
+}
+.bp-card__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bp-card__art--empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}
+.bp-card__veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--text-xs);
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+.bp-card__label {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: 2lh;
+  font-size: var(--text-s);
+  font-weight: 500;
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+.bp-card:hover {
+  color: var(--text);
+}
+.bp-card:hover .bp-card__cover {
+  outline-color: var(--border-strong);
+}
+.bp-card--focused {
+  color: var(--text);
+}
+.bp-card--focused .bp-card__cover,
+.bp-card--focused:hover .bp-card__cover {
+  outline-color: var(--accent-strong);
+}
+.bp-card:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--space-2);
+}
+.bp__controls {
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.bp__controls > span {
+  gap: var(--space-2);
+}
+.bp__pad-hint {
+  margin-inline-start: auto;
+}
+.bp__empty {
+  grid-row: 2 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  color: var(--text-muted);
+  text-align: center;
+}
+:root[data-reduce-effects="true"] .bp__backdrop {
+  display: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .bp__backdrop {
+    display: none;
+  }
+}
 @media (max-width: 899px) {
   .bp {
-    padding: var(--space-4) var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    gap: var(--space-4);
   }
-
-  .bp__layout {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+  .bp__hero {
+    gap: var(--space-5);
   }
-
-  .bp__grid {
-    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
-    gap: var(--space-3);
+  .bp__pad-hint {
+    display: none;
   }
 }
-
-/* The toolbar entry keeps its icon on a phone: the bar has a search box, three
- * view tabs and this button, and the label is the part that fits worst. */
 @media (max-width: 599px) {
+  .bp {
+    overflow-y: auto;
+    grid-template-rows: auto auto auto auto;
+  }
+  .bp__brand > span,
+  .bp__exit kbd {
+    display: none;
+  }
+  .bp__heading {
+    padding: 0;
+    border: 0;
+  }
+  .bp__hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bp__hero-copy {
+    padding-block: var(--space-6);
+  }
+  .bp__hero-cover {
+    display: none;
+  }
+  .bp__grid {
+    gap: var(--space-3);
+  }
+  .bp__controls {
+    gap: var(--space-3);
+  }
   .bp-entry__label {
     display: none;
+  }
+}
+@media (max-height: 720px) and (min-width: 600px) {
+  .bp {
+    overflow-y: auto;
+    grid-template-rows: auto auto auto auto;
+  }
+  .bp__hero {
+    min-height: var(--bp-compact-hero-height);
+  }
+  .bp__hero-cover {
+    height: var(--bp-compact-hero-height);
+  }
+  .bp__title {
+    font-size: var(--text-2xl);
   }
 }

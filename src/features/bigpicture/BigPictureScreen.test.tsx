@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 
 import { AppContext } from "@/app/AppProvider";
@@ -85,6 +86,11 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
 function renderScreen() {
   return render(
     <AppContext.Provider
@@ -116,6 +122,9 @@ describe("BigPictureScreen", () => {
     expect(screen.getByRole("heading", { name: "anemoi" })).toBeInTheDocument();
     // Compact duration, the same formatter the library uses.
     expect(screen.getByText(/1h played/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "anemoi" })).toHaveClass("bp__hero");
+    expect(screen.getByRole("listbox")).toHaveClass("bp__grid");
+    expect(options[0]?.querySelector(".bp-card__cover")).toBeInTheDocument();
   });
 
   it("moves the focus with the keyboard and the panel follows", async () => {
@@ -126,6 +135,7 @@ describe("BigPictureScreen", () => {
         screen.getByRole("heading", { name: "Little Busters!" }),
       ).toBeInTheDocument(),
     );
+    expect(screen.getByRole("option", { name: "Little Busters!" })).toHaveFocus();
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "anemoi" })).toBeInTheDocument(),
@@ -153,7 +163,7 @@ describe("BigPictureScreen", () => {
       explanation: "No executable is mapped to this game.",
     });
     renderScreen();
-    fireEvent.click(screen.getAllByRole("option")[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
     await waitFor(() =>
       expect(useAppStore.getState().toasts.at(-1)?.message).toBe(
         "No executable is mapped to this game.",
@@ -182,5 +192,85 @@ describe("BigPictureScreen", () => {
     // Nothing to launch, and no crash from the missing focus target.
     fireEvent.keyDown(window, { key: "Enter" });
     expect(api.launchGame).not.toHaveBeenCalled();
+  });
+
+  it("selects a clicked cover before launching it explicitly", async () => {
+    renderScreen();
+    fireEvent.click(screen.getByRole("option", { name: "Clannad" }));
+    expect(screen.getByRole("heading", { name: "Clannad" })).toBeInTheDocument();
+    expect(api.launchGame).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    await waitFor(() => expect(api.launchGame).toHaveBeenCalledWith("c"));
+  });
+
+  it("lets Enter activate the focused Details control without launching", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    screen.getByRole("button", { name: "Details" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByText("details")).toBeInTheDocument();
+    expect(api.launchGame).not.toHaveBeenCalled();
+  });
+
+  it("keeps a large collection bounded and brings keyboard focus onto each new page", () => {
+    useAppStore.setState({
+      cards: Array.from({ length: 203 }, (_, i) =>
+        card(`id-${i}`, `Game ${String(i).padStart(3, "0")}`, "playing"),
+      ),
+    });
+    renderScreen();
+    expect(screen.getAllByRole("option")).toHaveLength(5);
+    fireEvent.keyDown(window, { key: "PageDown" });
+    expect(screen.getByRole("heading", { name: "Game 005" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Game 005" })).toHaveFocus();
+    fireEvent.keyDown(window, { key: "End" });
+    expect(screen.getAllByRole("option")).toHaveLength(3);
+    expect(screen.getByRole("option", { name: "Game 202" })).toHaveFocus();
+    expect(screen.getByRole("option", { name: "Game 202" })).toHaveAttribute(
+      "aria-setsize",
+      "203",
+    );
+    expect(screen.getByRole("button", { name: "Next games" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Previous games" }));
+    expect(screen.getByRole("heading", { name: "Game 195" })).toBeInTheDocument();
+  });
+
+  it("debounces gamepad buttons across renders, resets released directions, and ignores background input", async () => {
+    let frame: FrameRequestCallback = () => undefined;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frame = callback;
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const focused = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const pads = vi.fn<() => Gamepad[]>(() => []);
+    vi.stubGlobal("navigator", { ...navigator, getGamepads: pads });
+    renderScreen();
+    const press = async (buttons: number[]) => {
+      pads.mockReturnValue([
+        {
+          connected: true,
+          axes: [],
+          buttons: Array.from({ length: 16 }, (_, index) => ({
+            pressed: buttons.includes(index),
+          })),
+        } as unknown as Gamepad,
+      ]);
+      await act(async () => frame(0));
+    };
+    await press([15]);
+    expect(screen.getByRole("heading", { name: "Little Busters!" })).toBeInTheDocument();
+    await press([15]);
+    expect(screen.getByRole("heading", { name: "Little Busters!" })).toBeInTheDocument();
+    await press([]);
+    await press([15]);
+    expect(screen.getByRole("heading", { name: "Clannad" })).toBeInTheDocument();
+    await press([0]);
+    await press([0]);
+    expect(api.launchGame).toHaveBeenCalledTimes(1);
+    await press([]);
+    focused.mockReturnValue(false);
+    await press([0]);
+    expect(api.launchGame).toHaveBeenCalledTimes(1);
   });
 });

@@ -54,10 +54,9 @@ export function moveFor(key: string): Move | null {
 /**
  * The index a move lands on.
  *
- * Horizontal moves clamp rather than wrap: wrapping from the last cover of a row
- * to the first of the next reads as a jump to a different game while the
- * highlight barely moves. Vertical moves clamp to the last row instead of
- * landing in a half-empty one.
+ * Steps walk the collection and clamp at its ends. Vertical and page moves
+ * change cover groups while retaining the column where possible. A short last
+ * group always lands on an existing game.
  */
 export function nextIndex(
   move: Move,
@@ -85,11 +84,8 @@ export function nextIndex(
     case "edge":
       return move.to === "first" ? 0 : count - 1;
     case "page": {
-      // A page is a screenful of rows, which is what the viewer can see at once.
-      const target = Math.max(
-        0,
-        Math.min(rows - 1, row + move.direction * Math.max(1, rows - 1)),
-      );
+      // Big Picture shows one row at a time: a page is the next cover group.
+      const target = Math.max(0, Math.min(rows - 1, row + move.direction));
       return Math.min(count - 1, target * width + column);
     }
   }
@@ -108,11 +104,11 @@ export type PadMove = "left" | "right" | "up" | "down" | null;
 export function readPad(
   pads: (Gamepad | null | undefined)[],
   previous: PadMove = null,
-): { move: PadMove; button: "a" | "b" | null } {
+): { move: PadMove; held: PadMove; button: "a" | "b" | null } {
   const pad = pads.find((candidate): candidate is Gamepad =>
     Boolean(candidate?.connected),
   );
-  if (!pad) return { move: null, button: null };
+  if (!pad) return { move: null, held: null, button: null };
   const pressed = (index: number): boolean => Boolean(pad.buttons[index]?.pressed);
   const axis = (index: number): number => pad.axes[index] ?? 0;
   const held: PadMove =
@@ -128,5 +124,5 @@ export function readPad(
   // A direction that is still held is not a new press.
   const move = held === previous ? null : held;
   const button = pressed(0) ? "a" : pressed(1) ? "b" : null;
-  return { move, button };
+  return { move, held, button };
 }
