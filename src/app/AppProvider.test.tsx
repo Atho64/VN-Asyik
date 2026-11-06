@@ -38,6 +38,7 @@ vi.mock("@/lib/ipc/client", () => ({
       language: "en",
       nsfw: "blur",
       reduce_effects: false,
+      beta_features: false,
     }),
     platformInfo: mocks.platform,
     trackingAndroidSession: mocks.session,
@@ -70,7 +71,13 @@ beforeEach(() => {
     cards: [],
     libraryLoaded: false,
     libraryError: null,
-    prefs: { theme: "dark", language: "en", nsfw: "blur", reduce_effects: false },
+    prefs: {
+      theme: "dark",
+      language: "en",
+      nsfw: "blur",
+      reduce_effects: false,
+      beta_features: false,
+    },
   });
 });
 

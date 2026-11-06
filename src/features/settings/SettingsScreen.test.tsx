@@ -5,9 +5,11 @@ import { MemoryRouter } from "react-router";
 import { AppContext } from "@/app/AppProvider";
 import { useAppStore } from "@/app/store";
 import { createTranslator } from "@/i18n";
+import { api } from "@/lib/ipc/client";
 
 vi.mock("@/lib/ipc/client", () => ({
   api: {
+    setBetaFeatures: vi.fn(),
     getAfkConfig: vi.fn().mockResolvedValue(null),
     vndbSyncSettings: vi.fn().mockResolvedValue(null),
     syncStatus: vi.fn().mockResolvedValue({
@@ -33,6 +35,13 @@ const { default: SettingsScreen } = await import("./SettingsScreen");
 beforeEach(() => {
   vi.clearAllMocks();
   useAppStore.setState({
+    prefs: {
+      theme: "dark",
+      language: "en",
+      nsfw: "blur",
+      reduce_effects: false,
+      beta_features: false,
+    },
     platform: {
       os: "android",
       kind: "mobile",
@@ -63,6 +72,36 @@ function renderSettings(
 }
 
 describe("unified settings data tab", () => {
+  it("keeps Beta setup hidden until enabled and hides it again on disable", async () => {
+    vi.mocked(api.setBetaFeatures).mockImplementation(async (value) => ({
+      ...useAppStore.getState().prefs,
+      beta_features: value,
+    }));
+    renderSettings();
+    const toggle = screen.getByRole("switch", { name: "Enable Beta features" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByText("Chat provider")).toBeNull();
+    expect(screen.queryByText("Luna live text")).toBeNull();
+    await userEvent.click(toggle);
+    expect(api.setBetaFeatures).toHaveBeenCalledWith(true);
+    expect(screen.getByText("Chat provider")).toBeInTheDocument();
+    expect(screen.getByText("Luna live text")).toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(api.setBetaFeatures).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByText("Chat provider")).toBeNull();
+    expect(screen.queryByText("Luna live text")).toBeNull();
+  });
+
+  it("retains the disabled state when saving the opt-in fails", async () => {
+    vi.mocked(api.setBetaFeatures).mockRejectedValueOnce(new Error("save failed"));
+    renderSettings();
+    const toggle = screen.getByRole("switch", { name: "Enable Beta features" });
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(toggle).not.toBeDisabled();
+    expect(useAppStore.getState().toasts.at(-1)?.kind).toBe("error");
+  });
+
   it("keeps General to one shortcut and removes duplicate backup actions", async () => {
     renderSettings();
     const tabs = screen.getByRole("tablist");

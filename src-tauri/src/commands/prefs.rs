@@ -2,7 +2,7 @@
 //! they are stored, so a bad string never reaches the UI.
 
 use serde::Deserialize;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use vn_core::model::{NsfwMode, ThemeMode};
 
 use super::{CommandError, CommandResult};
@@ -12,6 +12,42 @@ use crate::state::AppState;
 /// Read all preferences.
 #[tauri::command]
 pub async fn get_prefs(state: State<'_, AppState>) -> CommandResult<PrefsSnapshot> {
+    Ok(queries::load_prefs(state.db().pool()).await?)
+}
+
+pub(crate) async fn require_beta(state: &AppState) -> CommandResult<()> {
+    if !queries::load_prefs(state.db().pool()).await?.beta_features {
+        return Err(CommandError::new(
+            "beta_disabled",
+            "Enable Beta features in Settings first.",
+        ));
+    }
+    Ok(())
+}
+
+/// Hide experimental features without deleting their configuration or history.
+#[tauri::command]
+pub async fn set_beta_features(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    value: bool,
+) -> CommandResult<PrefsSnapshot> {
+    queries::set_pref(
+        state.db().pool(),
+        "beta_features",
+        if value { "true" } else { "false" },
+    )
+    .await?;
+    state.luna().apply_beta(state.db().pool(), value).await;
+    // Notify every webview even if cleanup reports an error after the save.
+    let _ = app.emit("prefs://beta-features", value);
+    if !value {
+        state.chat().cancel_all();
+        let suspended = state.companion().suspend_beta(&state).await;
+        #[cfg(desktop)]
+        crate::companion::window::companion_hide_overlay(app).await?;
+        suspended.map_err(|code| CommandError::new("companion", code))?;
+    }
     Ok(queries::load_prefs(state.db().pool()).await?)
 }
 

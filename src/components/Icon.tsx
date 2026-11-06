@@ -29,6 +29,7 @@ export type IconName =
   | "spark"
   | "send"
   | "stop"
+  | "pause"
   | "play"
   | "image"
   | "guide"
@@ -106,6 +107,7 @@ const paths: Record<IconName, ReactNode> = {
   chevronLeft: <path d="M15 5l-7 7 7 7" />,
   // A filled triangle, as a media control rather than an outline.
   play: <path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none" />,
+  pause: <path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor" stroke="none" />,
   clock: (
     <>
       <circle cx="12" cy="12" r="8.5" />

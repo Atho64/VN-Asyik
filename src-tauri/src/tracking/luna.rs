@@ -167,6 +167,11 @@ impl LunaMonitor {
             .execute(pool)
             .await
             .map_err(|_| "db_error".to_owned())?;
+        // Invalidate old socket frames before publishing the new setting.
+        // The supervisor may still be dropping its old listen future.
+        if *self.settings_tx.borrow() != settings {
+            self.host.reset().await;
+        }
         self.settings_tx.send_if_modified(|current| {
             if *current == settings {
                 false
@@ -176,6 +181,13 @@ impl LunaMonitor {
             }
         });
         Ok(settings)
+    }
+
+    pub async fn apply_beta(&self, pool: &SqlitePool, enabled: bool) {
+        let mut settings = Self::load(pool).await;
+        settings.enabled &= enabled;
+        self.host.reset().await;
+        self.settings_tx.send_replace(settings);
     }
 
     #[must_use]
@@ -237,6 +249,11 @@ impl LunaMonitor {
             .await;
             tokio::select! {
                 changed = settings_rx.changed() => {
+                    self.host.set_connected(false).await;
+                    self.set_status(|s| {
+                        s.connected = false;
+                        s.last_line_at = None;
+                    }).await;
                     if changed.is_err() {
                         return;
                     }
@@ -278,13 +295,13 @@ impl LunaMonitor {
             s.last_error = None;
         })
         .await;
-        self.host.set_connected(true).await;
+        let generation = self.host.set_connected(true).await.generation;
         while let Some(message) = socket.next().await {
             match message {
                 Ok(tokio_tungstenite::tungstenite::Message::Text(text)) => {
                     let text = text.as_str();
                     if !text.trim().is_empty() {
-                        self.host.push_external(text).await;
+                        self.host.push_external_for(generation, text).await;
                         let at = now_ms();
                         self.set_status(move |s| s.last_line_at = Some(at)).await;
                     }

@@ -117,6 +117,7 @@ async fn search(db: &Db, opts: ChatOptions, raw: &str) -> Value {
         .expect("vndb client");
     let hook = std::sync::Arc::new(vn_tracker_lib::tracking::hook::HookHost::default());
     let ctx = ToolContext {
+        reading: None,
         pool: db.pool(),
         vndb: &vndb,
         client: &client,

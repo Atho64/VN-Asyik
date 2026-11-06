@@ -112,14 +112,20 @@ function vndbPayload(overrides: Record<string, unknown> = {}) {
     screenshots: [],
     developers: [],
     extlinks: [],
-  characters: [],
+    characters: [],
     ...overrides,
   };
 }
 
 function setPolicy(nsfw: NsfwMode) {
   useAppStore.setState({
-    prefs: { theme: "dark", language: "en", nsfw, reduce_effects: false },
+    prefs: {
+      theme: "dark",
+      language: "en",
+      nsfw,
+      reduce_effects: false,
+      beta_features: false,
+    },
   });
 }
 
@@ -161,6 +167,20 @@ beforeEach(() => {
 });
 
 describe("game detail artwork policy", () => {
+  it("shows companion and chatbot shortcuts only after Beta opt-in", async () => {
+    renderDetail();
+    await screen.findByRole("heading", { name: "A visual novel" });
+    expect(screen.queryByRole("link", { name: "Read with companion" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Discuss this VN" })).toBeNull();
+    act(() =>
+      useAppStore.setState({
+        prefs: { ...useAppStore.getState().prefs, beta_features: true },
+      }),
+    );
+    expect(screen.getByRole("link", { name: "Read with companion" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Discuss this VN" })).toBeInTheDocument();
+  });
+
   it("blurs an explicit hero cover under the Blur setting", async () => {
     const { container } = renderDetail();
     await waitFor(() =>
@@ -261,9 +281,7 @@ describe("returning to a game", () => {
     useAppStore.setState({ cards: [detail()] });
     renderDetail();
     await waitFor(() => expect(mocks.getGame).toHaveBeenCalledWith("game-one"));
-    await waitFor(() =>
-      expect(mocks.listGameSessions).toHaveBeenCalledWith("game-one"),
-    );
+    await waitFor(() => expect(mocks.listGameSessions).toHaveBeenCalledWith("game-one"));
   });
 
   it("says when the session list is only the newest page", async () => {
@@ -288,9 +306,7 @@ describe("returning to a game", () => {
     });
     renderDetail();
 
-    expect(
-      await screen.findByText(/Showing 1 of 122 sessions/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Showing 1 of 122 sessions/)).toBeInTheDocument();
   });
 
   it("does not refetch the cover on every return", async () => {

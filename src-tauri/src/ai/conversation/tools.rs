@@ -6,6 +6,21 @@ use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool};
 use std::fmt::Write;
 use vn_core::chat::{ChatOptions, Spoilers, ToolArgs, public_text};
+use vn_core::companion::{DialogueSource, Knowledge, Observation};
+
+/// Immutable evidence selected at turn start, never a fallback to the global
+/// ring. The session owns game and playthrough attribution.
+#[derive(Debug, Clone)]
+pub struct ReadingContext {
+    pub memory: crate::companion::memory::TurnMemory,
+    /// Captured from validated session preferences at dispatch, not reread from DB.
+    pub system_prompt: Option<String>,
+    pub game_id: String,
+    pub playthrough_id: String,
+    pub knowledge: Knowledge,
+    pub source: DialogueSource,
+    pub lines: Vec<Observation>,
+}
 
 pub struct ToolContext<'a> {
     pub pool: &'a SqlitePool,
@@ -15,6 +30,7 @@ pub struct ToolContext<'a> {
     /// Live text-hook ring, for `recent_game_text`. The ring only exists on
     /// this device; there is no game attribution beyond what the player knows.
     pub hook: &'a std::sync::Arc<crate::tracking::hook::HookHost>,
+    pub reading: Option<&'a ReadingContext>,
 }
 
 impl std::fmt::Debug for ToolContext<'_> {
@@ -332,6 +348,32 @@ async fn taste(ctx: &ToolContext<'_>) -> Result<Value, String> {
 /// displayed, so they are the freshest evidence the companion has — but they
 /// carry no game attribution and no history beyond the ring buffer.
 async fn recent_text(ctx: &ToolContext<'_>) -> Result<Value, String> {
+    if let Some(reading) = ctx.reading {
+        if ctx.options.game_id.as_deref() != Some(reading.game_id.as_str()) {
+            return Err("outside_game_scope".into());
+        }
+        if reading.knowledge == Knowledge::Metadata {
+            return Ok(
+                json!({"lines": [], "withheld": "Metadata-only knowledge does not include captured dialogue."}),
+            );
+        }
+        let now = super::store::now();
+        let lines: Vec<_> = reading
+            .lines
+            .iter()
+            .filter(|line| {
+                line.at <= now
+                    && now.saturating_sub(line.at) <= vn_core::companion::MAX_SOURCE_AGE_MS
+            })
+            .collect();
+        return Ok(json!({
+            "game_id": reading.game_id,
+            "playthrough_id": reading.playthrough_id,
+            "source": reading.source,
+            "lines": lines,
+            "coverage": "Reader-confirmed source for this game and reading context. At most 30 lines / 12 KB captured after binding and within two minutes of this turn; no automatic game identification. An empty list means no eligible dialogue, not knowledge of the scene."
+        }));
+    }
     let status = ctx.hook.status().await;
     let lines = ctx.hook.lines().await;
     let recent: Vec<_> = lines

@@ -13,7 +13,7 @@ pub fn now() -> i64 {
 }
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<ChatThread>, String> {
-    let rows = sqlx::query("SELECT * FROM chat_threads ORDER BY updated_at DESC LIMIT 100")
+    let rows = sqlx::query("SELECT * FROM chat_threads t WHERE NOT EXISTS(SELECT 1 FROM companion_sessions c WHERE c.thread_id=t.id) ORDER BY updated_at DESC LIMIT 100")
         .fetch_all(pool)
         .await
         .map_err(|_| "db_error")?;
@@ -42,7 +42,7 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ChatThread, String> {
 
 pub async fn create(pool: &SqlitePool, options: ChatOptions) -> Result<ChatThread, String> {
     options.validate()?;
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM chat_threads")
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM chat_threads t WHERE NOT EXISTS(SELECT 1 FROM companion_sessions c WHERE c.thread_id=t.id)")
         .fetch_one(pool)
         .await
         .map_err(|_| "db_error")?;
@@ -83,21 +83,31 @@ pub async fn messages(pool: &SqlitePool, id: &str) -> Result<Vec<ChatMessage>, S
     .fetch_all(pool)
     .await
     .map_err(|_| "db_error")?;
-    rows.iter()
-        .map(|row| {
-            Ok(ChatMessage {
-                id: row.get("id"),
-                role: row.get("role"),
-                content: row.get("content"),
-                status: row.get("status"),
-                error: row.get("error"),
-                tools: decode(row.get("tools_json"))?,
-                sources: decode(row.get("sources_json"))?,
-                tokens: row.get("tokens"),
-                created_at: row.get("created_at"),
-            })
-        })
-        .collect()
+    rows.iter().map(message_row).collect()
+}
+
+pub(crate) fn message_row(row: &sqlx::sqlite::SqliteRow) -> Result<ChatMessage, String> {
+    Ok(ChatMessage {
+        id: row.get("id"),
+        role: row.get("role"),
+        content: row.get("content"),
+        status: row.get("status"),
+        error: row.get("error"),
+        tools: decode(row.get("tools_json"))?,
+        sources: decode(row.get("sources_json"))?,
+        tokens: row.get("tokens"),
+        created_at: row.get("created_at"),
+    })
+}
+
+/// Display reads deliberately ignore this barrier; only provider replay uses it.
+pub(crate) async fn model_messages(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<Vec<ChatMessage>, String> {
+    let rows = sqlx::query("SELECT m.* FROM chat_messages m JOIN chat_threads t ON t.id=m.thread_id LEFT JOIN companion_replay_barriers b ON b.thread_id=t.id WHERE t.id=? AND m.position>COALESCE(b.excluded_through,-1) ORDER BY m.position DESC LIMIT 200")
+        .bind(id).fetch_all(pool).await.map_err(|_| "db_error")?;
+    rows.iter().rev().map(message_row).collect()
 }
 
 fn decode<T: for<'de> Deserialize<'de>>(json: &str) -> Result<T, String> {
@@ -113,10 +123,23 @@ pub async fn begin(
     text: &str,
     retry: bool,
 ) -> Result<String, String> {
+    begin_scoped(pool, thread, text, retry, None).await
+}
+
+pub(crate) async fn begin_scoped(
+    pool: &SqlitePool,
+    thread: &ChatThread,
+    text: &str,
+    retry: bool,
+    memory: Option<&crate::companion::memory::TurnMemory>,
+) -> Result<String, String> {
     // A thread may hold more rows than the window; the newest window is all the
     // retry check needs, so this does not decode a long history to learn its size.
     let history = messages(pool, &thread.id).await?;
     let mut tx = pool.begin().await.map_err(|_| "db_error")?;
+    if let Some(memory) = memory {
+        crate::companion::memory::check_revision(&mut tx, memory.revision).await?;
+    }
     let assistant_id = uuid::Uuid::new_v4().to_string();
     let (position, room) = if retry {
         let last = history.last().ok_or("nothing_to_retry")?;
@@ -139,7 +162,13 @@ pub async fn begin(
     };
     // Roll the window before inserting: the oldest exchange goes, so the newest
     // exchange always fits and the thread never becomes permanently unusable.
-    trim_window(&mut tx, &thread.id, room).await?;
+    trim_window(
+        &mut tx,
+        &thread.id,
+        room,
+        memory.and_then(|m| m.capture.as_ref()),
+    )
+    .await?;
     sqlx::query("INSERT INTO chat_messages(id,thread_id,position,role,content,status,created_at) VALUES(?,?,?,'assistant','','running',?)")
         .bind(&assistant_id).bind(&thread.id).bind(position).bind(now())
         .execute(&mut *tx).await.map_err(|_| "db_error")?;
@@ -178,7 +207,7 @@ pub async fn recover(pool: &SqlitePool) -> Result<(), String> {
 }
 
 /// Next free `position` in a thread, or 0 for an empty one.
-async fn last_position(
+pub(crate) async fn last_position(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     thread_id: &str,
 ) -> Result<i64, String> {
@@ -203,10 +232,11 @@ async fn last_position(
 /// dropping one at a time would leave a user question with no answer or the
 /// reverse, so the rows that go are whole exchanges from the top. A thread that
 /// is short enough to fit is left untouched.
-async fn trim_window(
+pub(crate) async fn trim_window(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     thread_id: &str,
     room: i64,
+    capture: Option<&crate::companion::memory::jobs::Capture>,
 ) -> Result<(), String> {
     let window = i64::try_from(vn_core::chat::MAX_MESSAGES).unwrap_or(200);
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM chat_messages WHERE thread_id = ?")
@@ -223,6 +253,16 @@ async fn trim_window(
     // so a thread at the window boundary still accepts the next exchange.
     if excess % 2 == 1 {
         excess += 1;
+    }
+    if let Some(capture) = capture {
+        let (through,):(Option<i64>,) = sqlx::query_as("SELECT MAX(position) FROM (SELECT position FROM chat_messages WHERE thread_id=? ORDER BY position LIMIT ?)")
+            .bind(thread_id).bind(excess).fetch_one(&mut **tx).await.map_err(|_| "db_error")?;
+        if let Some(through) = through {
+            crate::companion::memory::jobs::capture(tx, capture, Some(through), true).await?;
+        }
+    } else {
+        sqlx::query("UPDATE companion_memory_state SET gap='disabled' WHERE id=1 AND EXISTS(SELECT 1 FROM companion_sessions WHERE thread_id=?)")
+            .bind(thread_id).execute(&mut **tx).await.map_err(|_| "db_error")?;
     }
     sqlx::query(
         "DELETE FROM chat_messages WHERE id IN (SELECT id FROM chat_messages \

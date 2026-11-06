@@ -26,7 +26,7 @@ pub async fn complete(
     on_delta: &mut impl FnMut(String),
 ) -> Result<CompletionStream, String> {
     let url = format!("{}/messages", config.base_url.trim_end_matches('/'));
-    let (system, turns) = convert(messages);
+    let (system, turns) = convert(messages)?;
     let body = json!({
         "model": config.model,
         "max_tokens": 4096,
@@ -216,7 +216,7 @@ fn tools(online: bool) -> Vec<Value> {
 /// Messages API reports a function result. Consecutive tool results share one
 /// user turn because the API rejects a turn with an empty content list and one
 /// turn per result would also break the call/result pairing it expects.
-pub fn convert(messages: &[Value]) -> (String, Vec<Value>) {
+pub fn convert(messages: &[Value]) -> Result<(String, Vec<Value>), String> {
     let mut system = String::new();
     let mut turns: Vec<Value> = Vec::new();
     for message in messages {
@@ -278,17 +278,19 @@ pub fn convert(messages: &[Value]) -> (String, Vec<Value>) {
                 }
             }
             _ => {
-                let text = message["content"].as_str().unwrap_or_default().to_owned();
+                let text = crate::ai::vision::anthropic_content(&message["content"])?;
                 // A user turn must not be empty, and a whitespace-only turn is
                 // empty as far as the API is concerned.
-                if text.trim().is_empty() {
+                if text.as_str().is_some_and(|s| s.trim().is_empty())
+                    || text.as_array().is_some_and(Vec::is_empty)
+                {
                     continue;
                 }
                 turns.push(json!({"role": "user", "content": text}));
             }
         }
     }
-    (system, turns)
+    Ok((system, turns))
 }
 
 #[cfg(test)]
@@ -305,7 +307,7 @@ mod tests {
             ]}),
             json!({"role": "tool", "tool_call_id": "toolu_1", "content": "{\"played\":12}"}),
         ];
-        let (system, turns) = convert(&history);
+        let (system, turns) = convert(&history).unwrap();
         assert_eq!(system, "be brief");
         assert_eq!(turns.len(), 3);
         assert_eq!(turns[1]["role"], "assistant");
@@ -327,7 +329,7 @@ mod tests {
             json!({"role": "tool", "tool_call_id": "a", "content": "1"}),
             json!({"role": "tool", "tool_call_id": "b", "content": "2"}),
         ];
-        let (_, turns) = convert(&history);
+        let (_, turns) = convert(&history).unwrap();
         assert_eq!(turns.len(), 3);
         let results = turns[2]["content"].as_array().expect("blocks");
         assert_eq!(results.len(), 2);
@@ -342,7 +344,7 @@ mod tests {
                 {"id": "a", "type": "function", "function": {"name": "library_stats", "arguments": ""}},
             ]}),
         ];
-        let (_, turns) = convert(&history);
+        let (_, turns) = convert(&history).unwrap();
         assert_eq!(turns[1]["content"][0]["input"], json!({}));
     }
 

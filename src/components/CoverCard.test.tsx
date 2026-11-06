@@ -85,7 +85,13 @@ function withProviders(ui: ReactNode) {
 
 function setPolicy(nsfw: NsfwMode) {
   useAppStore.setState({
-    prefs: { theme: "dark", language: "en", nsfw, reduce_effects: false },
+    prefs: {
+      theme: "dark",
+      language: "en",
+      nsfw,
+      reduce_effects: false,
+      beta_features: false,
+    },
   });
 }
 

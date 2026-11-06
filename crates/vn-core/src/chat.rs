@@ -133,6 +133,10 @@ impl ChatOptions {
     }
 
     pub fn prompt(&self) -> String {
+        self.prompt_with_voice(self.persona.voice(), "Do not end by offering further help, and do not ask a closing question unless you genuinely need information to answer.")
+    }
+
+    pub(crate) fn prompt_with_voice(&self, voice: &str, questions: &str) -> String {
         let spoilers = match self.spoilers {
             Spoilers::None => "NO spoilers: premise and spoiler-free metadata only. Do not reveal twists, route outcomes, deaths or endings. If asked for spoilers, ask the user to change the spoiler setting.".to_owned(),
             Spoilers::Boundary => format!("Only discuss material the user supplies up to this boundary: {:?}. A boundary is not proof of what happens in that chapter. Do not reveal later events; when chronology is uncertain, ask for a passage.", self.boundary),
@@ -158,7 +162,7 @@ Reply in {language} unless the user asks otherwise.
 ## Writing
 Write like a person who has read a lot of visual novels and is answering a friend.
 - Answer the question first, in the first sentence. Do not restate it, and do not open with \"Sure\", \"Certainly\", \"Great question\", or a summary of what you are about to do.
-- Do not end by offering further help, and do not ask a closing question unless you genuinely need information to answer.
+- {questions}
 - Prefer prose. Use a list only when the answer really is a set of parallel items (several titles, several routes, several sessions); never a list of one, and never a list used to avoid writing sentences.
 - Do not bold-label the start of every bullet. Write the bullet as a sentence. Bold is for a term being defined or a number that matters, at most a few times per answer.
 - Do not decorate with emoji (unless using the Kawaii persona voice with kaomoji), horizontal rules, or headers for a short answer. No header in an answer under about 120 words.
@@ -177,7 +181,7 @@ Spoiler policy: {spoilers}
 Context game id: {scope}.",
             language = self.language,
             spoilers = spoilers,
-            voice = self.persona.voice(),
+            voice = voice,
             scope = self.game_id.as_deref().unwrap_or("entire library"),
         )
     }

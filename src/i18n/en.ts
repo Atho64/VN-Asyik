@@ -12,11 +12,15 @@ export const en = {
   "reading.ended": "Ended",
   "reading.readingTime": "Reading time",
   "reading.sessionNotes": "Session checkpoints",
-  "reading.sessionEmpty": "No checkpoints for this session yet. Add a note or save-slot reminder.",
-  "reading.sessionError": "Could not refresh this session. It may have been removed. Reload to try again.",
+  "reading.sessionEmpty":
+    "No checkpoints for this session yet. Add a note or save-slot reminder.",
+  "reading.sessionError":
+    "Could not refresh this session. It may have been removed. Reload to try again.",
   "reading.openSession": "View reading session: {{date}}",
-  "reading.sessionsCount": "Showing {{count}} of {{total}} sessions. Select a session to view its details and checkpoints.",
-  "reading.sessionsError": "Could not load that page. The sessions shown are unchanged; try again.",
+  "reading.sessionsCount":
+    "Showing {{count}} of {{total}} sessions. Select a session to view its details and checkpoints.",
+  "reading.sessionsError":
+    "Could not load that page. The sessions shown are unchanged; try again.",
   "reading.olderSessions": "Older sessions",
   "reading.newerSessions": "Newer sessions",
   "reading.title": "Where did I leave off?",
@@ -25,17 +29,22 @@ export const en = {
   "reading.add": "Add checkpoint",
   "reading.edit": "Edit checkpoint",
   "reading.remove": "Delete checkpoint",
-  "reading.removeConfirm": "Delete this journal entry? Your recorded playtime and game saves stay unchanged.",
+  "reading.removeConfirm":
+    "Delete this journal entry? Your recorded playtime and game saves stay unchanged.",
   "reading.route": "Route",
   "reading.chapter": "Chapter",
   "reading.slot": "Save slot",
   "reading.note": "Session note",
   "reading.placeholder": "Tomorrow: load slot 12, before the choice at the station…",
-  "reading.empty": "Leave yourself a short note and a save slot so it is easy to return to this story.",
-  "reading.noSession": "No reading session recorded yet. You can still add a manual checkpoint.",
+  "reading.empty":
+    "Leave yourself a short note and a save slot so it is easy to return to this story.",
+  "reading.noSession":
+    "No reading session recorded yet. You can still add a manual checkpoint.",
   "reading.noPosition": "No route or chapter recorded for this session.",
-  "reading.manualHint": "Route, chapter and save slot can be entered manually. The slot is a reminder; the app does not load or change game saves.",
-  "reading.linkedSession": "This note is linked to the reading session selected when you opened this form.",
+  "reading.manualHint":
+    "Route, chapter and save slot can be entered manually. The slot is a reminder; the app does not load or change game saves.",
+  "reading.linkedSession":
+    "This note is linked to the reading session selected when you opened this form.",
   "reading.manualEntry": "Manual checkpoint, without a recorded session.",
   "reading.guide": "Open walkthrough",
   "reading.history": "Reading journal",
@@ -45,9 +54,11 @@ export const en = {
   "reading.save": "Save checkpoint",
   "reading.saving": "Saving…",
   "reading.saved": "Journal updated.",
-  "reading.loadError": "Could not refresh the journal. Any details shown are from the last successful load.",
+  "reading.loadError":
+    "Could not refresh the journal. Any details shown are from the last successful load.",
   "reading.saveError": "Could not save this change. Your text is still here; try again.",
-  "reading.conflict": "This entry changed or was deleted. The journal has been refreshed. Keep a copy of your text, then close this form before editing again.",
+  "reading.conflict":
+    "This entry changed or was deleted. The journal has been refreshed. Keep a copy of your text, then close this form before editing again.",
   "reading.retry": "Reload journal",
   "app.name": "VN Asyik",
 
@@ -596,50 +607,28 @@ export const en = {
   "detail.viewOnVndb": "Open on VNDB",
   "detail.viewOnVndbHint": "Opens {{vn}} on vndb.org in your browser",
   "detail.links": "Links",
-  "detail.cast":
-    "Characters",
-  "detail.castMore":
-    "{{count}} more",
-  "detail.castRole.main":
-    "Main",
-  "detail.castRole.primary":
-    "Primary",
-  "detail.castRole.side":
-    "Side",
-  "detail.castRole.appears":
-    "Appears",
-  "detail.castTraits":
-    "Traits",
-  "detail.castBirthday":
-    "Birthday",
-  "detail.castHeight":
-    "Height",
-  "detail.castWeight":
-    "Weight",
-  "detail.castBlood":
-    "Blood type",
-  "detail.castVoicedBy":
-    "Voiced by",
-  "detail.castTraitsMore":
-    "{{count}} more groups",
-  "detail.castShowSpoilers":
-    "Show {{count}} spoiler traits",
-  "detail.castHideSpoilers":
-    "Hide spoiler traits",
-  "detail.titleRole.english":
-    "English",
-  "detail.titleRole.romaji":
-    "Romaji",
-  "detail.titleRole.japanese":
-    "Japanese",
-  "detail.titleRole.original":
-    "Original",
-  "detail.titleRole.chinese":
-    "Chinese",
-  "detail.titleRole.korean":
-    "Korean",
-  "detail.titleRole.alias":
-    "Also called",
+  "detail.cast": "Characters",
+  "detail.castMore": "{{count}} more",
+  "detail.castRole.main": "Main",
+  "detail.castRole.primary": "Primary",
+  "detail.castRole.side": "Side",
+  "detail.castRole.appears": "Appears",
+  "detail.castTraits": "Traits",
+  "detail.castBirthday": "Birthday",
+  "detail.castHeight": "Height",
+  "detail.castWeight": "Weight",
+  "detail.castBlood": "Blood type",
+  "detail.castVoicedBy": "Voiced by",
+  "detail.castTraitsMore": "{{count}} more groups",
+  "detail.castShowSpoilers": "Show {{count}} spoiler traits",
+  "detail.castHideSpoilers": "Hide spoiler traits",
+  "detail.titleRole.english": "English",
+  "detail.titleRole.romaji": "Romaji",
+  "detail.titleRole.japanese": "Japanese",
+  "detail.titleRole.original": "Original",
+  "detail.titleRole.chinese": "Chinese",
+  "detail.titleRole.korean": "Korean",
+  "detail.titleRole.alias": "Also called",
   "detail.linksMore": "Databases and wikis",
   "detail.screenshots": "Screenshots",
   "detail.screenshotsEmpty": "VNDB has no screenshots for this visual novel.",
@@ -807,6 +796,12 @@ export const en = {
   "stats.loading": "Totalling your sessions",
   "stats.errorTitle": "Stats could not be loaded",
 
+  "settings.betaTitle": "Beta features",
+  "settings.betaLabel": "Enable Beta features",
+  "settings.betaHint": "Show Companion, Discover (VN search with an API key), and VN Chat, plus their setup tools. Off by default. Turning this off pauses the companion and keeps your saved settings and history.",
+  "settings.betaOn": "On",
+  "settings.betaOff": "Off",
+  "settings.betaSaving": "Saving…",
   "settings.title": "Settings",
   "settings.tabGeneral": "General",
   "settings.tabVndb": "VNDB Sync",
@@ -885,18 +880,13 @@ export const en = {
   "settings.presenceClientId": "Client ID (optional override)",
   "settings.presenceClientIdHint":
     "Leave blank to use the default VN Asyik application ID.",
-  "settings.presenceScope":
-    "Presence scope",
+  "settings.presenceScope": "Presence scope",
   "settings.presenceScopeHint":
     "Pick a game to override just that game. Anything you change here is stored alone; the rest keeps following the global default.",
-  "settings.presenceScopeGlobal":
-    "Global default",
-  "settings.presenceScopeResetButton":
-    "Reset this game to global",
-  "settings.presenceScopeReset":
-    "This game is back on the global settings.",
-  "settings.presencePreviewGame":
-    "Game shown in the preview",
+  "settings.presenceScopeGlobal": "Global default",
+  "settings.presenceScopeResetButton": "Reset this game to global",
+  "settings.presenceScopeReset": "This game is back on the global settings.",
+  "settings.presencePreviewGame": "Game shown in the preview",
   "settings.presencePreview": "Live Preview",
   "settings.presencePlaying": "PLAYING A GAME",
 
@@ -1102,7 +1092,8 @@ export const en = {
     "Automatic tracking on: only focused time counts, and idle time is filed as away per the idle-detection threshold.",
   "guide.tracking.p2":
     "Automatic tracking off: every second the game runs counts, away time included; the session stops when the game closes and is not continued.",
-  "guide.tracking.p3": "Scan a folder, then map an executable to a game. Nothing is guessed.",
+  "guide.tracking.p3":
+    "Scan a folder, then map an executable to a game. Nothing is guessed.",
   "guide.chapters.title": "Routes, chapters and endings",
   "guide.chapters.body":
     "Siglus engines write the chapter into the window title, and the app reads it: a date, a day number or a chapter number, full-width characters included.",
@@ -1115,7 +1106,8 @@ export const en = {
   "guide.game.title": "Start from the app",
   "guide.game.body":
     "The Play button launches a mapped game and binds that process to it immediately.",
-  "guide.game.p1": "When a Locale Emulator profile is chosen, the game starts through it.",
+  "guide.game.p1":
+    "When a Locale Emulator profile is chosen, the game starts through it.",
   "guide.game.p2": "Once the game runs, the chapter is read from its window title.",
   "guide.game.p3":
     "One game is one running session; pressing Play twice does not double the time.",
@@ -1225,7 +1217,8 @@ export const en = {
   "vnchat.boundaryHint": "For example: common route, chapter 3",
   "vnchat.locked": "Start a new chat to change game context or spoiler boundaries.",
   "vnchat.persona": "Personality",
-  "vnchat.personaHint": "How the companion talks. Facts, sources and spoiler rules are the same for every one.",
+  "vnchat.personaHint":
+    "How the companion talks. Facts, sources and spoiler rules are the same for every one.",
   "vnchat.persona.companion": "Companion",
   "vnchat.persona.kawaii": "Kawaii",
   "vnchat.persona.analyst": "Analyst",
@@ -1235,7 +1228,8 @@ export const en = {
   "vnchat.hookConnected": "Connected ({count} lines)",
   "vnchat.hookDisconnected": "Disconnected",
   "vnchat.hookHintActive": "LunaTranslator is streaming live dialogue into the chat.",
-  "vnchat.hookHintInactive": "LunaTranslator is not connected. Make sure the network service is enabled at port 2333.",
+  "vnchat.hookHintInactive":
+    "LunaTranslator is not connected. Make sure the network service is enabled at port 2333.",
   "vnchat.online": "Allow online sources for this chat",
   "vnchat.onlineHint":
     "VNDB lookup is free. Web search uses your Tavily key and credits; sources may contain spoilers.",
@@ -1280,6 +1274,8 @@ export const en = {
   "vnchat.tool.taste": "Reading collection themes",
   "vnchat.tool.vndb": "Looking up VNDB",
   "vnchat.tool.web": "Searching public sources",
+  "vnchat.tool.dialogue": "Reading recent game dialogue",
+  "vnchat.tool.script": "Reading imported script digest",
   "vnchat.tool.unknown": "Unavailable tool",
   "vnchat.status.complete": "Done",
   "vnchat.status.running": "Working",
@@ -1464,15 +1460,18 @@ export const en = {
   "walkthrough.kind.ending": "Ending",
   "walkthrough.kind.note": "Note",
   "walkthrough.reload": "Re-scrape",
-  "walkthrough.searchPlaceholder": "Search game titles (Japanese / Romaji) on Seiya-Saiga...",
+  "walkthrough.searchPlaceholder":
+    "Search game titles (Japanese / Romaji) on Seiya-Saiga...",
   "walkthrough.searchBtn": "Search",
   "walkthrough.searching": "Searching...",
   "walkthrough.searchResults": "Search Results ({{count}})",
   "walkthrough.candidatesFound": "Matching Candidates ({{count}})",
-  "walkthrough.noResults": "No matching titles found on Seiya-Saiga. Try another keyword or use a manual URL.",
+  "walkthrough.noResults":
+    "No matching titles found on Seiya-Saiga. Try another keyword or use a manual URL.",
   "walkthrough.select": "Fetch",
   "walkthrough.orManualUrl": "or enter a manual URL",
-  "walkthrough.autoSearchTip": "Covers 4,800+ visual novel titles from Seiya-Saiga (PC 18+, All-ages, Console).",
+  "walkthrough.autoSearchTip":
+    "Covers 4,800+ visual novel titles from Seiya-Saiga (PC 18+, All-ages, Console).",
   "update.title": "Updates",
   "update.intro":
     "This build checks the release page once per launch. Nothing is downloaded until you ask.",
@@ -1515,6 +1514,259 @@ export const en = {
   "appearance.error.invalid_accent": "That is not a #rrggbb colour.",
   "appearance.error.unsupported_image":
     "That image cannot be used; try a JPG or PNG under 8 MB.",
+  "companion.removedGame": "Removed game",
+  "companion.title": "Companion",
+  "companion.options": "Session options",
+  "companion.openOverlay": "Open overlay",
+  "companion.overlayHint":
+    "A movable window that stays on top. Use a windowed or borderless game; exclusive fullscreen may cover it.",
+  "companion.openMain": "Open in app",
+  "companion.hideOverlay": "Hide",
+  "companion.hideOverlayHint": "Hide this window. Your session and reply keep running.",
+  "companion.overlayEmpty": "Ready when you are",
+  "companion.overlaySetupHint":
+    "Start a reading session in the main app. It will appear here automatically.",
+  "companion.overlayUnsupported":
+    "Floating windows are available on desktop. Use the companion page on this device.",
+  "companion.error.overlay_unsupported":
+    "Floating windows are not supported on this device.",
+  "companion.error.overlay_window_error":
+    "The companion window could not be opened or updated. Try again.",
+  "companion.error.overlay_invalid_path":
+    "This page cannot be opened from the companion window.",
+  "companion.subtitle": "Ask about passages while you play.",
+  "companion.readWith": "Read with companion",
+  "companion.regularChat": "Open chat",
+  "companion.setupTitle": "Start reading together",
+  "companion.setupHint":
+    "Choose a game and a fresh reading context. You can navigate away while the companion stays active.",
+  "companion.replaceHint":
+    "This ends your current session and starts a fresh conversation for a different save, route or source.",
+  "companion.game": "Game",
+  "companion.chooseGame": "Choose a game",
+  "companion.readingLabel": "Session name",
+  "companion.readingOptions": "Reading context",
+  "companion.firstReading": "First reading",
+  "companion.newContextLabel": "New reading context",
+  "companion.personality": "Personality",
+  "companion.knowledge": "Spoiler scope",
+  "companion.knowledge.metadata": "Metadata only",
+  "companion.knowledge.observed": "Only what I share",
+  "companion.knowledge.all": "All spoilers",
+  "companion.knowledgeHint.metadata": "Game info only; no dialogue, scripts or notes.",
+  "companion.knowledgeHint.observed":
+    "Shared passages and fresh Luna text; no full scripts or notes.",
+  "companion.knowledgeHint.all":
+    "Full scripts and private notes; endings may be revealed.",
+  "companion.boundary": "Reading boundary (optional)",
+  "companion.boundaryPlaceholder": "Where should the discussion stop?",
+  "companion.source": "Dialogue source",
+  "companion.manual": "Typed passages",
+  "companion.manualHint": "Ask questions and paste the lines you want to discuss.",
+  "companion.luna": "LunaTranslator",
+  "companion.lunaHint":
+    "Only new, recent lines after you start or resume are eligible. Luna does not identify which game sent them.",
+  "companion.lunaUnavailable":
+    "Enable Luna's network service and connect it in Settings first.",
+  "companion.confirmLuna":
+    "Luna is showing this game. I'll start a new session after changing game, route or save.",
+  "companion.privacy":
+    "Your model receives questions and allowed context. History stays here, outside sync and exports.",
+  "companion.start": "Start session",
+  "companion.starting": "Starting…",
+  "companion.replaceStart": "End current and start fresh",
+  "companion.addGame": "Add a game to your library",
+  "companion.resetContext": "New session",
+  "companion.newSession": "New session",
+  "companion.end": "End session",
+  "companion.pause": "Pause session",
+  "companion.resume": "Resume with fresh dialogue",
+  "companion.stopReply": "Stop reply",
+  "companion.replying": "Preparing a reply…",
+  "companion.state.active": "Reading together",
+  "companion.state.paused": "Session paused",
+  "companion.state.starting": "Starting session",
+  "companion.state.ending": "Ending session",
+  "companion.connectionError":
+    "The companion view is disconnected. Its native session may still be running. Reconnect to check its state.",
+  "companion.retry": "Reconnect",
+  "companion.loading": "Loading companion…",
+  "companion.provider": "Model: {{name}} · {{model}}",
+  "companion.noProvider": "No model provider selected",
+  "companion.openSettings": "Open Settings",
+  "companion.mobileLimit":
+    "Keep the app open on this platform. Background operation is not guaranteed by the operating system.",
+  "companion.history": "Reading sessions",
+  "companion.selectSession": "Choose a session",
+  "companion.liveSession": "Current session",
+  "companion.latestSession": "Latest session / start new",
+  "companion.askOnly": "Ask only",
+  "companion.ended": "Session ended",
+  "companion.reason.user": "Resume to receive new dialogue and replies.",
+  "companion.reason.ended_by_user":
+    "Session ended. Start a new session to continue reading together.",
+  "companion.reason.source_lost":
+    "The dialogue connection changed or was lost. Check that Luna still shows this game, then resume to use only fresh lines.",
+  "companion.reason.source_changed":
+    "The Luna address changed. Start a new reading context to bind this source.",
+  "companion.reason.game_changed":
+    "Tracking moved to another game. Start a new context for that game or return to this one before resuming.",
+  "companion.reason.game_closed": "The tracked game closed. The companion is paused.",
+  "companion.reason.game_unavailable":
+    "The game or foreground desktop is unavailable. Check the game before resuming.",
+  "companion.reason.game_missing":
+    "This game was removed from the library. The session has ended.",
+  "companion.reason.db_error":
+    "The session was paused because its stored context could not be read.",
+  "companion.reason.shutdown": "The session ended when the app closed.",
+  "companion.reason.interrupted":
+    "The previous session was interrupted. Its history is available, and observation remains stopped.",
+  "companion.sourceState.manual": "Typed passages",
+  "companion.sourceState.waiting": "Luna: waiting for text",
+  "companion.sourceState.receiving": "Luna: receiving text",
+  "companion.sourceState.stale": "Luna: no recent text",
+  "companion.sourceState.disconnected": "Luna: disconnected",
+  "companion.sourceState.paused": "Paused",
+  "companion.sourceState.off": "Stopped",
+  "companion.lastText": "Last text: {{time}}",
+  "companion.processBound":
+    "Watching the tracked game for closure. Keep the same game selected in Luna.",
+  "companion.manualBinding":
+    "Game binding is manual; game closure cannot be verified for this session. Keep Luna on the selected game and end the session when finished.",
+  "companion.preview": "Preview recent dialogue",
+  "companion.conversation": "Companion conversation",
+  "companion.olderMessages": "Show older messages",
+  "companion.emptyTitle": "What are you reading?",
+  "companion.emptyHint": "Paste a passage or ask about the scene.",
+  "companion.providerRequired":
+    "Select a model and configure its credentials in Settings to send a question.",
+  "companion.message": "Message",
+  "companion.placeholder": "Ask about this scene…",
+  "companion.sendHint": "Ctrl / ⌘ + Enter",
+  "companion.send": "Send",
+  "companion.returnLive": "Return to current session",
+  "companion.historyHint": "Read-only history. Keeps the latest 200 messages.",
+  "memory.title": "Memory",
+  "memory.confirm": "Confirm",
+  "memory.intro": "Saved on this device only. Not included in sync, backups or exports.",
+  "memory.use": "Use saved memories",
+  "memory.useHint":
+    "Eligible saved text accompanies your questions to the selected provider. Saving does not enable this setting.",
+  "memory.auto": "Automatic recap suggestions",
+  "memory.autoHint":
+    "When older exchanges leave the 200-message window, suggest a recap using the selected model. Review before remembering.",
+  "memory.autoConfirm":
+    "Enable automatic model calls for recaps when history rolls over? Provider charges may apply. Interrupted calls pause until you explicitly retry.",
+  "memory.suggestConfirm":
+    "Send eligible recent exchanges to the selected model for a recap suggestion? Provider charges may apply. The result stays out of memory until you approve it.",
+  "memory.replayExcluded":
+    "Earlier companion messages remain readable, but are excluded from future model context after a memory correction or Forget.",
+  "memory.capacity": "{{items}} / 1,000 saved · {{pins}} / 100 pinned",
+  "memory.gap.disabled":
+    "Older exchanges were trimmed while automatic recaps were off. They were not summarized.",
+  "memory.gap.capacity": "A recap was skipped because memory or the recap queue is full.",
+  "memory.gap.input_limit":
+    "Some older exchanges could not fit in a recap. No complete recap was saved for them.",
+  "memory.gap.no_evidence":
+    "There is no eligible story context to summarize. Metadata-only sessions do not produce story recaps.",
+  "memory.remember": "Remember this",
+  "memory.open": "Review memories",
+  "memory.edit": "Edit / pin",
+  "memory.review": "Review recap",
+  "memory.scope": "Save for",
+  "memory.scope.shared": "All companions",
+  "memory.scope.companion": "This companion",
+  "memory.scope.reading": "This reading",
+  "memory.scopeHint.shared":
+    "Only preferences you choose to share with every companion. Keep story details in This reading.",
+  "memory.scopeHint.companion":
+    "Your preferences or relationship continuity for this identity, across profile edits. Keep story details in This reading.",
+  "memory.scopeHint.reading":
+    "Only this game and playthrough, within its spoiler scope. A new session starts a separate reading.",
+  "memory.text": "Memory text",
+  "memory.bytes": "{{count}} / 2,048 bytes",
+  "memory.pin": "Pin (keep until forgotten)",
+  "memory.pinned": "Pinned",
+  "memory.save": "Save memory",
+  "memory.suggest": "Suggest a recap",
+  "memory.suggestions": "Recap queue",
+  "memory.saved": "Saved memories",
+  "memory.search": "Search memories",
+  "memory.filter": "Show scope",
+  "memory.allScopes": "All saved scopes",
+  "memory.empty":
+    "No saved memories match. Remember a preference or an observation to get started.",
+  "memory.evidence.reader": "Reader authored",
+  "memory.evidence.passage": "Reader passage",
+  "memory.evidence.inference": "Derived / may be speculative",
+  "memory.expires": "Expires {{date}}",
+  "memory.readingId": "Reading {{id}}",
+  "memory.sources": "Source details",
+  "memory.noSource": "No current evidence is available.",
+  "memory.source.reader": "Reader authored",
+  "memory.source.user": "Reader message",
+  "memory.source.assistant": "Assistant statement, not verified",
+  "memory.source.summary": "Model recap, not verified",
+  "memory.source.luna": "Captured dialogue",
+  "memory.job.pending": "Waiting",
+  "memory.job.running": "Generating suggestion",
+  "memory.job.paused": "Paused; explicit retry required",
+  "memory.job.review": "Ready for review",
+  "memory.resumeJob": "Retry recap (model call)",
+  "memory.discard": "Discard suggestion",
+  "memory.previous": "Previous",
+  "memory.next": "Next",
+  "memory.forget": "Forget",
+  "memory.forgetMore": "Forget a larger scope",
+  "memory.forgetReading": "Forget this reading",
+  "memory.forgetSession": "Forget memories from this session",
+  "memory.forgetCompanion": "Forget this companion's preferences",
+  "memory.forgetAll": "Forget all memories",
+  "memory.forgetConfirm": "Forget the selected memory scope?",
+  "memory.forgetWarning":
+    "This clears the selected saved text and evidence, cancels pending recaps, and invalidates derived recaps. Every earlier companion transcript stays readable locally but is excluded from future prompts, so recent conversational continuity is lost. New Luna input starts here. Separate game notes and scripts are unchanged. Already sent provider input cannot be retracted.",
+  "memory.editWarning":
+    "Saving a correction stops the current reply, invalidates recaps, and excludes all earlier companion exchanges from future prompts. The old transcripts stay readable locally.",
+  "memory.passageHint":
+    "This saves a reviewed passage with its original source and reading scope. Assistant statements remain unverified inference. Passages over 4 KiB cannot be copied as evidence; enter a new observation instead.",
+  "companion.error.invalid_memory":
+    "Use a nonempty memory of at most 2 KiB and an eligible scope.",
+  "companion.error.memory_stale":
+    "Memory changed since this editor opened. Reopen it to review the current version.",
+  "companion.error.memory_capacity":
+    "Memory storage is full. Forget unneeded items or unpin some items. Revocation metadata is retained to prevent stale text from returning.",
+  "companion.error.memory_evidence_limit":
+    "This passage exceeds the 4 KiB evidence limit. Enter a new observation instead.",
+  "companion.error.memory_source_unavailable":
+    "The source was trimmed, excluded or removed. Only newly supplied context can be remembered again.",
+  "companion.error.memory_summary_gap":
+    "No recap could be queued. Check the memory notice and capacity.",
+  "companion.error.memory_provider_changed":
+    "The selected endpoint or model changed. Restore that selection to retry, or discard this suggestion and request a new recap.",
+  "companion.error.memory_attempt_limit":
+    "This recap reached its retry limit. Discard it and request a new recap from current evidence.",
+  "companion.error.memory_output_limit":
+    "The provider returned an empty or oversized recap. Nothing was remembered.",
+  "companion.delete": "Delete session history",
+  "companion.deleteConfirm":
+    "Delete this session, its conversation and memories derived from it? Independent preferences stay saved. Derived recaps are invalidated, and all earlier companion transcripts are excluded from future model context while remaining readable locally.",
+  "companion.error.source_unavailable":
+    "Luna is not connected. Check Settings or start with typed passages.",
+  "companion.error.source_changed":
+    "The dialogue address changed. Start a new context with the selected source.",
+  "companion.error.companion_active":
+    "End the current companion session before starting another.",
+  "companion.error.companion_paused": "Resume the session before sending a question.",
+  "companion.error.companion_missing":
+    "This companion session is no longer current. Reopen it from Reading sessions.",
+  "companion.error.invalid_playthrough":
+    "Enter a reading context name of up to 80 characters.",
+  "companion.error.invalid_session_state":
+    "The session state changed. Reconnect and try again.",
+  "companion.error.companion_limit":
+    "There are 100 saved sessions. Delete an old session before starting another.",
+  "companion.error.runtime_error":
+    "The companion could not update its session. Restart the app and check its saved history.",
   "bp.title": "Big Picture",
   "bp.entry": "Big Picture",
   "bp.entryHint": "Full-screen library for a TV or a controller",
@@ -1531,6 +1783,159 @@ export const en = {
   "bp.played": "{{time}} played",
   "bp.length": "{{time}} estimated",
   "bp.empty": "No games yet. Add one from the library first.",
+  "companion.profile.savedVersion": "Saved version {{version}}",
+  "companion.profile.presets": "Presets",
+  "companion.profile.custom": "Your profiles",
+  "companion.profile.customize": "Customize",
+  "companion.profile.reload": "Reload profiles",
+  "companion.profile.name": "Profile name",
+  "companion.profile.base": "Based on",
+  "companion.profile.style": "Speaking style",
+  "companion.profile.tuning": "Fine-tune",
+  "companion.profile.length": "Reply length",
+  "companion.profile.length.short": "Short",
+  "companion.profile.length.balanced": "Balanced",
+  "companion.profile.length.detailed": "Detailed",
+  "companion.profile.language": "Reply language",
+  "companion.profile.language.app": "App language",
+  "companion.profile.language.en": "English",
+  "companion.profile.language.id": "Indonesian",
+  "companion.profile.language.ja": "Japanese",
+  "companion.profile.humor": "Humor",
+  "companion.profile.energy": "Energy",
+  "companion.profile.warmth": "Warmth",
+  "companion.profile.questions": "Follow-up questions",
+  "companion.profile.level.0": "Low",
+  "companion.profile.level.1": "Moderate",
+  "companion.profile.level.2": "High",
+  "companion.profile.interests": "Interests",
+  "companion.profile.example": "Sample reply",
+  "companion.profile.exampleHint":
+    "Authored example for this preset. No model call; your edits are not previewed.",
+  "companion.profile.passage":
+    "At the empty station, Aki leaves an unopened letter on the bench. “Maybe tomorrow,” she says, then steps back into the rain.",
+  "companion.profile.save": "Save profile",
+  "companion.profile.delete": "Delete profile",
+  "companion.profile.deleteHint":
+    "Delete this saved profile? Sessions keep their own copy.",
+  "companion.profile.confirmDelete": "Confirm deletion",
+  "companion.profile.apply": "Apply personality",
+  "companion.profile.applyHint":
+    "Apply to this session and stop any reply still in progress.",
+  "companion.error.invalid_profile": "Check the profile name, text length and settings.",
+  "companion.error.profile_conflict":
+    "This profile changed or was deleted in another window. Reload profiles, then select the latest version. Your draft is still here.",
+  "companion.error.profile_limit":
+    "You have 100 saved profiles. Delete one before adding another.",
+  "companion.preset.companion": "Companion",
+  "companion.preset.kawaii": "Kawaii",
+  "companion.preset.analyst": "Analyst",
+  "companion.preset.playful": "Playful",
+  "companion.preset.concise": "Concise",
+  "companion.preset.quiet_listener": "Quiet listener",
+  "companion.preset.hype_friend": "Hype friend",
+  "companion.preset.mystery_partner": "Mystery partner",
+  "companion.preset.romance_enthusiast": "Romance enthusiast",
+  "companion.preset.cozy_book_club": "Cozy book club",
+  "companion.preset.language_buddy": "Language buddy",
+  "companion.preset.wry_rival": "Wry rival",
+  "companion.example.companion":
+    "Leaving it unopened makes that “tomorrow” feel heavy. We don't yet know what Aki is putting off.",
+  "companion.example.kawaii":
+    "Aki… that little “maybe tomorrow” hurts a bit (｡•́︿•̀｡). The letter stays; she goes back into the rain.",
+  "companion.example.analyst":
+    "The letter is unopened, and Aki leaves without it. Her words suggest postponement; the passage doesn't establish who wrote it or why she hesitates.",
+  "companion.example.playful":
+    "The letter has secured a bench seat for tomorrow. Aki's hesitation makes the joke feel a little lonely, though.",
+  "companion.example.concise":
+    "Aki postpones something. The unopened letter leaves the reason uncertain.",
+  "companion.example.quiet_listener":
+    "She leaves the letter and walks into the rain. I'd let that silence sit for a moment.",
+  "companion.example.hype_friend":
+    "That final image lands! One unopened letter and two words leave so much unresolved.",
+  "companion.example.mystery_partner":
+    "We have three clues: an unopened letter, an empty station, and “maybe tomorrow.” She might be avoiding the contents or leaving it for someone; neither is confirmed.",
+  "companion.example.romance_enthusiast":
+    "Leaving the letter could suggest something she can't yet say. It feels intimate, though we don't know whether the relationship is romantic.",
+  "companion.example.cozy_book_club":
+    "“Tomorrow” offers a little hope while keeping the moment unfinished. Does it read more like comfort or avoidance to you?",
+  "companion.example.language_buddy":
+    "“Maybe tomorrow” leaves both the action and the decision unstated. We can discuss that nuance, but without the original Japanese I wouldn't infer its exact phrasing.",
+  "companion.example.wry_rival":
+    "I'd challenge a confident “she's moving on” reading. “Maybe tomorrow” sounds suspiciously like leaving herself a return ticket.",
+  "vision.title": "Vision",
+  "vision.intro": "Choose one game window and inspect a local preview before sharing it.",
+  "vision.unsupported": "Window capture is available on Windows only.",
+  "vision.metadata": "Start an Observed or All session to share scenes.",
+  "vision.resumeSession": "Resume the reading session first.",
+  "vision.listWindows": "Find game windows",
+  "vision.window": "Game window",
+  "vision.chooseWindow": "Choose a window...",
+  "vision.crop": "Optional crop",
+  "vision.crop.x": "Left (%)",
+  "vision.crop.y": "Top (%)",
+  "vision.crop.width": "Width (%)",
+  "vision.crop.height": "Height (%)",
+  "vision.resetCrop": "Use whole window",
+  "vision.selectPreview": "Select window and preview",
+  "vision.probeCost":
+    "Test image support sends a small synthetic image to this provider. It may cost money.",
+  "vision.test": "Test image support",
+  "vision.accepted":
+    "Image input accepted. This does not guarantee visual understanding.",
+  "vision.unknown":
+    "Image support is not confirmed for this configuration. Text chat remains available.",
+  "vision.look": "Look at this scene",
+  "vision.previewAlt": "Selected game scene preview",
+  "vision.previewSize": "{{width}} x {{height}} pixels - this image will be shared",
+  "vision.question": "Question about this scene",
+  "vision.defaultQuestion": "What do you notice in this scene?",
+  "vision.send": "Send this image",
+  "vision.consent":
+    "For this reading session, automatically share this window and crop with the provider shown above. Image and text calls may cost money. Watch only while this game is foreground.",
+  "vision.watch": "Watch and react",
+  "vision.quiet": "Quiet",
+  "vision.stop": "Stop watching",
+  "vision.limits":
+    "{{hourly}}/12 requests this hour; {{total}}/30 this session. At least 60 seconds between automatic calls. Failed, cancelled and silent calls count.",
+  "vision.retention":
+    "Screenshots stay in memory only. History keeps text and source details, not images. Stop, Pause, End or Forget clears capture. Watching never restarts automatically after app launch.",
+  "vision.reaction": "Companion reaction",
+  "vision.inference": "Visual inference - image not retained",
+  "vision.state.off": "Vision off",
+  "vision.state.preview": "Local preview",
+  "vision.state.watching": "Watching - waiting for a stable scene",
+  "vision.state.quiet": "Quiet - automatic replies stopped",
+  "vision.state.focus_paused": "Waiting for the game to be foreground",
+  "vision.state.limit": "Request limit reached",
+  "vision.state.replying": "Replying",
+  "vision.state.cooldown": "Watching - between reactions",
+  "vision.state.unavailable": "Capture unavailable - preview again",
+  "companion.error.vision_unsupported": "Window capture is supported on Windows only.",
+  "companion.error.vision_unavailable":
+    "Windows capture is unavailable. Check the selected window and use a supported SDR display.",
+  "companion.error.vision_window_unavailable":
+    "The window is closed, minimized or inaccessible. Choose it again when available.",
+  "companion.error.vision_window_changed":
+    "The window changed or resized. Preview it again before sharing.",
+  "companion.error.vision_protected": "This window does not allow capture.",
+  "companion.error.vision_hdr_unavailable":
+    "HDR capture is not supported in this phase. Use an SDR display.",
+  "companion.error.vision_no_frame":
+    "No usable frame arrived. Preview the selected window again.",
+  "companion.error.vision_invalid_crop": "Choose a nonempty crop inside the window.",
+  "companion.error.vision_invalid_image":
+    "The captured image could not be prepared within the image limits.",
+  "companion.error.vision_stale_preview":
+    "This preview expired or its source changed. Preview again.",
+  "companion.error.vision_provider_changed":
+    "The provider configuration changed. Preview and test again.",
+  "companion.error.vision_test_required":
+    "Test image support before sharing a game scene.",
+  "companion.error.vision_metadata": "Metadata-only sessions cannot share scene images.",
+  "companion.error.vision_invalid_reaction":
+    "The automatic response was invalid and was not shown.",
+  "companion.error.vision_limit": "Automatic request limit reached.",
 } as const;
 
 export type MessageKey = keyof typeof en;

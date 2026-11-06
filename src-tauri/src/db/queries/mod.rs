@@ -421,6 +421,7 @@ pub async fn load_prefs(pool: &SqlitePool) -> Result<PrefsSnapshot, DbError> {
             "language" => prefs.language = value,
             "nsfw" => prefs.nsfw = value,
             "reduce_effects" => prefs.reduce_effects = value == "true",
+            "beta_features" => prefs.beta_features = value == "true",
             _ => {}
         }
     }

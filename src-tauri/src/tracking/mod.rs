@@ -186,6 +186,13 @@ impl TrackingService {
         self.probe.as_ref()
     }
 
+    /// Cheap metadata snapshot for companion lifecycle checks. Reading it does
+    /// not enumerate processes, take over the tracker, or change counted time.
+    pub async fn companion_target(&self) -> Option<(String, u32)> {
+        let snapshot = self.snapshot.read().await;
+        Some((snapshot.game_id?.to_string(), snapshot.pid?))
+    }
+
     /// Build the service, creating the probe for this platform.
     #[must_use]
     pub fn new(now: Timestamp) -> Self {

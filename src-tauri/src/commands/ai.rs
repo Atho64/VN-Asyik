@@ -231,6 +231,10 @@ pub async fn ai_llm_save_profile(
     state: State<'_, AppState>,
     input: ProfileInput,
 ) -> CommandResult<ProfilesView> {
+    state
+        .companion()
+        .invalidate_vision()
+        .map_err(|code| CommandError::new("companion", code))?;
     let pool = state.db().pool();
     let mut saved = crate::ai::profiles::load(pool).await;
     let provider = crate::ai::chat::Provider::parse(&input.provider)
@@ -269,6 +273,10 @@ pub async fn ai_llm_activate_profile(
     state: State<'_, AppState>,
     id: String,
 ) -> CommandResult<ProfilesView> {
+    state
+        .companion()
+        .invalidate_vision()
+        .map_err(|code| CommandError::new("companion", code))?;
     let pool = state.db().pool();
     let mut saved = crate::ai::profiles::load(pool).await;
     saved.activate(&id)?;
@@ -285,6 +293,10 @@ pub async fn ai_llm_delete_profile(
     state: State<'_, AppState>,
     id: String,
 ) -> CommandResult<ProfilesView> {
+    state
+        .companion()
+        .invalidate_vision()
+        .map_err(|code| CommandError::new("companion", code))?;
     let pool = state.db().pool();
     let mut saved = crate::ai::profiles::load(pool).await;
     saved.remove(&id)?;
@@ -306,6 +318,10 @@ pub async fn ai_llm_clear_key(
     state: State<'_, AppState>,
     id: String,
 ) -> CommandResult<ProfilesView> {
+    state
+        .companion()
+        .invalidate_vision()
+        .map_err(|code| CommandError::new("companion", code))?;
     let saved = crate::ai::profiles::load(state.db().pool()).await;
     if saved.find(&id).is_none() {
         return Err(crate::ai::profiles::Invalid::UNKNOWN.into());
@@ -441,6 +457,8 @@ pub async fn ai_recommend(
 ) -> CommandResult<crate::ai::recommend::RecommendationOutcome> {
     use crate::ai::recommend;
     use sqlx::Row as _;
+
+    super::prefs::require_beta(&state).await?;
 
     let key = crate::secrets::load_tavily_key().map_err(|err| {
         CommandError::new("no_key", format!("{err}. Add a Tavily key in Settings."))

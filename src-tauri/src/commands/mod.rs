@@ -4,6 +4,7 @@ pub mod ai;
 pub mod appearance;
 pub mod backup;
 pub mod chat;
+pub mod companion;
 pub mod data;
 pub mod hook;
 pub mod launch;

@@ -87,6 +87,22 @@ button {
   padding: 0;
 }
 
+:is(
+  a[href],
+  summary,
+  select,
+  label[for],
+  label:has(input[type="checkbox"], input[type="radio"]),
+  input[type="checkbox"],
+  input[type="radio"]
+) {
+  cursor: pointer;
+}
+:is(button, select, input, textarea):disabled,
+label:has(input:disabled) {
+  cursor: not-allowed;
+}
+
 a {
   color: var(--accent-strong);
   text-decoration-color: color-mix(in srgb, var(--accent-strong) 40%, transparent);

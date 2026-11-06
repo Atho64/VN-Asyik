@@ -10,11 +10,15 @@ export const id: Messages = {
   "reading.ended": "Selesai",
   "reading.readingTime": "Waktu baca",
   "reading.sessionNotes": "Penanda sesi ini",
-  "reading.sessionEmpty": "Belum ada penanda untuk sesi ini. Tambahkan catatan atau pengingat save slot.",
-  "reading.sessionError": "Sesi belum bisa dimuat ulang atau sudah dihapus. Coba muat ulang.",
+  "reading.sessionEmpty":
+    "Belum ada penanda untuk sesi ini. Tambahkan catatan atau pengingat save slot.",
+  "reading.sessionError":
+    "Sesi belum bisa dimuat ulang atau sudah dihapus. Coba muat ulang.",
   "reading.openSession": "Lihat sesi baca: {{date}}",
-  "reading.sessionsCount": "Menampilkan {{count}} dari {{total}} sesi. Pilih sesi untuk melihat detail dan penandanya.",
-  "reading.sessionsError": "Halaman belum bisa dimuat. Daftar sesi tetap ditampilkan; coba lagi.",
+  "reading.sessionsCount":
+    "Menampilkan {{count}} dari {{total}} sesi. Pilih sesi untuk melihat detail dan penandanya.",
+  "reading.sessionsError":
+    "Halaman belum bisa dimuat. Daftar sesi tetap ditampilkan; coba lagi.",
   "reading.olderSessions": "Sesi lebih lama",
   "reading.newerSessions": "Sesi lebih baru",
   "reading.title": "Terakhir sampai mana?",
@@ -23,17 +27,22 @@ export const id: Messages = {
   "reading.add": "Tambah penanda",
   "reading.edit": "Edit penanda",
   "reading.remove": "Hapus penanda",
-  "reading.removeConfirm": "Hapus entri jurnal ini? Waktu baca dan save game tetap tersimpan.",
+  "reading.removeConfirm":
+    "Hapus entri jurnal ini? Waktu baca dan save game tetap tersimpan.",
   "reading.route": "Rute",
   "reading.chapter": "Bab",
   "reading.slot": "Save slot",
   "reading.note": "Catatan sesi",
   "reading.placeholder": "Besok lanjut dari slot 12, sebelum pilihan di stasiun…",
-  "reading.empty": "Tinggalkan catatan singkat dan save slot agar mudah kembali ke cerita ini.",
-  "reading.noSession": "Belum ada sesi baca yang tercatat. Kamu tetap bisa menambah penanda manual.",
+  "reading.empty":
+    "Tinggalkan catatan singkat dan save slot agar mudah kembali ke cerita ini.",
+  "reading.noSession":
+    "Belum ada sesi baca yang tercatat. Kamu tetap bisa menambah penanda manual.",
   "reading.noPosition": "Rute atau bab belum tercatat untuk sesi ini.",
-  "reading.manualHint": "Rute, bab, dan save slot bisa diisi manual. Slot hanya pengingat; aplikasi tidak memuat atau mengubah save game.",
-  "reading.linkedSession": "Catatan terhubung ke sesi baca yang dipilih saat formulir ini dibuka.",
+  "reading.manualHint":
+    "Rute, bab, dan save slot bisa diisi manual. Slot hanya pengingat; aplikasi tidak memuat atau mengubah save game.",
+  "reading.linkedSession":
+    "Catatan terhubung ke sesi baca yang dipilih saat formulir ini dibuka.",
   "reading.manualEntry": "Penanda manual, tanpa sesi baca yang tercatat.",
   "reading.guide": "Buka panduan",
   "reading.history": "Jurnal baca",
@@ -43,9 +52,11 @@ export const id: Messages = {
   "reading.save": "Simpan penanda",
   "reading.saving": "Menyimpan…",
   "reading.saved": "Jurnal diperbarui.",
-  "reading.loadError": "Jurnal belum bisa dimuat ulang. Detail yang terlihat berasal dari pemuatan terakhir yang berhasil.",
+  "reading.loadError":
+    "Jurnal belum bisa dimuat ulang. Detail yang terlihat berasal dari pemuatan terakhir yang berhasil.",
   "reading.saveError": "Perubahan belum bisa disimpan. Teksmu masih ada; coba lagi.",
-  "reading.conflict": "Entri ini telah berubah atau dihapus. Jurnal sudah dimuat ulang. Salin teksmu, lalu tutup formulir sebelum mengedit kembali.",
+  "reading.conflict":
+    "Entri ini telah berubah atau dihapus. Jurnal sudah dimuat ulang. Salin teksmu, lalu tutup formulir sebelum mengedit kembali.",
   "reading.retry": "Muat ulang jurnal",
   "app.name": "VN Asyik",
 
@@ -597,50 +608,28 @@ export const id: Messages = {
   "detail.viewOnVndb": "Buka di VNDB",
   "detail.viewOnVndbHint": "Membuka {{vn}} di vndb.org lewat browser",
   "detail.links": "Tautan",
-  "detail.cast":
-    "Karakter",
-  "detail.castMore":
-    "{{count}} lainnya",
-  "detail.castRole.main":
-    "Utama",
-  "detail.castRole.primary":
-    "Pendukung utama",
-  "detail.castRole.side":
-    "Pendukung",
-  "detail.castRole.appears":
-    "Muncul",
-  "detail.castTraits":
-    "Sifat",
-  "detail.castBirthday":
-    "Ulang tahun",
-  "detail.castHeight":
-    "Tinggi",
-  "detail.castWeight":
-    "Berat",
-  "detail.castBlood":
-    "Golongan darah",
-  "detail.castVoicedBy":
-    "Diisi suara oleh",
-  "detail.castTraitsMore":
-    "{{count}} grup lainnya",
-  "detail.castShowSpoilers":
-    "Tampilkan {{count}} sifat spoiler",
-  "detail.castHideSpoilers":
-    "Sembunyikan sifat spoiler",
-  "detail.titleRole.english":
-    "Inggris",
-  "detail.titleRole.romaji":
-    "Romaji",
-  "detail.titleRole.japanese":
-    "Jepang",
-  "detail.titleRole.original":
-    "Asli",
-  "detail.titleRole.chinese":
-    "Mandarin",
-  "detail.titleRole.korean":
-    "Korea",
-  "detail.titleRole.alias":
-    "Juga disebut",
+  "detail.cast": "Karakter",
+  "detail.castMore": "{{count}} lainnya",
+  "detail.castRole.main": "Utama",
+  "detail.castRole.primary": "Pendukung utama",
+  "detail.castRole.side": "Pendukung",
+  "detail.castRole.appears": "Muncul",
+  "detail.castTraits": "Sifat",
+  "detail.castBirthday": "Ulang tahun",
+  "detail.castHeight": "Tinggi",
+  "detail.castWeight": "Berat",
+  "detail.castBlood": "Golongan darah",
+  "detail.castVoicedBy": "Diisi suara oleh",
+  "detail.castTraitsMore": "{{count}} grup lainnya",
+  "detail.castShowSpoilers": "Tampilkan {{count}} sifat spoiler",
+  "detail.castHideSpoilers": "Sembunyikan sifat spoiler",
+  "detail.titleRole.english": "Inggris",
+  "detail.titleRole.romaji": "Romaji",
+  "detail.titleRole.japanese": "Jepang",
+  "detail.titleRole.original": "Asli",
+  "detail.titleRole.chinese": "Mandarin",
+  "detail.titleRole.korean": "Korea",
+  "detail.titleRole.alias": "Juga disebut",
   "detail.linksMore": "Basis data dan wiki",
   "detail.screenshots": "Tangkapan layar",
   "detail.screenshotsEmpty": "VNDB belum punya tangkapan layar untuk visual novel ini.",
@@ -808,6 +797,12 @@ export const id: Messages = {
   "stats.loading": "Menjumlahkan sesi",
   "stats.errorTitle": "Statistik gagal dimuat",
 
+  "settings.betaTitle": "Fitur Beta",
+  "settings.betaLabel": "Aktifkan fitur Beta",
+  "settings.betaHint": "Tampilkan Teman baca, Temukan (pencarian VN dengan kunci API), dan Chat VN, beserta pengaturannya. Nonaktif secara bawaan. Menonaktifkan ini menjeda teman baca tanpa menghapus pengaturan dan riwayat tersimpan.",
+  "settings.betaOn": "Aktif",
+  "settings.betaOff": "Nonaktif",
+  "settings.betaSaving": "Menyimpan…",
   "settings.title": "Pengaturan",
   "settings.tabGeneral": "Umum",
   "settings.tabVndb": "Sinkron VNDB",
@@ -869,7 +864,7 @@ export const id: Messages = {
   "settings.presenceImageHostCatbox": "Catbox",
   "settings.presenceImageHostImgbb": "ImgBB",
   "settings.presenceImageHostHint":
-    "Opsional. Memungkinkan kartu menampilkan gambar yang tidak bisa diambil Discord sendiri: sampul eksplisit sebagai salinan yang diburamkan secara lokal, dan sampul kustom Anda. Tidak ada yang diunggah selama masih \"Tidak ada\".",
+    'Opsional. Memungkinkan kartu menampilkan gambar yang tidak bisa diambil Discord sendiri: sampul eksplisit sebagai salinan yang diburamkan secara lokal, dan sampul kustom Anda. Tidak ada yang diunggah selama masih "Tidak ada".',
   "settings.presenceImageKey": "Kunci API ImgBB",
   "settings.presenceImageKeyPlaceholder": "Tempel kunci API imgbb Anda",
   "settings.presenceImageKeySave": "Simpan Kunci",
@@ -886,18 +881,13 @@ export const id: Messages = {
   "settings.presenceClientId": "Client ID (opsional)",
   "settings.presenceClientIdHint":
     "Biarkan kosong untuk menggunakan ID aplikasi bawaan VN Asyik.",
-  "settings.presenceScope":
-    "Cakupan presence",
+  "settings.presenceScope": "Cakupan presence",
   "settings.presenceScopeHint":
     "Pilih gim untuk menimpa gim itu saja. Yang kamu ubah di sini disimpan sendiri; sisanya tetap mengikuti bawaan global.",
-  "settings.presenceScopeGlobal":
-    "Bawaan global",
-  "settings.presenceScopeResetButton":
-    "Kembalikan gim ini ke global",
-  "settings.presenceScopeReset":
-    "Gim ini kembali memakai pengaturan global.",
-  "settings.presencePreviewGame":
-    "Gim yang ditampilkan di pratinjau",
+  "settings.presenceScopeGlobal": "Bawaan global",
+  "settings.presenceScopeResetButton": "Kembalikan gim ini ke global",
+  "settings.presenceScopeReset": "Gim ini kembali memakai pengaturan global.",
+  "settings.presencePreviewGame": "Gim yang ditampilkan di pratinjau",
   "settings.presencePreview": "Pratinjau Langsung",
   "settings.presencePlaying": "SEDANG MEMAINKAN",
 
@@ -1106,7 +1096,8 @@ export const id: Messages = {
     "Lacak otomatis aktif: hanya waktu fokus yang dihitung, waktu diam dipisah sebagai AFK sesuai ambang Deteksi diam.",
   "guide.tracking.p2":
     "Lacak otomatis mati: semua waktu selama game berjalan dihitung, termasuk AFK; sesi berhenti saat gamenya ditutup dan tidak dilanjutkan.",
-  "guide.tracking.p3": "Pindai folder lalu petakan exe ke game. Tidak ada tebakan otomatis.",
+  "guide.tracking.p3":
+    "Pindai folder lalu petakan exe ke game. Tidak ada tebakan otomatis.",
   "guide.chapters.title": "Rute, chapter, dan ending",
   "guide.chapters.body":
     "Engine Siglus menulis chapter di judul jendela, dan aplikasi membacanya: tanggal, hari, atau nomor chapter, termasuk karakter full-width.",
@@ -1230,7 +1221,8 @@ export const id: Messages = {
   "vnchat.boundaryHint": "Contoh: common route, chapter 3",
   "vnchat.locked": "Buat chat baru untuk mengganti konteks game atau batas spoiler.",
   "vnchat.persona": "Kepribadian",
-  "vnchat.personaHint": "Cara pendamping bicara. Fakta, sumber, dan aturan spoiler sama untuk semuanya.",
+  "vnchat.personaHint":
+    "Cara pendamping bicara. Fakta, sumber, dan aturan spoiler sama untuk semuanya.",
   "vnchat.persona.companion": "Pendamping",
   "vnchat.persona.kawaii": "Kawaii (Imut)",
   "vnchat.persona.analyst": "Analis",
@@ -1240,7 +1232,8 @@ export const id: Messages = {
   "vnchat.hookConnected": "Terhubung ({count} baris)",
   "vnchat.hookDisconnected": "Terputus",
   "vnchat.hookHintActive": "LunaTranslator aktif mengirim teks langsung ke obrolan.",
-  "vnchat.hookHintInactive": "LunaTranslator belum terhubung. Pastikan layanan jaringan aktif di port 2333.",
+  "vnchat.hookHintInactive":
+    "LunaTranslator belum terhubung. Pastikan layanan jaringan aktif di port 2333.",
   "vnchat.online": "Izinkan sumber online untuk chat ini",
   "vnchat.onlineHint":
     "Pencarian VNDB gratis. Pencarian web memakai kunci dan kredit Tavily kamu; sumber bisa berisi spoiler.",
@@ -1285,6 +1278,8 @@ export const id: Messages = {
   "vnchat.tool.taste": "Membaca tema koleksi",
   "vnchat.tool.vndb": "Mencari di VNDB",
   "vnchat.tool.web": "Mencari sumber publik",
+  "vnchat.tool.dialogue": "Membaca dialog game terbaru",
+  "vnchat.tool.script": "Membaca ringkasan skrip yang diimpor",
   "vnchat.tool.unknown": "Tool tidak tersedia",
   "vnchat.status.complete": "Selesai",
   "vnchat.status.running": "Berjalan",
@@ -1435,7 +1430,8 @@ export const id: Messages = {
   "script.remove": "Hapus",
   "script.deleted": "Skrip dihapus",
   "script.busy": "Ringkasan lain masih berjalan. Coba lagi sebentar.",
-  "script.localOnly": "Skrip tetap di perangkat ini; tidak pernah disinkronkan atau diekspor.",
+  "script.localOnly":
+    "Skrip tetap di perangkat ini; tidak pernah disinkronkan atau diekspor.",
   "script.error.chatKeyMissing":
     "Atur dulu penyedia AI (atau endpoint lokal) di Pengaturan.",
   "walkthrough.title": "Walkthrough",
@@ -1474,10 +1470,12 @@ export const id: Messages = {
   "walkthrough.searching": "Mencari...",
   "walkthrough.searchResults": "Hasil Pencarian ({{count}})",
   "walkthrough.candidatesFound": "Kandidat Cocok ({{count}})",
-  "walkthrough.noResults": "Tidak ada judul yang cocok di Seiya-Saiga. Coba kata kunci lain atau gunakan URL manual.",
+  "walkthrough.noResults":
+    "Tidak ada judul yang cocok di Seiya-Saiga. Coba kata kunci lain atau gunakan URL manual.",
   "walkthrough.select": "Ambil",
   "walkthrough.orManualUrl": "atau masukkan URL manual",
-  "walkthrough.autoSearchTip": "Mencakup 4.800+ judul visual novel dari Seiya-Saiga (PC 18+, All-ages, Konsol).",
+  "walkthrough.autoSearchTip":
+    "Mencakup 4.800+ judul visual novel dari Seiya-Saiga (PC 18+, All-ages, Konsol).",
   "update.title": "Pembaruan",
   "update.intro":
     "Build ini memeriksa halaman rilis sekali tiap dibuka. Tidak ada yang diunduh sebelum kamu minta.",
@@ -1521,6 +1519,262 @@ export const id: Messages = {
   "appearance.error.invalid_accent": "Itu bukan warna #rrggbb.",
   "appearance.error.unsupported_image":
     "Gambar itu tidak bisa dipakai; coba JPG atau PNG di bawah 8 MB.",
+  "companion.removedGame": "Game telah dihapus",
+  "companion.title": "Teman baca",
+  "companion.options": "Opsi sesi",
+  "companion.openOverlay": "Buka overlay",
+  "companion.overlayHint":
+    "Jendela yang bisa dipindah dan selalu di atas. Gunakan mode berjendela atau tanpa bingkai; layar penuh eksklusif bisa menutupinya.",
+  "companion.openMain": "Buka di aplikasi",
+  "companion.hideOverlay": "Sembunyikan",
+  "companion.hideOverlayHint":
+    "Sembunyikan jendela ini. Sesi dan balasan tetap berjalan.",
+  "companion.overlayEmpty": "Siap menemani",
+  "companion.overlaySetupHint":
+    "Mulai sesi membaca di aplikasi utama. Sesi akan muncul di sini secara otomatis.",
+  "companion.overlayUnsupported":
+    "Jendela melayang tersedia di desktop. Gunakan halaman teman baca di perangkat ini.",
+  "companion.error.overlay_unsupported":
+    "Jendela melayang tidak didukung di perangkat ini.",
+  "companion.error.overlay_window_error":
+    "Jendela teman baca tidak dapat dibuka atau diperbarui. Coba lagi.",
+  "companion.error.overlay_invalid_path":
+    "Halaman ini tidak dapat dibuka dari jendela teman baca.",
+  "companion.subtitle": "Bicarakan cerita sambil bermain.",
+  "companion.readWith": "Baca bersama teman",
+  "companion.regularChat": "Buka chat",
+  "companion.setupTitle": "Mulai membaca bersama",
+  "companion.setupHint":
+    "Pilih game dan konteks bacaan baru. Teman baca tetap aktif saat kamu berpindah halaman.",
+  "companion.replaceHint":
+    "Sesi aktif akan berakhir. Percakapan baru dimulai untuk save, rute, atau sumber yang berbeda.",
+  "companion.game": "Game",
+  "companion.chooseGame": "Pilih game",
+  "companion.readingLabel": "Nama sesi",
+  "companion.readingOptions": "Konteks bacaan",
+  "companion.firstReading": "Bacaan pertama",
+  "companion.newContextLabel": "Konteks bacaan baru",
+  "companion.personality": "Kepribadian",
+  "companion.knowledge": "Batas spoiler",
+  "companion.knowledge.metadata": "Metadata saja",
+  "companion.knowledge.observed": "Hanya yang kubagikan",
+  "companion.knowledge.all": "Semua spoiler",
+  "companion.knowledgeHint.metadata":
+    "Info game saja; tanpa dialog, naskah, atau catatan.",
+  "companion.knowledgeHint.observed":
+    "Kutipanmu dan teks baru Luna; tanpa naskah lengkap atau catatan.",
+  "companion.knowledgeHint.all":
+    "Naskah lengkap dan catatan pribadi; bisa membocorkan ending.",
+  "companion.boundary": "Batas bacaan (opsional)",
+  "companion.boundaryPlaceholder": "Pembahasan boleh sampai mana?",
+  "companion.source": "Sumber dialog",
+  "companion.manual": "Kutipan yang diketik",
+  "companion.manualHint": "Ajukan pertanyaan dan tempel dialog yang ingin dibahas.",
+  "companion.luna": "LunaTranslator",
+  "companion.lunaHint":
+    "Hanya dialog baru dan terkini setelah mulai atau lanjut yang digunakan. Luna tidak memberi identitas game asal dialog.",
+  "companion.lunaUnavailable":
+    "Aktifkan layanan jaringan Luna dan hubungkan melalui Pengaturan terlebih dahulu.",
+  "companion.confirmLuna":
+    "Luna menampilkan game ini. Aku akan memulai sesi baru setelah berganti game, rute, atau save.",
+  "companion.privacy":
+    "Pertanyaan dan konteks yang diizinkan dikirim ke modelmu. Riwayat tetap di sini, di luar sinkronisasi dan ekspor.",
+  "companion.start": "Mulai sesi",
+  "companion.starting": "Memulai…",
+  "companion.replaceStart": "Akhiri sesi dan mulai baru",
+  "companion.addGame": "Tambahkan game ke library",
+  "companion.resetContext": "Sesi baru",
+  "companion.newSession": "Sesi baru",
+  "companion.end": "Akhiri sesi",
+  "companion.pause": "Jeda sesi",
+  "companion.resume": "Lanjut dengan dialog baru",
+  "companion.stopReply": "Hentikan jawaban",
+  "companion.replying": "Menyiapkan jawaban…",
+  "companion.state.active": "Membaca bersama",
+  "companion.state.paused": "Sesi dijeda",
+  "companion.state.starting": "Memulai sesi",
+  "companion.state.ending": "Mengakhiri sesi",
+  "companion.connectionError":
+    "Tampilan teman baca terputus. Sesinya mungkin masih berjalan. Hubungkan kembali untuk memeriksa statusnya.",
+  "companion.retry": "Hubungkan kembali",
+  "companion.loading": "Memuat teman baca…",
+  "companion.provider": "Model: {{name}} · {{model}}",
+  "companion.noProvider": "Belum ada penyedia model dipilih",
+  "companion.openSettings": "Buka Pengaturan",
+  "companion.mobileLimit":
+    "Biarkan aplikasi terbuka di platform ini. Sistem operasi tidak menjamin aplikasi tetap berjalan di latar belakang.",
+  "companion.history": "Sesi bacaan",
+  "companion.selectSession": "Pilih sesi",
+  "companion.liveSession": "Sesi aktif",
+  "companion.latestSession": "Sesi terakhir / mulai baru",
+  "companion.askOnly": "Saat ditanya",
+  "companion.ended": "Sesi berakhir",
+  "companion.reason.user": "Lanjutkan untuk menerima dialog baru dan jawaban.",
+  "companion.reason.ended_by_user":
+    "Sesi berakhir. Mulai sesi baru untuk membaca bersama lagi.",
+  "companion.reason.source_lost":
+    "Koneksi dialog berubah atau terputus. Pastikan Luna masih menampilkan game ini, lalu lanjutkan untuk memakai dialog baru saja.",
+  "companion.reason.source_changed":
+    "Alamat Luna berubah. Mulai konteks bacaan baru untuk menghubungkan sumber ini.",
+  "companion.reason.game_changed":
+    "Pelacakan beralih ke game lain. Mulai konteks untuk game tersebut atau kembali ke game ini sebelum melanjutkan.",
+  "companion.reason.game_closed": "Game yang dilacak sudah ditutup. Teman baca dijeda.",
+  "companion.reason.game_unavailable":
+    "Game atau desktop aktif tidak tersedia. Periksa game sebelum melanjutkan.",
+  "companion.reason.game_missing": "Game ini dihapus dari library. Sesi sudah berakhir.",
+  "companion.reason.db_error":
+    "Sesi dijeda karena konteks tersimpannya tidak dapat dibaca.",
+  "companion.reason.shutdown": "Sesi berakhir saat aplikasi ditutup.",
+  "companion.reason.interrupted":
+    "Sesi sebelumnya terputus. Riwayatnya tersedia, dan pengamatan tetap berhenti.",
+  "companion.sourceState.manual": "Kutipan ketikan",
+  "companion.sourceState.waiting": "Luna: menunggu teks",
+  "companion.sourceState.receiving": "Luna: menerima teks",
+  "companion.sourceState.stale": "Luna: belum ada teks baru",
+  "companion.sourceState.disconnected": "Luna: terputus",
+  "companion.sourceState.paused": "Dijeda",
+  "companion.sourceState.off": "Berhenti",
+  "companion.lastText": "Dialog terakhir: {{time}}",
+  "companion.processBound":
+    "Memantau apakah game yang dilacak ditutup. Tetap pilih game yang sama di Luna.",
+  "companion.manualBinding":
+    "Game dihubungkan secara manual; penutupannya tidak dapat dipastikan untuk sesi ini. Tetap pilih game ini di Luna dan akhiri sesi saat selesai.",
+  "companion.preview": "Pratinjau dialog terbaru",
+  "companion.conversation": "Percakapan teman baca",
+  "companion.olderMessages": "Tampilkan pesan sebelumnya",
+  "companion.emptyTitle": "Sedang membaca apa?",
+  "companion.emptyHint": "Tempel kutipan atau tanyakan adegan ini.",
+  "companion.providerRequired":
+    "Pilih model dan atur kredensialnya di Pengaturan untuk mengirim pertanyaan.",
+  "companion.message": "Pesan",
+  "companion.placeholder": "Tanyakan adegan ini…",
+  "companion.sendHint": "Ctrl / ⌘ + Enter",
+  "companion.send": "Kirim",
+  "companion.returnLive": "Kembali ke sesi aktif",
+  "companion.historyHint": "Riwayat hanya untuk dibaca. Menyimpan 200 pesan terakhir.",
+  "memory.title": "Ingatan",
+  "memory.confirm": "Konfirmasi",
+  "memory.intro":
+    "Disimpan hanya di perangkat ini. Tidak disertakan dalam sinkronisasi, cadangan, atau ekspor.",
+  "memory.use": "Gunakan ingatan tersimpan",
+  "memory.useHint":
+    "Teks tersimpan yang sesuai ikut dikirim bersama pertanyaan ke penyedia terpilih. Menyimpan tidak mengaktifkan pengaturan ini.",
+  "memory.auto": "Saran rangkuman otomatis",
+  "memory.autoHint":
+    "Saat percakapan lama keluar dari batas 200 pesan, buat saran rangkuman dengan model terpilih. Tinjau sebelum menyimpan.",
+  "memory.autoConfirm":
+    "Aktifkan panggilan model otomatis untuk rangkuman saat riwayat bergulir? Biaya penyedia mungkin berlaku. Panggilan terhenti menunggu Anda mencoba lagi.",
+  "memory.suggestConfirm":
+    "Kirim percakapan terbaru yang sesuai ke model terpilih untuk saran rangkuman? Biaya penyedia mungkin berlaku. Hasil baru menjadi ingatan setelah Anda menyetujuinya.",
+  "memory.replayExcluded":
+    "Pesan pendamping sebelumnya tetap dapat dibaca, tetapi tidak masuk konteks model selanjutnya setelah ingatan diperbaiki atau dilupakan.",
+  "memory.capacity": "{{items}} / 1.000 tersimpan · {{pins}} / 100 disematkan",
+  "memory.gap.disabled":
+    "Percakapan lama dipangkas saat rangkuman otomatis nonaktif. Percakapan tersebut tidak dirangkum.",
+  "memory.gap.capacity":
+    "Rangkuman dilewati karena ingatan atau antrean rangkuman penuh.",
+  "memory.gap.input_limit":
+    "Sebagian percakapan lama tidak muat dalam rangkuman. Tidak ada rangkuman lengkap yang disimpan untuknya.",
+  "memory.gap.no_evidence":
+    "Tidak ada konteks cerita yang sesuai untuk dirangkum. Sesi metadata saja tidak menghasilkan rangkuman cerita.",
+  "memory.remember": "Ingat ini",
+  "memory.open": "Tinjau ingatan",
+  "memory.edit": "Edit / sematkan",
+  "memory.review": "Tinjau rangkuman",
+  "memory.scope": "Simpan untuk",
+  "memory.scope.shared": "Semua pendamping",
+  "memory.scope.companion": "Pendamping ini",
+  "memory.scope.reading": "Pembacaan ini",
+  "memory.scopeHint.shared":
+    "Hanya preferensi yang Anda pilih untuk dibagikan ke semua pendamping. Simpan detail cerita di Pembacaan ini.",
+  "memory.scopeHint.companion":
+    "Preferensi atau kesinambungan hubungan untuk identitas ini, termasuk setelah profil diedit. Simpan detail cerita di Pembacaan ini.",
+  "memory.scopeHint.reading":
+    "Hanya game dan alur pembacaan ini, sesuai batas spoilernya. Sesi baru memulai pembacaan terpisah.",
+  "memory.text": "Teks ingatan",
+  "memory.bytes": "{{count}} / 2.048 byte",
+  "memory.pin": "Sematkan (simpan sampai dilupakan)",
+  "memory.pinned": "Disematkan",
+  "memory.save": "Simpan ingatan",
+  "memory.suggest": "Sarankan rangkuman",
+  "memory.suggestions": "Antrean rangkuman",
+  "memory.saved": "Ingatan tersimpan",
+  "memory.search": "Cari ingatan",
+  "memory.filter": "Tampilkan cakupan",
+  "memory.allScopes": "Semua cakupan tersimpan",
+  "memory.empty":
+    "Tidak ada ingatan yang cocok. Simpan preferensi atau pengamatan untuk memulai.",
+  "memory.evidence.reader": "Ditulis pembaca",
+  "memory.evidence.passage": "Kutipan pembaca",
+  "memory.evidence.inference": "Turunan / mungkin dugaan",
+  "memory.expires": "Kedaluwarsa {{date}}",
+  "memory.readingId": "Pembacaan {{id}}",
+  "memory.sources": "Detail sumber",
+  "memory.noSource": "Tidak ada bukti terkini yang tersedia.",
+  "memory.source.reader": "Ditulis pembaca",
+  "memory.source.user": "Pesan pembaca",
+  "memory.source.assistant": "Pernyataan asisten, belum terverifikasi",
+  "memory.source.summary": "Rangkuman model, belum terverifikasi",
+  "memory.source.luna": "Dialog tertangkap",
+  "memory.job.pending": "Menunggu",
+  "memory.job.running": "Membuat saran",
+  "memory.job.paused": "Dijeda; perlu dicoba ulang",
+  "memory.job.review": "Siap ditinjau",
+  "memory.resumeJob": "Coba lagi (panggilan model)",
+  "memory.discard": "Buang saran",
+  "memory.previous": "Sebelumnya",
+  "memory.next": "Berikutnya",
+  "memory.forget": "Lupakan",
+  "memory.forgetMore": "Lupakan cakupan lebih luas",
+  "memory.forgetReading": "Lupakan pembacaan ini",
+  "memory.forgetSession": "Lupakan ingatan dari sesi ini",
+  "memory.forgetCompanion": "Lupakan preferensi pendamping ini",
+  "memory.forgetAll": "Lupakan semua ingatan",
+  "memory.forgetConfirm": "Lupakan cakupan ingatan terpilih?",
+  "memory.forgetWarning":
+    "Ini menghapus teks dan bukti terpilih, membatalkan rangkuman tertunda, serta menghapus rangkuman turunan. Semua riwayat pendamping sebelumnya tetap dapat dibaca lokal tetapi tidak masuk prompt berikutnya, sehingga kesinambungan percakapan terbaru hilang. Input Luna baru dimulai di sini. Catatan game dan skrip terpisah tetap ada. Input yang sudah dikirim ke penyedia tidak dapat ditarik kembali.",
+  "memory.editWarning":
+    "Menyimpan koreksi menghentikan balasan saat ini, menghapus rangkuman turunan, dan mengecualikan seluruh percakapan pendamping sebelumnya dari prompt berikutnya. Riwayat lama tetap dapat dibaca lokal.",
+  "memory.passageHint":
+    "Ini menyimpan kutipan yang ditinjau bersama sumber dan cakupan pembacaannya. Pernyataan asisten tetap berupa dugaan belum terverifikasi. Kutipan di atas 4 KiB tidak dapat disalin sebagai bukti; tulis pengamatan baru.",
+  "companion.error.invalid_memory":
+    "Gunakan ingatan berisi teks maksimal 2 KiB dan cakupan yang sesuai.",
+  "companion.error.memory_stale":
+    "Ingatan berubah sejak editor dibuka. Buka kembali untuk meninjau versi terkini.",
+  "companion.error.memory_capacity":
+    "Penyimpanan ingatan penuh. Lupakan atau lepas sematan yang tidak diperlukan. Metadata pelupaan dipertahankan agar teks lama tidak kembali.",
+  "companion.error.memory_evidence_limit":
+    "Kutipan melebihi batas bukti 4 KiB. Tulis pengamatan baru.",
+  "companion.error.memory_source_unavailable":
+    "Sumber dipangkas, dikecualikan, atau dihapus. Hanya konteks yang diberikan kembali yang dapat diingat lagi.",
+  "companion.error.memory_summary_gap":
+    "Rangkuman tidak dapat diantrekan. Periksa pemberitahuan dan kapasitas ingatan.",
+  "companion.error.memory_provider_changed":
+    "Endpoint atau model terpilih berubah. Kembalikan pilihan sebelumnya untuk mencoba lagi, atau buang saran ini dan minta rangkuman baru.",
+  "companion.error.memory_attempt_limit":
+    "Rangkuman ini mencapai batas percobaan ulang. Buang dan minta rangkuman baru dari bukti terkini.",
+  "companion.error.memory_output_limit":
+    "Penyedia mengembalikan rangkuman kosong atau terlalu besar. Tidak ada yang diingat.",
+  "companion.delete": "Hapus riwayat sesi",
+  "companion.deleteConfirm":
+    "Hapus sesi, percakapan, dan ingatan turunannya? Preferensi mandiri tetap tersimpan. Rangkuman turunan dihapus, dan seluruh riwayat pendamping sebelumnya dikecualikan dari konteks model berikutnya tetapi tetap dapat dibaca lokal.",
+  "companion.error.source_unavailable":
+    "Luna belum terhubung. Periksa Pengaturan atau mulai dengan kutipan ketikan.",
+  "companion.error.source_changed":
+    "Alamat dialog berubah. Mulai konteks baru dengan sumber pilihanmu.",
+  "companion.error.companion_active":
+    "Akhiri sesi teman baca aktif sebelum memulai sesi lain.",
+  "companion.error.companion_paused": "Lanjutkan sesi sebelum mengirim pertanyaan.",
+  "companion.error.companion_missing":
+    "Sesi teman baca ini tidak lagi aktif. Buka kembali melalui Sesi bacaan.",
+  "companion.error.invalid_playthrough":
+    "Masukkan nama konteks bacaan hingga 80 karakter.",
+  "companion.error.invalid_session_state":
+    "Status sesi berubah. Hubungkan kembali dan coba lagi.",
+  "companion.error.companion_limit":
+    "Ada 100 sesi tersimpan. Hapus sesi lama sebelum memulai sesi lain.",
+  "companion.error.runtime_error":
+    "Teman baca tidak dapat memperbarui sesi. Mulai ulang aplikasi dan periksa riwayat tersimpannya.",
   "bp.title": "Big Picture",
   "bp.entry": "Big Picture",
   "bp.entryHint": "Library layar penuh untuk TV atau stik",
@@ -1538,4 +1792,159 @@ export const id: Messages = {
   "bp.played": "{{time}} dimainkan",
   "bp.length": "{{time}} perkiraan",
   "bp.empty": "Belum ada game. Tambahkan dulu dari library.",
+  "companion.profile.savedVersion": "Versi tersimpan {{version}}",
+  "companion.profile.presets": "Preset",
+  "companion.profile.custom": "Profilmu",
+  "companion.profile.customize": "Sesuaikan",
+  "companion.profile.reload": "Muat ulang profil",
+  "companion.profile.name": "Nama profil",
+  "companion.profile.base": "Dasar kepribadian",
+  "companion.profile.style": "Gaya bicara",
+  "companion.profile.tuning": "Penyesuaian",
+  "companion.profile.length": "Panjang balasan",
+  "companion.profile.length.short": "Singkat",
+  "companion.profile.length.balanced": "Seimbang",
+  "companion.profile.length.detailed": "Terperinci",
+  "companion.profile.language": "Bahasa balasan",
+  "companion.profile.language.app": "Bahasa aplikasi",
+  "companion.profile.language.en": "Inggris",
+  "companion.profile.language.id": "Indonesia",
+  "companion.profile.language.ja": "Jepang",
+  "companion.profile.humor": "Humor",
+  "companion.profile.energy": "Semangat",
+  "companion.profile.warmth": "Kehangatan",
+  "companion.profile.questions": "Pertanyaan lanjutan",
+  "companion.profile.level.0": "Rendah",
+  "companion.profile.level.1": "Sedang",
+  "companion.profile.level.2": "Tinggi",
+  "companion.profile.interests": "Minat",
+  "companion.profile.example": "Contoh balasan",
+  "companion.profile.exampleHint":
+    "Contoh tulisan untuk preset ini. Tanpa panggilan model; perubahanmu belum dicontohkan.",
+  "companion.profile.passage":
+    "Di stasiun yang sepi, Aki meninggalkan surat yang belum dibuka di bangku. “Mungkin besok,” katanya, lalu kembali melangkah ke tengah hujan.",
+  "companion.profile.save": "Simpan profil",
+  "companion.profile.delete": "Hapus profil",
+  "companion.profile.deleteHint":
+    "Hapus profil tersimpan ini? Setiap sesi tetap menyimpan salinannya.",
+  "companion.profile.confirmDelete": "Konfirmasi hapus",
+  "companion.profile.apply": "Terapkan kepribadian",
+  "companion.profile.applyHint":
+    "Terapkan ke sesi ini dan hentikan balasan yang masih berjalan.",
+  "companion.error.invalid_profile": "Periksa nama profil, panjang teks, dan pengaturan.",
+  "companion.error.profile_conflict":
+    "Profil ini berubah atau dihapus di jendela lain. Muat ulang profil, lalu pilih versi terbaru. Drafmu masih ada.",
+  "companion.error.profile_limit":
+    "Sudah ada 100 profil tersimpan. Hapus satu sebelum menambah profil baru.",
+  "companion.preset.companion": "Teman",
+  "companion.preset.kawaii": "Kawaii",
+  "companion.preset.analyst": "Analis",
+  "companion.preset.playful": "Jenaka",
+  "companion.preset.concise": "Ringkas",
+  "companion.preset.quiet_listener": "Pendengar tenang",
+  "companion.preset.hype_friend": "Teman antusias",
+  "companion.preset.mystery_partner": "Rekan misteri",
+  "companion.preset.romance_enthusiast": "Penggemar romansa",
+  "companion.preset.cozy_book_club": "Teman klub buku",
+  "companion.preset.language_buddy": "Teman belajar bahasa",
+  "companion.preset.wry_rival": "Rival jenaka",
+  "companion.example.companion":
+    "Surat yang belum dibuka membuat ucapan “besok” terasa berat. Kita belum tahu apa yang sedang Aki tunda.",
+  "companion.example.kawaii":
+    "Aki… “mungkin besok” itu agak nyesek (｡•́︿•̀｡). Suratnya tinggal; dia kembali ke hujan.",
+  "companion.example.analyst":
+    "Suratnya belum dibuka, dan Aki pergi tanpa membawanya. Ucapannya mengisyaratkan penundaan; adegan ini belum menjelaskan penulis surat atau alasan keraguannya.",
+  "companion.example.playful":
+    "Suratnya sudah pesan tempat duduk untuk besok. Tapi keraguan Aki membuat lelucon itu terasa agak sepi.",
+  "companion.example.concise":
+    "Aki menunda sesuatu. Surat yang belum dibuka membuat alasannya tetap tak pasti.",
+  "companion.example.quiet_listener":
+    "Dia meninggalkan surat lalu melangkah ke hujan. Rasanya keheningan itu boleh kita biarkan sejenak.",
+  "companion.example.hype_friend":
+    "Gambar terakhirnya kuat sekali! Satu surat yang belum dibuka dan dua kata menyisakan begitu banyak hal.",
+  "companion.example.mystery_partner":
+    "Ada tiga petunjuk: surat belum dibuka, stasiun sepi, dan “mungkin besok”. Dia mungkin menghindari isinya atau menitipkannya untuk seseorang; keduanya belum pasti.",
+  "companion.example.romance_enthusiast":
+    "Meninggalkan surat bisa mengisyaratkan sesuatu yang belum sanggup dia ucapkan. Terasa dekat, meski kita belum tahu apakah hubungannya romantis.",
+  "companion.example.cozy_book_club":
+    "“Besok” memberi sedikit harapan sambil membiarkan momen ini menggantung. Buatmu, itu lebih terasa seperti penghiburan atau penghindaran?",
+  "companion.example.language_buddy":
+    "“Mungkin besok” tidak menyebut tindakan maupun keputusan secara tegas. Kita bisa membahas nuansanya, tetapi tanpa teks Jepang asli aku tidak akan menebak susunan katanya.",
+  "companion.example.wry_rival":
+    "Aku kurang sepakat kalau langsung disimpulkan “dia sudah merelakan”. “Mungkin besok” terdengar seperti dia masih menyisakan tiket pulang.",
+  "vision.title": "Penglihatan",
+  "vision.intro":
+    "Pilih satu jendela gim dan periksa pratinjau lokal sebelum membagikannya.",
+  "vision.unsupported": "Tangkapan jendela hanya tersedia di Windows.",
+  "vision.metadata": "Mulai sesi Teramati atau Semua untuk berbagi adegan.",
+  "vision.resumeSession": "Lanjutkan sesi membaca terlebih dahulu.",
+  "vision.listWindows": "Cari jendela gim",
+  "vision.window": "Jendela gim",
+  "vision.chooseWindow": "Pilih jendela...",
+  "vision.crop": "Potongan opsional",
+  "vision.crop.x": "Kiri (%)",
+  "vision.crop.y": "Atas (%)",
+  "vision.crop.width": "Lebar (%)",
+  "vision.crop.height": "Tinggi (%)",
+  "vision.resetCrop": "Gunakan seluruh jendela",
+  "vision.selectPreview": "Pilih jendela dan pratinjau",
+  "vision.probeCost":
+    "Uji dukungan gambar mengirim gambar sintetis kecil ke penyedia ini. Biaya mungkin dikenakan.",
+  "vision.test": "Uji dukungan gambar",
+  "vision.accepted": "Input gambar diterima. Ini tidak menjamin pemahaman visual.",
+  "vision.unknown":
+    "Dukungan gambar belum dikonfirmasi untuk konfigurasi ini. Obrolan teks tetap tersedia.",
+  "vision.look": "Lihat adegan ini",
+  "vision.previewAlt": "Pratinjau adegan gim terpilih",
+  "vision.previewSize": "{{width}} x {{height}} piksel - gambar ini akan dibagikan",
+  "vision.question": "Pertanyaan tentang adegan ini",
+  "vision.defaultQuestion": "Apa yang kamu perhatikan dalam adegan ini?",
+  "vision.send": "Kirim gambar ini",
+  "vision.consent":
+    "Untuk sesi ini, bagikan jendela dan potongan ini secara otomatis dengan penyedia di atas. Panggilan gambar dan teks dapat dikenai biaya. Amati hanya saat gim di depan.",
+  "vision.watch": "Amati dan tanggapi",
+  "vision.quiet": "Diam",
+  "vision.stop": "Berhenti mengamati",
+  "vision.limits":
+    "{{hourly}}/12 panggilan jam ini; {{total}}/30 sesi ini. Jeda minimal 60 detik. Panggilan gagal, dibatalkan, dan tanpa tanggapan tetap dihitung.",
+  "vision.retention":
+    "Tangkapan layar hanya ada di memori. Riwayat menyimpan teks dan rincian sumber, tanpa gambar. Berhenti, Jeda, Akhiri, atau Lupakan menghapus tangkapan. Pengamatan tidak otomatis dimulai saat aplikasi dibuka.",
+  "vision.reaction": "Tanggapan teman baca",
+  "vision.inference": "Penafsiran visual - gambar tidak disimpan",
+  "vision.state.off": "Penglihatan mati",
+  "vision.state.preview": "Pratinjau lokal",
+  "vision.state.watching": "Mengamati - menunggu adegan stabil",
+  "vision.state.quiet": "Diam - tanggapan otomatis dihentikan",
+  "vision.state.focus_paused": "Menunggu gim berada di depan",
+  "vision.state.limit": "Batas panggilan tercapai",
+  "vision.state.replying": "Menanggapi",
+  "vision.state.cooldown": "Mengamati - jeda tanggapan",
+  "vision.state.unavailable": "Tangkapan tidak tersedia - pratinjau ulang",
+  "companion.error.vision_unsupported": "Tangkapan jendela hanya didukung di Windows.",
+  "companion.error.vision_unavailable":
+    "Tangkapan Windows tidak tersedia. Periksa jendela terpilih dan gunakan layar SDR yang didukung.",
+  "companion.error.vision_window_unavailable":
+    "Jendela ditutup, diperkecil, atau tidak dapat diakses. Pilih lagi saat tersedia.",
+  "companion.error.vision_window_changed":
+    "Jendela berubah atau diubah ukurannya. Pratinjau ulang sebelum berbagi.",
+  "companion.error.vision_protected": "Jendela ini tidak mengizinkan tangkapan.",
+  "companion.error.vision_hdr_unavailable":
+    "Tangkapan HDR belum didukung pada tahap ini. Gunakan layar SDR.",
+  "companion.error.vision_no_frame":
+    "Tidak ada bingkai yang dapat digunakan. Pratinjau ulang jendela terpilih.",
+  "companion.error.vision_invalid_crop":
+    "Pilih potongan yang tidak kosong di dalam jendela.",
+  "companion.error.vision_invalid_image":
+    "Gambar tangkapan tidak dapat disiapkan dalam batas gambar.",
+  "companion.error.vision_stale_preview":
+    "Pratinjau kedaluwarsa atau sumber berubah. Pratinjau ulang.",
+  "companion.error.vision_provider_changed":
+    "Konfigurasi penyedia berubah. Pratinjau dan uji ulang.",
+  "companion.error.vision_test_required":
+    "Uji dukungan gambar sebelum membagikan adegan gim.",
+  "companion.error.vision_metadata":
+    "Sesi metadata saja tidak dapat membagikan gambar adegan.",
+  "companion.error.vision_invalid_reaction":
+    "Tanggapan otomatis tidak valid dan tidak ditampilkan.",
+  "companion.error.vision_limit": "Batas panggilan otomatis tercapai.",
 };

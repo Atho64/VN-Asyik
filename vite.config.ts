@@ -19,8 +19,8 @@ export default defineConfig({
     // Tauri's own templates set this for the same reason.
     host: "127.0.0.1",
     watch: {
-      // src-tauri and crates are watched by cargo, not by vite.
-      ignored: ["**/src-tauri/**", "**/crates/**"],
+      // Cargo owns Rust sources; its build output is never frontend input.
+      ignored: ["**/src-tauri/**", "**/crates/**", "**/target/**"],
     },
   },
   envPrefix: ["VITE_", "TAURI_ENV_"],

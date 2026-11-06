@@ -32,7 +32,9 @@ export type SettingsTab = "general" | "vndb" | "transfer";
  * Settings screen consolidating General preferences, VNDB Sync, and Device
  * Data Transfer & Backup into a single place.
  */
-export default function SettingsScreen({ initialTab }: { initialTab?: SettingsTab } = {}) {
+export default function SettingsScreen({
+  initialTab,
+}: { initialTab?: SettingsTab } = {}) {
   const { t } = useI18n();
   const prefs = useAppStore((state) => state.prefs);
   const setPrefs = useAppStore((state) => state.setPrefs);
@@ -40,6 +42,7 @@ export default function SettingsScreen({ initialTab }: { initialTab?: SettingsTa
   const pushToast = useAppStore((state) => state.pushToast);
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? "general");
   const [afk, setAfk] = useState<AfkConfig | null>(null);
+  const [betaSaving, setBetaSaving] = useState(false);
   const [syncSettings, setSyncSettings] = useState<SyncSettings | null>(null);
 
   useEffect(() => {
@@ -70,7 +73,8 @@ export default function SettingsScreen({ initialTab }: { initialTab?: SettingsTa
   };
 
   const isWindows = platform?.os === "windows";
-  const canUsePresence = isWindows || platform?.os === "android" || platform?.discord_presence === "supported";
+  const canUsePresence =
+    isWindows || platform?.os === "android" || platform?.discord_presence === "supported";
 
   return (
     <div className="settings">
@@ -120,6 +124,46 @@ export default function SettingsScreen({ initialTab }: { initialTab?: SettingsTa
 
       {tab === "general" ? (
         <>
+          <section className="settings__group">
+            <h2 className="settings__group-title">{t("settings.betaTitle")}</h2>
+            <div className="settings__row">
+              <span className="settings__label">
+                <span id="beta-label">{t("settings.betaLabel")}</span>
+                <span className="settings__hint" id="beta-hint">
+                  {t("settings.betaHint")}
+                </span>
+              </span>
+              <div className="settings__control">
+                <Button
+                  variant="secondary"
+                  role="switch"
+                  aria-checked={prefs.beta_features}
+                  aria-labelledby="beta-label"
+                  aria-describedby="beta-hint"
+                  disabled={betaSaving}
+                  onClick={() => {
+                    setBetaSaving(true);
+                    void apply(() => api.setBetaFeatures(!prefs.beta_features)).finally(
+                      () => setBetaSaving(false),
+                    );
+                  }}
+                >
+                  {betaSaving
+                    ? t("settings.betaSaving")
+                    : prefs.beta_features
+                      ? t("settings.betaOn")
+                      : t("settings.betaOff")}
+                </Button>
+              </div>
+            </div>
+            {prefs.beta_features ? (
+              <>
+                <ChatPanel />
+                <LunaPanel />
+              </>
+            ) : null}
+          </section>
+
           <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.appearance")}</h2>
 
@@ -289,8 +333,6 @@ export default function SettingsScreen({ initialTab }: { initialTab?: SettingsTa
 
           <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.languageTools")}</h2>
-            <ChatPanel />
-            <LunaPanel />
             {isWindows ? <LocalePanel /> : null}
             {isWindows ? <TitleParsingPanel /> : null}
             {/* The panel outgrew this screen: preview, image host, templates and a
@@ -379,10 +421,7 @@ function MetadataRefreshPanel() {
         );
       }
     } catch (caught) {
-      pushToast(
-        "error",
-        caught instanceof IpcError ? caught.message : t("common.error"),
-      );
+      pushToast("error", caught instanceof IpcError ? caught.message : t("common.error"));
     } finally {
       setBusy(false);
     }

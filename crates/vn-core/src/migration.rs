@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Rules (AGENTS.md §5): migrations are numbered, applied once, and never edited
 /// after they ship. A version bump must come with a migration and a test.
-pub const SCHEMA_VERSION: u32 = 29;
+pub const SCHEMA_VERSION: u32 = 33;
 
 /// Maximum schema version this build can read in a backup file.
 ///

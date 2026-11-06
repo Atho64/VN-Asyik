@@ -22,6 +22,7 @@ pub async fn luna_save_settings(
     state: State<'_, AppState>,
     settings: LunaSettings,
 ) -> CommandResult<LunaSettings> {
+    super::prefs::require_beta(&state).await?;
     state
         .luna()
         .save(state.db().pool(), settings)
@@ -43,6 +44,7 @@ pub async fn luna_test(
     state: State<'_, AppState>,
     base_url: Option<String>,
 ) -> CommandResult<crate::tracking::luna::LunaProbe> {
+    super::prefs::require_beta(&state).await?;
     let candidate = base_url.unwrap_or_else(|| state.luna().settings().base_url);
     let settings = LunaSettings {
         enabled: true,

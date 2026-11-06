@@ -135,6 +135,9 @@
   --bp-compact-hero-height: 300px;
   --bp-action-height: 52px;
   --bp-action-width: 160px;
+  --companion-width: 64rem;
+  --companion-chat-min-height: 220px;
+  --companion-overlay-chat-min-height: 120px;
 }
 
 /* Light theme: same token names, mirrored values. Not a tint of the dark theme. */

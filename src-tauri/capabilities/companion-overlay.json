@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "companion-overlay",
+  "description": "Companion overlay observes native snapshots. Window creation and visibility use fixed native commands; no filesystem, dialog, shell or generic window management permissions.",
+  "windows": ["companion-overlay"],
+  "platforms": ["windows", "linux", "macOS"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

@@ -48,6 +48,44 @@ describe("dictionary completeness", () => {
     }
   });
 
+  it("defines the companion's dynamic status and knowledge keys", () => {
+    const families = {
+      "vnchat.persona": ["companion", "kawaii", "analyst", "playful", "concise"],
+      "companion.knowledge": ["metadata", "observed", "all"],
+      "companion.knowledgeHint": ["metadata", "observed", "all"],
+      "companion.state": ["starting", "active", "paused", "ending"],
+      "companion.sourceState": [
+        "off",
+        "manual",
+        "waiting",
+        "receiving",
+        "stale",
+        "disconnected",
+        "paused",
+      ],
+      "companion.reason": [
+        "user",
+        "ended_by_user",
+        "shutdown",
+        "interrupted",
+        "game_missing",
+        "db_error",
+        "game_changed",
+        "game_closed",
+        "game_unavailable",
+        "source_changed",
+        "source_lost",
+      ],
+    };
+    for (const [prefix, values] of Object.entries(families)) {
+      for (const value of values) {
+        const key = `${prefix}.${value}`;
+        expect(en, key).toHaveProperty(key);
+        expect(id, key).toHaveProperty(key);
+      }
+    }
+  });
+
   /**
    * Every `t("literal.key")` in the source must exist in the dictionary.
    *
@@ -80,7 +118,9 @@ describe("dictionary completeness", () => {
       }
     }
 
-    expect(used.size, "the scan must find keys, or it proves nothing").toBeGreaterThan(200);
+    expect(used.size, "the scan must find keys, or it proves nothing").toBeGreaterThan(
+      200,
+    );
 
     // A key may be defined as a plural family (`x_one` / `x_other`) rather than
     // literally, because `t("x", { count })` resolves the suffix at call time.

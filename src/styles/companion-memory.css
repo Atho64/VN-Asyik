@@ -1,0 +1,49 @@
+.companion-memory,
+.companion-memory__section,
+.companion-memory__editor,
+.companion-memory__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.companion-memory__section,
+.companion-memory__editor {
+  padding-block: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.companion-memory__item {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+}
+.companion-memory__body,
+.companion-memory__evidence {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.companion-memory small {
+  display: block;
+  color: var(--text-muted);
+}
+.companion-memory__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+}
+.companion-memory__toggle input {
+  flex: 0 0 auto;
+}
+.companion-memory summary {
+  cursor: pointer;
+  min-height: var(--touch-target);
+}
+.companion-memory__evidence {
+  border-left: 2px solid var(--accent);
+  padding-left: var(--space-3);
+}
+.companion-memory__message {
+  min-width: 0;
+}
