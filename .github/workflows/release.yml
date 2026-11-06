@@ -39,11 +39,20 @@ jobs:
           RELEASE_NOTES: |
             ## What's new
 
-            - Reading journal with editable session notes and manual save-slot reminders.
-            - Session details, older/newer history pages, and short note previews.
-            - Journal entries included in library sync and backups.
-            - Redesigned Big Picture with a selected-game hero, bounded cover pages,
-              clearer keyboard navigation, and corrected controller input handling.
+            - **Beta features** is now a device-local setting under Settings → General,
+              off by default. Enable it to show Companion, Discover/API-key VN search,
+              VN Chat, and their setup tools.
+            - Companion adds reading sessions, a desktop overlay, twelve personality
+              presets, custom personalities, and editable local memories with reviewed
+              recap suggestions.
+            - On Windows, Companion can share one selected game window with a capable
+              model and optionally watch for occasional text reactions. Window sharing,
+              automatic reactions, and recap suggestions require their own opt-ins.
+            - Turning Beta features off pauses Companion, stops window capture, and
+              keeps saved configuration and history for later.
+            - **Android session fix:** polling now checkpoints an ongoing reading
+              stretch instead of creating a new 14–15 second history entry each time.
+              A real reading boundary finalizes the session; existing history is preserved.
 
             ## Downloads
 
@@ -54,11 +63,12 @@ jobs:
 
             ## Notes
 
-            - Save-slot reminders never load or modify game saves.
-            - Automatic chapters still depend on supported window titles; other chapters
-              are manual. Live text uses LunaTranslator's network service.
-            - Mobile/light-theme Big Picture checks and physical-controller testing
-              remain part of prerelease testing.
+            - Companion remains experimental and further development is paused.
+              Real-model, real-VN, and on-device checks remain part of prerelease testing.
+            - Vision requires Windows and a model that accepts images. Shared images
+              stay in memory locally and are sent only to the selected model provider.
+              Automatic reactions are bounded and can incur provider charges.
+            - Automated tests were not rerun for this release at the owner's request.
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release already exists"

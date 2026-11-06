@@ -83,6 +83,11 @@ emulator. Android tidak bisa melihat isi jendela aplikasi lain, jadi bab di
 sana diatur manual dan aplikasi mengatakannya terang-terangan alih-alih
 menebak.
 
+Selama gim tetap di depan, pemeriksaan berkala memperbarui satu checkpoint lokal.
+Riwayat mendapat satu sesi selesai ketika rentang baca berakhir, misalnya saat
+berpindah aplikasi, mengunci layar, atau menekan Stop. Potongan riwayat 15 detik
+yang sudah tersimpan tetap dipertahankan; perbaikan berlaku untuk rekaman baru.
+
 ## Bab dari judul jendela
 
 Di desktop, bab diambil dari apa yang ditulis game di judul jendelanya sendiri:
@@ -147,7 +152,93 @@ Yang perlu diketahui sebelum menyimpan:
 perangkat ini. Android tidak pernah membaca judul jendela — OS tidak
 mengizinkannya — jadi bab di sana diisi manual.
 
+## Fitur Beta
+
+Teman baca, Temukan (pencarian VN dengan kunci API), dan Chat VN tersembunyi secara
+bawaan. Aktifkan **Pengaturan → Umum → Fitur Beta** untuk menampilkan fitur dan
+alat pengaturannya. Pilihan ini berlaku lokal per perangkat; impor pustaka tidak
+mengaktifkannya. Menonaktifkannya menjeda teman baca, menghentikan tangkapan
+jendela dan jawaban chat, memutus teks langsung Luna, serta menyembunyikan overlay.
+Kunci, pengaturan, memori, dan riwayat tersimpan tetap ada. Mengaktifkannya kembali
+tidak otomatis melanjutkan sesi atau tangkapan jendela. Pengembangan teman baca
+untuk sementara dijeda. Pencarian pustaka, pencarian/impor VNDB, dan pelacakan
+tetap tersedia.
+
 ## Obrolan pendamping
+
+Pilih **Baca bersama teman** di halaman game, atau buka **Teman baca**, untuk
+memulai sesi. Pilih game dan kepribadian, lalu gunakan teks yang
+ditempel atau sumber LunaTranslator yang sudah kamu cocokkan dengan game itu.
+Buka **Konteks bacaan** untuk mengatur nama sesi dan batas bacaan tambahan.
+Jawaban tetap berjalan saat kamu berpindah halaman atau meminimalkan aplikasi
+Windows. Jeda menghentikan dialog baru dan jawaban; **Hentikan jawaban** memutus
+jawaban saat ini; **Akhiri sesi** menutup konteks. Setelah memuat save sebelumnya
+atau berpindah rute, buka **Opsi sesi** (ikon roda gigi) lalu pilih **Sesi baru**.
+Detail model, riwayat, dan Akhiri sesi ada di panel itu; Jeda dan Kirim tetap
+di samping percakapan. Kirim menjadi Hentikan jawaban selama jawaban berjalan.
+Detail tool yang selesai tersedia di bagian Sumber.
+
+Batas pengetahuan dipilih secara jelas: **Metadata saja**, **Hanya yang kubagikan**,
+atau **Semua spoiler**. Hanya baris Luna baru yang masih segar
+setelah mulai atau lanjut yang dapat dipakai. Koneksi yang terputus atau
+berganti menjeda sesi dan perlu dikonfirmasi sebelum dilanjutkan. Pertanyaan
+menggunakan penyedia yang dipilih; reaksi otomatis dan saran rangkuman perlu
+diaktifkan secara terpisah. Sesi
+disimpan lokal, tidak ikut sinkronisasi atau ekspor pustaka, dan menyimpan
+maksimal 200 pesan terbaru per percakapan. Riwayat yang sudah berakhir tetap
+bisa dibaca atau dihapus setelah game dihapus. Memulai ulang aplikasi tidak
+otomatis melanjutkan sesi.
+
+Di desktop, **Buka overlay** membuka jendela kecil yang bisa dipindah, diubah
+ukurannya, dan tetap di atas, dengan percakapan serta kontrol jeda/akhiri yang
+sama. **Sembunyikan** atau tombol tutup menyembunyikannya sementara jawaban tetap
+berjalan; buka lagi untuk mengikuti kelanjutannya. Pengaturan sesi, pengaturan
+aplikasi, dan tautan pustaka dibuka di jendela utama. Gunakan mode berjendela atau
+borderless: fullscreen eksklusif dapat menutupi jendela biasa. Android belum
+memiliki overlay mengambang.
+
+Pilih dari dua belas kepribadian, atau gunakan **Sesuaikan** untuk menyimpan
+profil lokal dengan gaya bicara, minat, panjang balasan, bahasa, dan nadanya
+sendiri. Contoh balasan berupa tulisan contoh; membukanya tidak memanggil model.
+Di **Opsi sesi**, **Terapkan kepribadian** mengubah sesi saat ini dan menghentikan
+balasan yang masih memakai kepribadian sebelumnya. Menyimpan atau menghapus profil
+saja tidak mengubah salinan dalam sesi. Profil dan riwayat teman baca tidak ikut
+ekspor koleksi maupun sinkronisasi.
+
+**Opsi sesi → Tinjau ingatan** menambahkan ingatan lokal berkelanjutan (20C).
+Gunakan **Ingat ini** untuk preferensi atau kutipan yang ditinjau, lalu pilih
+cakupannya: semua pendamping, identitas ini, atau game dan alur pembacaan ini.
+**Gunakan ingatan tersimpan** adalah pilihan terpisah yang awalnya nonaktif.
+Ingatan dapat dicari, ditinjau, diedit, dan disematkan. **Sarankan rangkuman**
+memanggil model terpilih saat diminta; saran rangkuman otomatis memerlukan
+persetujuan terpisah dan mungkin dikenai biaya penyedia. Saran baru digunakan
+setelah disetujui. Rangkuman terhenti menunggu percobaan ulang eksplisit, dan
+bukti tersimpan tetap ada setelah riwayat melewati batas 200 pesan.
+
+**Lupakan** menghapus teks ingatan dan bukti terpilih. Koreksi dan pelupaan juga
+menghapus rangkuman turunan serta mengecualikan seluruh percakapan pendamping
+sebelumnya dari prompt berikutnya, tetapi riwayat lokal tetap dapat dibaca.
+Kesinambungan percakapan terbaru akan hilang; konten yang sudah dikirim ke
+penyedia tidak dapat ditarik kembali. Sesi baru tidak mewarisi ingatan cerita
+dari alur pembacaan lain. Ingatan tidak ikut sinkronisasi, cadangan, atau ekspor.
+Menghapus sesi menghapus ingatan turunannya; preferensi yang ditulis mandiri
+tetap tersimpan.
+
+**Penglihatan** menambahkan adegan dari satu jendela terpilih di Windows (20D).
+Pilih jendela game, periksa pratinjau lokal dan potongan opsional, lalu uji dukungan
+gambar pada penyedia yang dipilih. Kirim satu gambar dengan pertanyaan, atau
+aktifkan pengamatan dan reaksi otomatis sesekali saat game berada di depan.
+Panggilan gambar dapat dikenai biaya. Panggilan otomatis berjarak minimal 60 detik,
+maksimal 12/jam dan 30/sesi; panggilan yang diam, gagal, atau dibatalkan setelah
+dikirim tetap dihitung. **Diam** menghentikan balasan otomatis; berhenti mengamati,
+Jeda/Akhiri sesi, dan Lupakan membersihkan tangkapan. Pengamatan tidak dimulai ulang
+otomatis saat aplikasi dibuka. Gambar hanya berada di memori; riwayat menyimpan
+teks berlabel inferensi visual dan metadata sumber minimal. Tangkapan SDR Windows
+didukung; HDR dan platform lain menampilkan status tidak tersedia.
+
+Ini mencakup sesi teks (20A), identitas teman (20B), ingatan berkelanjutan (20C),
+serta penglihatan dan reaksi sesekali (20D). Suara masih direncanakan. Android tidak
+menjamin proses tetap berjalan di latar belakang; biarkan aplikasi terbuka di sana.
 
 Obrolan ini bukan asisten umum yang ditempel ke pustaka. Ia bisa membaca dua hal
 dan menyebut sumbernya:
@@ -164,8 +255,9 @@ membawa ekor ringkasan sebelumnya sebagai konteks, lalu digest tiap segmen
 digabung jadi satu. Kemajuannya disimpan per potongan, jadi menutup aplikasi di
 tengah jalan lalu kembali lagi akan melanjutkan, bukan mengulang dari nol.
 
-Digest ditahan kecuali tingkat spoiler obrolan disetel ke _All_. Teks langsung
-tidak ditahan, karena kamu memang sudah membacanya.
+Digest ditahan kecuali tingkat spoiler obrolan disetel ke _All_. Chat biasa
+dapat membaca teks langsung pada semua tingkat spoiler; sesi teman baca juga
+menahan dialog tangkapan dalam mode **Metadata saja**.
 
 ### Penyedia
 
@@ -178,10 +270,10 @@ pertama dijalankan, lengkap dengan kuncinya.
 
 Dua endpoint yang sudah terbukti jalan lewat lapisan kompatibilitas:
 
-| Penyedia | Endpoint | Contoh model |
-| --- | --- | --- |
+| Penyedia         | Endpoint                                                  | Contoh model       |
+| ---------------- | --------------------------------------------------------- | ------------------ |
 | Google AI Studio | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` |
-| Runtime lokal | `http://127.0.0.1:11434/v1` (Ollama) | `qwen3` |
+| Runtime lokal    | `http://127.0.0.1:11434/v1` (Ollama)                      | `qwen3`            |
 
 `http` biasa hanya diterima di localhost, karena di tempat lain kuncinya akan
 terkirim tanpa enkripsi.
@@ -202,15 +294,20 @@ apa pun alasannya, aplikasi mengatakannya, bukan berpura-pura.
 
 ## Pemasangan
 
-Build dibuat sendiri di mesinmu; belum ada rilis publik yang ditandatangani.
+Unduh prarilis terbaru dari [GitHub Releases](https://github.com/Atho64/VN-Asyik/releases).
+Windows menyediakan installer `.exe` dan `.msi`; keduanya belum ditandatangani
+dan mungkin menampilkan peringatan SmartScreen. Android menggunakan
+`app-universal-release.apk` yang ditandatangani.
+
+Untuk membangun dari kode sumber:
 
 ```
 pnpm install --frozen-lockfile
 pnpm tauri build
 ```
 
-Hasilnya ada di `src-tauri/target/release/bundle/`. Android butuh JDK 21,
-Android SDK dan NDK, serta target Rust Android:
+Hasilnya ada di `target/release/bundle/` kecuali direktori target Cargo diatur
+sendiri. Android butuh JDK 21, Android SDK dan NDK, serta target Rust Android:
 
 ```
 pnpm tauri android build --apk --target aarch64
