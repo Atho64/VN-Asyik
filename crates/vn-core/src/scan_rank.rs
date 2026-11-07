@@ -11,7 +11,9 @@
 //! `launcher` are almost never the game, while a bare title matching the folder
 //! name usually is.
 //!
-//! This module is pure so the ranking is testable without a filesystem.
+//! The classification and ranking are pure; only [`walk`] touches the
+//! filesystem, through portable `std` directory reads, so every rule here is
+//! testable without one.
 
 use serde::{Deserialize, Serialize};
 
@@ -95,29 +97,6 @@ fn trim_end_matches_case_insensitive<'t>(text: &'t str, suffix: &str) -> &'t str
         }
     }
     text
-}
-
-/// Sort candidates for display: plausibility first, then size, then path.
-///
-/// Larger binaries stay ahead within a plausibility band because a game
-/// executable is usually bigger than the launcher next to it.
-#[must_use]
-pub fn order<'a, T>(
-    items: impl IntoIterator<Item = &'a T>,
-    fields: impl Fn(&'a T) -> (&'a str, &'a str, u64),
-    folder_name: &str,
-) -> Vec<&'a T> {
-    // The closure borrows from `T`, so both lifetimes are tied to `'a`.
-    let mut scored: Vec<(u8, u64, &'a T)> = items
-        .into_iter()
-        .map(|item| {
-            let (name, _path, size) = fields(item);
-            let grade = plausibility(name, folder_name);
-            (grade.score(), size, item)
-        })
-        .collect();
-    scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
-    scored.into_iter().map(|(_, _, item)| item).collect()
 }
 
 /// One executable found by a folder walk.
@@ -262,25 +241,41 @@ mod tests {
         // Reproduces the real folder: a 31 MB editor tool outranked the 0.9 MB
         // game purely because it was bigger.
         let rows = [
-            (
-                "msg_tool.exe",
-                r"F:\DC4\AdvData\GRP\EFF\msg_tool.exe",
-                31_000_000u64,
-            ),
-            ("DC4.exe", r"F:\DC4\DC4.exe", 900_000),
+            Found {
+                name: "msg_tool.exe".into(),
+                path: r"F:\DC4\AdvData\GRP\EFF\msg_tool.exe".into(),
+                size_bytes: 31_000_000,
+                level: 2,
+            },
+            Found {
+                name: "dc4.exe".into(),
+                path: r"F:\DC4\DC4.exe".into(),
+                size_bytes: 900_000,
+                level: 0,
+            },
         ];
-        let ordered = order(rows.iter(), |r| (r.0, r.1, r.2), "DC4");
-        assert_eq!(ordered[0].0, "DC4.exe");
+        let ordered = order_found(&rows, "DC4");
+        assert_eq!(ordered[0].name, "dc4.exe");
     }
 
     #[test]
     fn a_plain_executable_stays_above_known_tools() {
         let rows = [
-            ("somegame.exe", "a", 100u64),
-            ("uninst.exe", "b", 9_000_000),
+            Found {
+                name: "somegame.exe".into(),
+                path: "a".into(),
+                size_bytes: 100,
+                level: 0,
+            },
+            Found {
+                name: "uninst.exe".into(),
+                path: "b".into(),
+                size_bytes: 9_000_000,
+                level: 0,
+            },
         ];
-        let ordered = order(rows.iter(), |r| (r.0, r.1, r.2), "folder");
-        assert_eq!(ordered[0].0, "somegame.exe");
+        let ordered = order_found(&rows, "folder");
+        assert_eq!(ordered[0].name, "somegame.exe");
     }
 
     /// Build a throwaway tree mirroring the folder that exposed the bug: a deep

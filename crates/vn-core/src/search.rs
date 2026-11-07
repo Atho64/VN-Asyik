@@ -26,13 +26,9 @@ pub fn fold(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut last_was_space = true;
     for ch in text.chars() {
-        // Full-width ASCII (U+FF01..U+FF5E) maps onto its half-width form, then
-        // decomposes like any other Latin letter.
-        let ch = if ('\u{FF01}'..='\u{FF5E}').contains(&ch) {
-            char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch)
-        } else {
-            ch
-        };
+        // Full-width ASCII maps onto its half-width form, then decomposes like
+        // any other Latin letter.
+        let ch = crate::width::half_width_form(ch);
         for part in ch.to_lowercase() {
             let folded = fold_char(part);
             if folded.is_empty() {

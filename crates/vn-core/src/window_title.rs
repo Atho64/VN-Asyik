@@ -58,9 +58,8 @@ pub enum TitleChapter {
 fn normalise_width(text: &str) -> String {
     text.chars()
         .map(|ch| match ch {
-            '\u{FF01}'..='\u{FF5E}' => char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch),
             '\u{3000}' => ' ',
-            other => other,
+            other => crate::width::half_width_form(other),
         })
         .collect()
 }

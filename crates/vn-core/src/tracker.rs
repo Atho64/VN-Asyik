@@ -52,22 +52,6 @@ pub enum Phase {
     Unfocused,
 }
 
-/// Why a run ended, which the UI shows in the session list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum StopReason {
-    /// The user stopped tracking.
-    UserStopped,
-    /// The process exited.
-    ProcessExited,
-    /// The user paused and the run was closed.
-    Paused,
-    /// The app is shutting down.
-    AppClosing,
-    /// A checkpoint of an unfinished run, written before a crash.
-    Recovered,
-}
-
 /// A finished stretch of time for one chapter, ready to persist.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Segment {
@@ -327,7 +311,7 @@ impl Tracker {
             // A manual timer took the stretch over. The gap this event covers is
             // the timer's to record, so it is closed here without accruing it.
             Event::HandoffToManual => {
-                if let Some(segment) = self.close(now, StopReason::Paused) {
+                if let Some(segment) = self.close(now) {
                     emitted.push(segment);
                 }
                 self.phase = Phase::Paused;
@@ -336,7 +320,7 @@ impl Tracker {
                 if self.phase == Phase::Tracking {
                     self.accrue(delta, now, &mut emitted);
                 }
-                if let Some(segment) = self.close(now, StopReason::Paused) {
+                if let Some(segment) = self.close(now) {
                     emitted.push(segment);
                 }
                 self.phase = Phase::Paused;
@@ -353,7 +337,7 @@ impl Tracker {
                 if matches!(self.phase, Phase::Tracking) {
                     self.accrue(delta, now, &mut emitted);
                 }
-                if let Some(segment) = self.close(now, StopReason::UserStopped) {
+                if let Some(segment) = self.close(now) {
                     emitted.push(segment);
                 }
                 self.phase = Phase::Idle;
@@ -363,7 +347,7 @@ impl Tracker {
                 if self.phase == Phase::Tracking {
                     self.accrue(delta, now, &mut emitted);
                 }
-                if let Some(segment) = self.close(now, StopReason::ProcessExited) {
+                if let Some(segment) = self.close(now) {
                     emitted.push(segment);
                 }
                 self.phase = Phase::Idle;
@@ -373,7 +357,7 @@ impl Tracker {
                 if self.phase == Phase::Tracking {
                     self.accrue(delta, now, &mut emitted);
                 }
-                if let Some(segment) = self.close(now, StopReason::AppClosing) {
+                if let Some(segment) = self.close(now) {
                     emitted.push(segment);
                 }
                 self.phase = Phase::Idle;
@@ -449,7 +433,7 @@ impl Tracker {
     }
 
     /// Close the open segment, returning it as a final write.
-    fn close(&mut self, now: Timestamp, _reason: StopReason) -> Option<Segment> {
+    fn close(&mut self, now: Timestamp) -> Option<Segment> {
         let open = self.open.take()?;
         let game_id = self.target.as_ref()?.game_id;
         // A segment with no accrued time carries nothing worth storing.
@@ -500,7 +484,6 @@ pub fn away_ms_in_gap(gap_ms: i64, idle_for_ms: i64, threshold_ms: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::DeviceId;
 
     fn t(ms: i64) -> Timestamp {
         Timestamp::from_millis(ms)
@@ -1023,13 +1006,5 @@ mod tests {
         tick_for(&mut tracker, 0, 3_000, 1_000);
         let segment = tracker.apply(Event::Stop, t(3_000)).into_iter().next();
         assert_eq!(segment.expect("segment").game_id, game_id);
-    }
-
-    #[test]
-    fn a_device_id_is_not_needed_by_the_machine() {
-        // Sanity check that the machine stays free of identity concerns; the
-        // caller stamps sessions with its own device id when persisting.
-        let device = DeviceId::parse("dev").expect("device");
-        assert_eq!(device.as_str(), "dev");
     }
 }

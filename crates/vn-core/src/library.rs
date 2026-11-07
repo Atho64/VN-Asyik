@@ -16,7 +16,8 @@ pub enum SortKey {
     Recent,
     /// Title, case-insensitive.
     Title,
-    /// Highest rating first, unrated last.
+    /// Highest rating first when descending; unrated counts as 0, so ascending
+    /// opens with it.
     Rating,
     /// Most tracked time first.
     Playtime,
@@ -282,7 +283,9 @@ mod tests {
     }
 
     #[test]
-    fn sort_by_rating_puts_unrated_last_ascending() {
+    fn sort_by_rating_ascending_puts_unrated_first() {
+        // Unrated is treated as 0, so ascending order opens with it. The "unrated
+        // last" promise in the `SortKey::Rating` doc holds only for descending.
         let games = [
             game("A", GameStatus::Playing, None),
             game("B", GameStatus::Playing, Some(50)),

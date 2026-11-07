@@ -14,6 +14,11 @@
 //!
 //! Nothing here injects into another process: `LEProc.exe` is a launcher that
 //! the operating system runs, exactly as the user would.
+//!
+//! The profile parsing is pure, but this module is the crate's one sanctioned
+//! exception to its no-filesystem rule: [`read_profiles`] and the launcher
+//! lookup read Locale Emulator's own files with portable `std` calls, nothing
+//! platform-specific.
 
 use std::path::{Path, PathBuf};
 

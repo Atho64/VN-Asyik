@@ -10,7 +10,6 @@
 //! [`UnsupportedChapterReader`] is what every build provides.
 
 use vn_core::chapter::{self, SceneRole};
-use vn_core::scene::ChapterRead;
 
 /// Why a chapter could not be read.
 #[derive(Debug, thiserror::Error)]
@@ -50,9 +49,6 @@ pub trait ChapterReader {
     /// The scene currently being played, or `None` if the engine is between
     /// scenes or at an interface screen the user would not call a chapter.
     fn current_chapter(&self) -> Result<Option<Chapter>, ChapterError>;
-
-    /// The raw scene name, for diagnostics and for the profile creator UI.
-    fn raw_scene(&self) -> Result<ChapterRead, ChapterError>;
 }
 
 /// Resolve a raw scene name into a chapter for `engine`.
@@ -86,10 +82,6 @@ pub struct UnsupportedChapterReader;
 
 impl ChapterReader for UnsupportedChapterReader {
     fn current_chapter(&self) -> Result<Option<Chapter>, ChapterError> {
-        Err(ChapterError::Unsupported)
-    }
-
-    fn raw_scene(&self) -> Result<ChapterRead, ChapterError> {
         Err(ChapterError::Unsupported)
     }
 }

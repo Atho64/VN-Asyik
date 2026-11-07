@@ -135,12 +135,6 @@ fn detect_charset(head: &[u8]) -> Option<String> {
     None
 }
 
-/// Backwards-compatible alias for [`decode_html_bytes`].
-#[must_use]
-pub fn decode_shift_jis(bytes: &[u8]) -> String {
-    decode_html_bytes(bytes)
-}
-
 /// Parse walkthrough links from any Seiya-Saiga index page (home, galge, kouryaku).
 #[must_use]
 pub fn parse_index_links(html: &str, base_url: &str) -> Vec<WalkthroughIndexEntry> {
@@ -751,7 +745,7 @@ mod tests {
     #[test]
     fn decodes_shift_jis_bytes() {
         let (cow, _, _) = encoding_rs::SHIFT_JIS.encode("小鳥");
-        let decoded = decode_shift_jis(&cow);
+        let decoded = decode_html_bytes(&cow);
         assert_eq!(decoded, "小鳥");
     }
 

@@ -700,7 +700,7 @@ fn rotating_field(
     if fixed.trim().is_empty() {
         return None;
     }
-    SANITIZE(&transform.apply(&render_template(fixed, tokens)))
+    sanitize_discord_string(&transform.apply(&render_template(fixed, tokens)))
 }
 
 /// Renders the built-in four-fact VNDB details rotation.
@@ -817,9 +817,6 @@ fn render_lines(
         }
     }
 }
-
-/// Wraps [`sanitize_discord_string`] for use as a function value.
-const SANITIZE: fn(&str) -> Option<String> = sanitize_discord_string;
 
 /// A button's URL is only accepted when the OS could actually open it.
 ///

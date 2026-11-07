@@ -7,6 +7,7 @@
 pub mod adapter;
 pub mod afk;
 pub mod chapter;
+pub mod chat;
 pub mod clock;
 pub mod emulator;
 pub mod ids;
@@ -27,9 +28,10 @@ pub mod time_fmt;
 pub mod title_settings;
 pub mod tracker;
 pub mod usage;
+pub mod walkthrough;
 pub mod window_title;
+
+mod width;
 
 pub use clock::Timestamp;
 pub use ids::{DeviceId, EntityId};
-pub mod chat;
-pub mod walkthrough;

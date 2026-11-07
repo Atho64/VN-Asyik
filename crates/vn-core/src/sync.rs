@@ -76,17 +76,6 @@ pub enum Side {
     Remote,
 }
 
-impl Side {
-    /// The opposite side.
-    #[must_use]
-    pub const fn flip(self) -> Self {
-        match self {
-            Side::Local => Side::Remote,
-            Side::Remote => Side::Local,
-        }
-    }
-}
-
 /// Why a merge picked the side it did.
 ///
 /// Recorded so the conflict log can explain an overwrite instead of just
