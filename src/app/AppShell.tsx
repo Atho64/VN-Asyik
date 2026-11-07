@@ -8,10 +8,12 @@ import { Icon, type IconName } from "@/components/Icon";
 import { Toasts } from "@/components/Toasts";
 import { ContextMenuProvider } from "@/app/ContextMenuProvider";
 import { NowPlayingBar } from "@/features/tracking/NowPlayingBar";
+import { CompanionBar } from "@/features/companion/CompanionBar";
 import { CommandPalette } from "@/features/palette/CommandPalette";
 import { Button } from "@/components/Button";
 import { Sheet } from "@/components/Sheet";
 import { api } from "@/lib/ipc/client";
+import { companionWindowApi } from "@/lib/ipc/companionWindow";
 import appIcon from "@/assets/vn-asyik.svg";
 
 interface NavEntry {
@@ -22,10 +24,12 @@ interface NavEntry {
     | "nav.stats"
     | "nav.recommend"
     | "vnchat.title"
+    | "companion.title"
     | "nav.settings"
     | "nav.presence"
     | "nav.guide";
   icon: IconName;
+  beta?: boolean;
 }
 
 /**
@@ -37,8 +41,9 @@ const navEntries: NavEntry[] = [
   { to: "/", labelKey: "nav.library", icon: "library" },
   { to: "/tracking", labelKey: "nav.tracking", icon: "play" },
   { to: "/stats", labelKey: "nav.stats", icon: "stats" },
-  { to: "/recommend", labelKey: "nav.recommend", icon: "spark" },
-  { to: "/chat", labelKey: "vnchat.title", icon: "chat" },
+  { to: "/recommend", beta: true, labelKey: "nav.recommend", icon: "spark" },
+  { to: "/chat", beta: true, labelKey: "vnchat.title", icon: "chat" },
+  { to: "/companion", beta: true, labelKey: "companion.title", icon: "spark" },
   { to: "/presence", labelKey: "nav.presence", icon: "gamepad" },
   { to: "/guide", labelKey: "nav.guide", icon: "guide" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
@@ -46,10 +51,12 @@ const navEntries: NavEntry[] = [
 
 const mobilePaths = new Set(["/", "/tracking", "/stats", "/settings"]);
 const mobileEntries = navEntries.filter((entry) => mobilePaths.has(entry.to));
-const moreEntries = navEntries.filter((entry) => !mobilePaths.has(entry.to));
 
 export function AppShell() {
   const { t } = useI18n();
+  const beta = useAppStore((state) => state.prefs.beta_features);
+  const visibleEntries = navEntries.filter((entry) => !entry.beta || beta);
+  const moreEntries = visibleEntries.filter((entry) => !mobilePaths.has(entry.to));
   const paletteOpen = useAppStore((state) => state.paletteOpen);
   const appearance = useAppStore((state) => state.appearance);
   const setPaletteOpen = useAppStore((state) => state.setPaletteOpen);
@@ -60,6 +67,24 @@ export function AppShell() {
   const moreActive = moreEntries.some((entry) => entry.to === pathname);
   const settingsActive =
     pathname === "/settings" || pathname === "/sync" || pathname === "/devices";
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void companionWindowApi
+      .listenMain((path) => {
+        void navigate(path);
+      })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [navigate]);
 
   useEffect(() => {
     mainRef.current?.scrollTo?.({ top: 0 });
@@ -115,7 +140,7 @@ export function AppShell() {
           <span className="rail__name">{t("app.name")}</span>
         </div>
         <div className="rail__nav">
-          {navEntries.map((entry) => (
+          {visibleEntries.map((entry) => (
             <NavLink
               key={entry.to}
               to={entry.to}
@@ -153,6 +178,7 @@ export function AppShell() {
           <Outlet />
         </main>
         <NowPlayingBar />
+        {beta ? <CompanionBar /> : null}
       </div>
 
       <nav className="bottomnav" aria-label={t("app.name")}>

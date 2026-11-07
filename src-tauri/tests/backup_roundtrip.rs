@@ -82,6 +82,7 @@ async fn populated() -> (Db, BackupFile) {
             language: "en".to_owned(),
             nsfw: "hide".to_owned(),
             reduce_effects: true,
+            beta_features: false,
         },
     };
 

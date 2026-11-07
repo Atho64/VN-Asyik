@@ -42,7 +42,7 @@ function payload(overrides: Partial<DetailPayload> = {}): DetailPayload {
     screenshots: [],
     developers: [],
     extlinks: [],
-  characters: [],
+    characters: [],
     ...overrides,
   };
 }
@@ -50,11 +50,7 @@ function payload(overrides: Partial<DetailPayload> = {}): DetailPayload {
 function renderFacts(props: { payload: DetailPayload; playtimeMs?: number }) {
   return render(
     <AppContext.Provider value={{ t, locale: "en", ready: true, bootError: null }}>
-      <VndbFacts
-        payload={props.payload}
-        vnId="v17"
-        playtimeMs={props.playtimeMs ?? 0}
-      />
+      <VndbFacts payload={props.payload} vnId="v17" playtimeMs={props.playtimeMs ?? 0} />
     </AppContext.Provider>,
   );
 }
@@ -62,8 +58,8 @@ function renderFacts(props: { payload: DetailPayload; playtimeMs?: number }) {
 /** A facts value carries its caveat in a nested span, so its text is split across
  *  elements and an exact string matcher cannot find it. */
 function ddContaining(text: string): HTMLElement {
-  const match = Array.from(document.querySelectorAll(".facts__value")).find(
-    (node) => node.textContent?.startsWith(text),
+  const match = Array.from(document.querySelectorAll(".facts__value")).find((node) =>
+    node.textContent?.startsWith(text),
   );
   if (!match) {
     throw new Error(`no facts value starting with ${text}`);
@@ -75,7 +71,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.openExternal.mockResolvedValue(undefined);
   useAppStore.setState({
-    prefs: { theme: "dark", language: "en", nsfw: "blur", reduce_effects: false },
+    prefs: {
+      theme: "dark",
+      language: "en",
+      nsfw: "blur",
+      reduce_effects: false,
+      beta_features: false,
+    },
   });
 });
 
@@ -148,7 +150,11 @@ describe("VNDB facts", () => {
     renderFacts({
       payload: payload({
         extlinks: [
-          { url: "https://example.invalid/official", label: "Official site", name: "official" },
+          {
+            url: "https://example.invalid/official",
+            label: "Official site",
+            name: "official",
+          },
           {
             url: "https://en.wikipedia.org/wiki/Ever17",
             label: "Wikipedia (en)",
@@ -168,7 +174,11 @@ describe("VNDB facts", () => {
     renderFacts({
       payload: payload({
         extlinks: [
-          { url: "https://example.invalid/official", label: "Official site", name: "official" },
+          {
+            url: "https://example.invalid/official",
+            label: "Official site",
+            name: "official",
+          },
         ],
       }),
     });

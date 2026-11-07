@@ -26,6 +26,7 @@ export function CommandPalette() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const setOpen = useAppStore((state) => state.setPaletteOpen);
+  const beta = useAppStore((state) => state.prefs.beta_features);
   const cards = useAppStore((state) => state.cards);
   const isAndroid = useAppStore((state) => state.platform?.os === "android");
   const [query, setQuery] = useState("");
@@ -137,10 +138,11 @@ export function CommandPalette() {
       },
     ];
 
+    const visible = entries.filter((entry) => beta || entry.id !== "nav-chat");
     const needle = query.trim();
-    if (needle.length === 0) return entries;
+    if (needle.length === 0) return visible;
 
-    const matchedActions = entries.filter((entry) =>
+    const matchedActions = visible.filter((entry) =>
       entry.label.toLowerCase().includes(needle.toLowerCase()),
     );
     // Ranked, not filtered: typing "clannad" should offer CLANNAD before a
@@ -161,7 +163,7 @@ export function CommandPalette() {
       }));
 
     return [...matchedActions, ...matchedGames];
-  }, [cards, close, isAndroid, navigate, query, t]);
+  }, [beta, cards, close, isAndroid, navigate, query, t]);
 
   useEffect(() => {
     inputRef.current?.focus();

@@ -1,0 +1,371 @@
+.companion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--companion-width);
+  height: 100%;
+  min-height: 0;
+  margin-inline: auto;
+}
+.companion h1 {
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+}
+.companion h2 {
+  font-size: var(--text-l);
+}
+.companion__muted,
+.companion small {
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+.companion__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: var(--space-3);
+}
+.companion__heading {
+  flex: 1;
+  min-width: 0;
+}
+.companion__heading h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-l);
+}
+.companion__header p {
+  margin-top: var(--space-1);
+}
+.companion__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.companion__header > .companion__actions,
+.companion-bar > .companion__actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+}
+.companion__provider {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-s);
+  flex: 0 0 auto;
+}
+.companion__provider span {
+  overflow-wrap: anywhere;
+}
+.companion__provider a,
+.companion__setup a {
+  color: var(--accent-strong);
+}
+.companion__setup,
+.companion__session {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--surface-1);
+}
+.companion__setup {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+.companion__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.companion__personality,
+.companion__profile-editor {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.companion__personality > .btn {
+  justify-self: start;
+}
+.companion__profile-editor {
+  padding-block: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.companion__profile-editor .companion__fields {
+  margin-bottom: var(--space-3);
+}
+.companion__field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--space-2);
+  font-size: var(--text-s);
+}
+.companion__field input,
+.companion__field select,
+.companion__field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--field-bg);
+  color: var(--text);
+  font: inherit;
+}
+.companion select option {
+  background: var(--surface-solid);
+  color: var(--text);
+}
+.companion :is(input, select, textarea, summary):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.companion__field textarea {
+  resize: vertical;
+  line-height: var(--leading-normal);
+}
+.companion__field :is(input, textarea)::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+.companion__sources {
+  display: grid;
+  gap: var(--space-2);
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.companion__choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+  cursor: pointer;
+}
+.companion__choice input {
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+.companion__choice span {
+  display: grid;
+  gap: var(--space-1);
+}
+.companion__session {
+  display: flex;
+  flex-direction: column;
+  /* Keep controls at their natural height. Short windows scroll the page. */
+  flex: 1 0 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.companion__details {
+  min-width: 0;
+  font-size: var(--text-s);
+}
+.companion__details > summary {
+  min-height: var(--touch-target);
+  align-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-s);
+}
+.companion__details > summary:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.companion__details > summary:active {
+  background: var(--surface-2);
+}
+.companion__details[open] > summary {
+  margin-bottom: var(--space-2);
+}
+.companion__setup > .companion__details {
+  border-block: 1px solid var(--border);
+  padding-block: var(--space-2);
+}
+.companion__dialogue {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--accent);
+  overflow-wrap: anywhere;
+}
+.companion__conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1 1 var(--companion-chat-min-height);
+  height: var(--companion-chat-min-height);
+  min-height: var(--companion-chat-min-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-5);
+}
+.companion__empty {
+  margin: auto;
+  max-width: var(--settings-width);
+  padding: var(--space-5);
+  color: var(--text-muted);
+}
+.companion__empty h3 {
+  margin-block: var(--space-3) var(--space-2);
+  color: var(--text);
+}
+.companion__empty svg {
+  color: var(--accent);
+}
+.companion__composer {
+  border-top: 1px solid var(--border);
+  padding: var(--space-4) var(--space-5);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--touch-target);
+  align-items: end;
+  flex: 0 0 auto;
+  gap: var(--space-3);
+}
+.companion__composer > p {
+  grid-column: 1 / -1;
+}
+.companion__send {
+  align-self: end;
+}
+.companion .vnchat__sources > summary,
+.companion .vnchat__tool > summary {
+  min-height: var(--touch-target);
+}
+.companion--options {
+  height: auto;
+}
+.companion__options-section {
+  display: grid;
+  gap: var(--space-2);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.companion__archive-actions {
+  border-top: 1px solid var(--border);
+  padding: var(--space-4) var(--space-5);
+}
+.companion__notice {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+  font-size: var(--text-s);
+}
+.companion__error {
+  color: var(--danger);
+  font-size: var(--text-s);
+}
+.companion-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface-solid);
+  flex: 0 0 auto;
+}
+.companion-bar__link {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  text-decoration: none;
+  color: var(--text);
+}
+.companion-bar__link > span {
+  display: grid;
+  min-width: 0;
+}
+.companion-bar__link strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-s);
+}
+.companion-bar__link small {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.companion-bar__link svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.companion-overlay {
+  position: fixed;
+  inset: 0;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3);
+  background: var(--surface-solid);
+}
+.companion--overlay {
+  gap: var(--space-2);
+}
+.companion--overlay .companion__header h1 {
+  font-size: var(--text-m);
+}
+.companion--overlay .companion__provider {
+  align-items: center;
+  font-size: var(--text-xs);
+}
+.companion--overlay .companion__provider > span {
+  flex: 1;
+  min-width: 0;
+}
+.companion--overlay .companion__conversation {
+  flex-basis: var(--companion-overlay-chat-min-height);
+  height: var(--companion-overlay-chat-min-height);
+  min-height: var(--companion-overlay-chat-min-height);
+  gap: var(--space-3);
+}
+.companion--overlay .companion__field textarea {
+  max-height: var(--companion-overlay-chat-min-height);
+}
+.companion--overlay .companion__empty {
+  display: grid;
+  gap: var(--space-3);
+}
+.companion--overlay .vnchat__message {
+  max-width: 100%;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .companion__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .companion__setup,
+  .companion__composer,
+  .companion__conversation,
+  .companion__archive-actions {
+    padding: var(--space-3);
+  }
+  .companion__header h1 {
+    font-size: var(--text-l);
+  }
+  .companion-bar {
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+  .companion-bar__link {
+    min-height: var(--touch-target);
+    padding-inline: var(--space-2);
+  }
+}

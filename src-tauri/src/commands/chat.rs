@@ -28,6 +28,9 @@ pub async fn chat_messages(
     state: State<'_, AppState>,
     id: String,
 ) -> CommandResult<Vec<ChatMessage>> {
+    crate::companion::store::require_regular_chat(state.db().pool(), &id)
+        .await
+        .map_err(error)?;
     store::get(state.db().pool(), &id).await.map_err(error)?;
     store::messages(state.db().pool(), &id).await.map_err(error)
 }
@@ -38,6 +41,9 @@ pub async fn chat_update(
     title: String,
     options: ChatOptions,
 ) -> CommandResult<ChatThread> {
+    crate::companion::store::require_regular_chat(state.db().pool(), &id)
+        .await
+        .map_err(error)?;
     let (_lease, _) = state.chat().enter(&id).map_err(error)?;
     options.validate().map_err(error)?;
     if title.chars().count() > 120 {
@@ -68,6 +74,9 @@ pub async fn chat_update(
 }
 #[tauri::command]
 pub async fn chat_delete(state: State<'_, AppState>, id: String) -> CommandResult<()> {
+    crate::companion::store::require_regular_chat(state.db().pool(), &id)
+        .await
+        .map_err(error)?;
     let (_lease, _) = state.chat().enter(&id).map_err(error)?;
     let mut tx = state
         .db()
@@ -96,11 +105,18 @@ pub async fn chat_send(
     retry: bool,
     on_event: tauri::ipc::Channel<ChatEvent>,
 ) -> CommandResult<ChatMessage> {
+    super::prefs::require_beta(&state).await?;
+    crate::companion::store::require_regular_chat(state.db().pool(), &id)
+        .await
+        .map_err(error)?;
     conversation::send(&state, &id, &text, retry, &on_event)
         .await
         .map_err(error)
 }
 #[tauri::command]
 pub async fn chat_cancel(state: State<'_, AppState>, id: String) -> CommandResult<()> {
+    crate::companion::store::require_regular_chat(state.db().pool(), &id)
+        .await
+        .map_err(error)?;
     state.chat().cancel(&id).map_err(error)
 }

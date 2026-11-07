@@ -5,6 +5,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
 
+import { listenBetaFeatures } from "@/lib/ipc/prefs";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { GameCard } from "@/lib/ipc/types";
 import { createTranslator, resolveLocale, type Translator } from "@/i18n";
@@ -50,7 +51,13 @@ function readableOn(hex: string): string {
   return luminance > 0.45 ? "#102125" : "#08110f";
 }
 
-export function AppProvider({ children }: { children: ReactNode }) {
+export function AppProvider({
+  children,
+  companionWindow = false,
+}: {
+  children: ReactNode;
+  companionWindow?: boolean;
+}) {
   const prefs = useAppStore((state) => state.prefs);
   const setPrefs = useAppStore((state) => state.setPrefs);
   const setPlatform = useAppStore((state) => state.setPlatform);
@@ -66,6 +73,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const locale = resolveLocale(prefs.language);
   const t = useMemo(() => createTranslator(locale), [locale]);
 
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listenBetaFeatures((enabled) => {
+      if (!disposed)
+        useAppStore.setState((state) => ({
+          prefs: { ...state.prefs, beta_features: enabled },
+        }));
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   // One boot pass: prefs, platform capabilities, then the library itself. The
   // library is separate so its failure does not blank the whole app.
   useEffect(() => {
@@ -79,7 +106,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelled) return;
         if (loadedPrefs) setPrefs(loadedPrefs);
+        else useAppStore.setState({ prefsLoaded: true });
         if (platform) setPlatform(platform);
+        if (companionWindow) return;
 
         try {
           const cards = await loadLibrary(platform?.os);
@@ -99,8 +128,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     void boot();
+    if (companionWindow) window.addEventListener("focus", boot);
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", boot);
     };
     // Boot runs once. `t` is only used for the fallback message.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,25 +182,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // starts in English. Relabel it as soon as the UI knows the language, and
   // again on every switch: the tray is a user-visible surface like any other.
   useEffect(() => {
-    void api
-      .traySetLabels(t("tray.show"), t("tray.hide"), t("tray.quit"))
-      .catch(() => {
-        // Platforms without a tray have nothing to relabel.
-      });
-  }, [t]);
+    if (companionWindow) return;
+    void api.traySetLabels(t("tray.show"), t("tray.hide"), t("tray.quit")).catch(() => {
+      // Platforms without a tray have nothing to relabel.
+    });
+  }, [t, companionWindow]);
 
   useEffect(() => {
     let cancelled = false;
-    void api
-      .appearanceGet()
-      .then((result) => {
-        if (!cancelled) setAppearance(result);
-      })
-      .catch(() => undefined);
+    const refresh = () => {
+      void api
+        .appearanceGet()
+        .then((result) => {
+          if (!cancelled) setAppearance(result);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    if (companionWindow) window.addEventListener("focus", refresh);
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", refresh);
     };
-  }, [setAppearance]);
+  }, [setAppearance, companionWindow]);
 
   /* The accent is a CSS variable override rather than a class per colour: the
    * token set already reads `--accent` everywhere, so one property recolours
@@ -202,6 +237,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * so this is one request a day in practice. A failure is silent on purpose: a
    * library screen must not show an error because a release feed was unreachable. */
   useEffect(() => {
+    if (companionWindow) return;
     let cancelled = false;
     void api
       .updateCheck(false)
@@ -212,7 +248,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [setUpdate]);
+  }, [setUpdate, companionWindow]);
 
   useLayoutEffect(() => {
     // The focused card can leave the virtual range while its artwork remains
@@ -223,6 +259,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Reduce effects is suggested, never forced, on platforms that ask for it.
   useEffect(() => {
+    if (companionWindow) return;
     if (prefersReducedTransparency() && !prefs.reduce_effects) {
       void api
         .setReduceEffects(true)
@@ -234,8 +271,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AppContextValue>(
-    () => ({ t, locale, ready: libraryLoaded, bootError }),
-    [t, locale, libraryLoaded, bootError],
+    () => ({ t, locale, ready: companionWindow || libraryLoaded, bootError }),
+    [t, locale, companionWindow, libraryLoaded, bootError],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

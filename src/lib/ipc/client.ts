@@ -253,6 +253,7 @@ export interface Api {
   setLanguage(value: string): Promise<Prefs>;
   setNsfwMode(value: string): Promise<Prefs>;
   setReduceEffects(value: boolean): Promise<Prefs>;
+  setBetaFeatures(value: boolean): Promise<Prefs>;
   getAfkConfig(): Promise<AfkConfig>;
   setAfkConfig(thresholdMs: number, excludeAfk: boolean): Promise<AfkConfig>;
   vndbSearch(query: string, page?: number): Promise<SearchResponse>;
@@ -546,6 +547,7 @@ export const api: Api = {
   setTheme: (value) => call("set_theme", prefsSchema, { value }),
   setLanguage: (value) => call("set_language", prefsSchema, { value }),
   setNsfwMode: (value) => call("set_nsfw_mode", prefsSchema, { value }),
+  setBetaFeatures: (value) => call("set_beta_features", prefsSchema, { value }),
   setReduceEffects: (value) => call("set_reduce_effects", prefsSchema, { value }),
   getAfkConfig: () => call("get_afk_config", afkConfigSchema),
   setAfkConfig: (thresholdMs, excludeAfk) =>

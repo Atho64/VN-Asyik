@@ -784,6 +784,7 @@ export const prefsSchema = z.object({
   language: z.string(),
   nsfw: z.string(),
   reduce_effects: z.boolean(),
+  beta_features: z.boolean().default(false),
 });
 export type Prefs = z.infer<typeof prefsSchema>;
 

@@ -35,6 +35,7 @@ export interface ThemeResolution {
 
 interface AppState {
   prefs: Prefs;
+  prefsLoaded: boolean;
   platform: PlatformInfo | null;
   cards: GameCard[];
   libraryLoaded: boolean;
@@ -102,12 +103,14 @@ const defaultPrefs: Prefs = {
   language: "en",
   nsfw: "blur",
   reduce_effects: false,
+  beta_features: false,
 };
 
 let toastId = 0;
 
 export const useAppStore = create<AppState>((set) => ({
   prefs: defaultPrefs,
+  prefsLoaded: false,
   platform: null,
   cards: [],
   libraryLoaded: false,
@@ -123,7 +126,7 @@ export const useAppStore = create<AppState>((set) => ({
   setUpdate: (update) => set({ update }),
   setAppearance: (appearance) => set({ appearance }),
 
-  setPrefs: (prefs) => set({ prefs }),
+  setPrefs: (prefs) => set({ prefs, prefsLoaded: true }),
   setPlatform: (platform) => set({ platform }),
   setCards: (cards) => set({ cards, libraryLoaded: true, libraryError: null }),
   setLibraryLoaded: (libraryLoaded) => set({ libraryLoaded }),
@@ -132,7 +135,9 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({ libraryBrowse: { ...state.libraryBrowse, ...patch } })),
   upsertCard: (card) =>
     set((state) => {
-      const index = state.cards.findIndex((entry) => entry.game.meta.id === card.game.meta.id);
+      const index = state.cards.findIndex(
+        (entry) => entry.game.meta.id === card.game.meta.id,
+      );
       if (index === -1) return { cards: [card, ...state.cards] };
       const next = [...state.cards];
       next[index] = card;
@@ -170,9 +175,7 @@ export function resolveTheme(mode: string): "dark" | "light" {
   if (mode === "light") return "light";
   if (mode === "dark") return "dark";
   if (typeof window !== "undefined" && window.matchMedia) {
-    return window.matchMedia("(prefers-color-scheme: light)").matches
-      ? "light"
-      : "dark";
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   }
   return "dark";
 }

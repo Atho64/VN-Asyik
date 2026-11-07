@@ -109,6 +109,7 @@ export function GameDetailScreen() {
   const walkthroughRef = useRef<HTMLDivElement>(null);
   const { id } = useParams<{ id: string }>();
   const { t, locale } = useI18n();
+  const beta = useAppStore((state) => state.prefs.beta_features);
   const pushToast = useAppStore((state) => state.pushToast);
   const upsertCard = useAppStore((state) => state.upsertCard);
   const removeCard = useAppStore((state) => state.removeCard);
@@ -142,9 +143,14 @@ export function GameDetailScreen() {
 
   const [card, setCard] = useState<GameCard | null>(cachedCard ?? null);
   const [sessions, setSessions] = useState<PlaySession[]>([]);
-  const [sessionNotePreviews, setSessionNotePreviews] = useState<Record<string, string>>({});
+  const [sessionNotePreviews, setSessionNotePreviews] = useState<Record<string, string>>(
+    {},
+  );
   const [readingVersion, setReadingVersion] = useState(0);
-  const refreshSessionNotes = useCallback(() => setReadingVersion((version) => version + 1), []);
+  const refreshSessionNotes = useCallback(
+    () => setReadingVersion((version) => version + 1),
+    [],
+  );
   // Exact totals over every session, not just the visible page.
   const [sessionTotals, setSessionTotals] = useState({ total: 0, countedMs: 0 });
   const [executables, setExecutables] = useState<GameExecutable[]>([]);
@@ -163,7 +169,10 @@ export function GameDetailScreen() {
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<{ gameId: string; id: string } | null>(null);
+  const [selectedSession, setSelectedSession] = useState<{
+    gameId: string;
+    id: string;
+  } | null>(null);
   const closeSessionDetails = useCallback(() => setSelectedSession(null), []);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -600,12 +609,22 @@ export function GameDetailScreen() {
               widths and made the group read as scattered rather than stacked. */}
           <div className="detail__actions">
             <div className="detail__actions-row">
-              <Link
-                className="btn btn--secondary"
-                to={`/chat?game=${encodeURIComponent(game.meta.id)}`}
-              >
-                {t("vnchat.askGame")}
-              </Link>
+              {beta ? (
+                <>
+                  <Link
+                    className="btn btn--secondary"
+                    to={"/companion?game=" + encodeURIComponent(game.meta.id)}
+                  >
+                    {t("companion.readWith")}
+                  </Link>
+                  <Link
+                    className="btn btn--secondary"
+                    to={`/chat?game=${encodeURIComponent(game.meta.id)}`}
+                  >
+                    {t("vnchat.askGame")}
+                  </Link>
+                </>
+              ) : null}
               {progress !== null && progressText ? (
                 <span className="detail__progress caption">
                   <ProgressRing
@@ -646,18 +665,20 @@ export function GameDetailScreen() {
         </div>
       </header>
 
-      {id && <ReadingCard
-        key={id}
-        gameId={id}
-        sessionVersion={sessions[0]?.meta.updated_at}
-        selectedSessionId={selectedSession?.gameId === id ? selectedSession.id : null}
-        onCloseSession={closeSessionDetails}
-        onEntriesChange={refreshSessionNotes}
-        onWalkthrough={() => {
-          walkthroughRef.current?.scrollIntoView({ block: "start" });
-          walkthroughRef.current?.focus({ preventScroll: true });
-        }}
-      />}
+      {id && (
+        <ReadingCard
+          key={id}
+          gameId={id}
+          sessionVersion={sessions[0]?.meta.updated_at}
+          selectedSessionId={selectedSession?.gameId === id ? selectedSession.id : null}
+          onCloseSession={closeSessionDetails}
+          onEntriesChange={refreshSessionNotes}
+          onWalkthrough={() => {
+            walkthroughRef.current?.scrollIntoView({ block: "start" });
+            walkthroughRef.current?.focus({ preventScroll: true });
+          }}
+        />
+      )}
 
       <div className="detail__columns">
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
@@ -823,11 +844,13 @@ export function GameDetailScreen() {
 
           {/* The script card sits with the routes: both are per-game material
               for the companion chat, and neither is required to play. */}
-          {id ? <ScriptCard gameId={id} /> : null}
+          {id && beta ? <ScriptCard gameId={id} /> : null}
 
-          {id ? <div ref={walkthroughRef} tabIndex={-1} aria-label={t("walkthrough.title")}>
-            <WalkthroughCard gameId={id} vnId={game.vndb_id} />
-          </div> : null}
+          {id ? (
+            <div ref={walkthroughRef} tabIndex={-1} aria-label={t("walkthrough.title")}>
+              <WalkthroughCard gameId={id} vnId={game.vndb_id} />
+            </div>
+          ) : null}
 
           <Card>
             <CardHeader
@@ -845,7 +868,9 @@ export function GameDetailScreen() {
               notePreviews={sessionNotePreviews}
               noteVersion={readingVersion}
               total={sessionTotals.total}
-              onSelect={(sessionId) => setSelectedSession({ gameId: game.meta.id, id: sessionId })}
+              onSelect={(sessionId) =>
+                setSelectedSession({ gameId: game.meta.id, id: sessionId })
+              }
             />
           </Card>
         </div>

@@ -81,6 +81,23 @@ describe("live chat events", () => {
 });
 
 describe("interrupted answers", () => {
+  it("keeps finished tool activity visible in regular chat", () => {
+    renderMessage({
+      ...base,
+      status: "complete",
+      content: "Done.",
+      tools: [
+        {
+          id: "call-one",
+          name: "recent_game_text",
+          arguments: "{}",
+          status: "complete",
+          result: null,
+        },
+      ],
+    });
+    expect(screen.getByLabelText("Tool activity")).toBeVisible();
+  });
   it("marks a stopped answer with partial text as incomplete", () => {
     renderMessage({ ...base, status: "cancelled", content: "She heads to the" });
     expect(screen.getByText(/incomplete/i)).toBeInTheDocument();

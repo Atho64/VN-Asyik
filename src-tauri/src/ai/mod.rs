@@ -30,3 +30,5 @@ pub mod conversation;
 pub mod profiles;
 pub mod recommend;
 pub mod tavily;
+
+pub mod vision;

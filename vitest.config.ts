@@ -11,6 +11,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // Cold jsdom starts can time out when too many workers read a slow disk.
+    // Keep a small pool while preserving the default per-file isolation.
+    maxWorkers: 2,
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],

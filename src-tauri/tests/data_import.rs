@@ -48,6 +48,7 @@ fn fixture() -> BackupFile {
             language: "id".to_owned(),
             nsfw: "hide".to_owned(),
             reduce_effects: true,
+            beta_features: false,
         },
     }
 }

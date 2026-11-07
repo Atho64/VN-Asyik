@@ -5,6 +5,7 @@
 
 pub mod ai;
 pub mod commands;
+pub mod companion;
 pub mod db;
 pub mod platform;
 pub mod presence;
@@ -17,7 +18,7 @@ pub mod tray;
 pub mod vndb;
 pub mod walkthrough;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// The Android usage-stats plugin, or an inert plugin elsewhere.
 ///
@@ -82,6 +83,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::library::set_game_custom_cover,
         commands::library::clear_game_custom_cover,
         commands::prefs::get_prefs,
+        commands::prefs::set_beta_features,
         commands::prefs::set_theme,
         commands::prefs::set_language,
         commands::prefs::set_nsfw_mode,
@@ -164,6 +166,34 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::chat::chat_delete,
         commands::chat::chat_send,
         commands::chat::chat_cancel,
+        commands::companion::companion_snapshot,
+        commands::companion::companion_start,
+        commands::companion::companion_vision_windows,
+        commands::companion::companion_vision_select,
+        commands::companion::companion_vision_preview,
+        commands::companion::companion_vision_probe,
+        commands::companion::companion_vision_control,
+        commands::companion::companion_vision_send,
+        commands::companion::companion_control,
+        commands::companion::companion_send,
+        commands::companion::companion_memory_view,
+        commands::companion::companion_memory_save,
+        commands::companion::companion_memory_forget,
+        commands::companion::companion_memory_settings,
+        commands::companion::companion_memory_sources,
+        commands::companion::companion_recap,
+        commands::companion::companion_recap_resume,
+        commands::companion::companion_recap_review,
+        commands::companion::companion_list,
+        commands::companion::companion_messages,
+        commands::companion::companion_delete,
+        commands::companion::companion_profiles,
+        commands::companion::companion_save_profile,
+        commands::companion::companion_delete_profile,
+        commands::companion::companion_apply_profile,
+        companion::window::companion_open_overlay,
+        companion::window::companion_hide_overlay,
+        companion::window::companion_show_main,
         commands::script::script_import,
         commands::script::script_list,
         commands::script::script_delete,
@@ -241,6 +271,16 @@ pub fn run() {
             let handle = app.handle().clone();
             let state = tauri::async_runtime::block_on(state::AppState::boot(&handle))?;
             app.manage(state);
+            app.manage(companion::window::OverlayWindow::default());
+            let events = handle.clone();
+            app.state::<state::AppState>()
+                .companion()
+                .set_notifier(move |notice| {
+                    // No subscribers is normal; loss of a page cannot cancel a turn.
+                    let _ = events.emit_to("main", companion::EVENT, &notice);
+                    let _ = events.emit_to(companion::window::LABEL, companion::EVENT, &notice);
+                });
+            commands::companion::spawn_monitor(handle.clone());
             // Start the playtime loop once state exists.
             commands::tracking::spawn_loop(handle.clone());
             // System tray icon for desktop background operation.
@@ -252,6 +292,8 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(not(desktop))]
+            let _ = (window, event);
             #[cfg(desktop)]
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -259,6 +301,12 @@ pub fn run() {
             }
         })
         .invoke_handler(handlers())
-        .run(tauri::generate_context!())
-        .expect("error while running VN Asyik");
+        .build(tauri::generate_context!())
+        .expect("error while building VN Asyik")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+                let state = app.state::<state::AppState>();
+                let _ = tauri::async_runtime::block_on(state.companion().shutdown(&state));
+            }
+        });
 }

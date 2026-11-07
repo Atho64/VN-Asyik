@@ -10,9 +10,11 @@
 
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::Serialize;
 use tokio::sync::Mutex;
+use vn_core::companion::{Observation, SourceCursor};
 
 /// How many lines are kept for the live viewer and the chat tool.
 const MAX_LINES: usize = 200;
@@ -52,14 +54,24 @@ pub struct HookStatus {
 #[derive(Debug, Default)]
 pub struct HookHost {
     inner: Mutex<HookInner>,
+    generation: AtomicU64,
 }
 
 #[derive(Debug, Default)]
 struct HookInner {
-    lines: VecDeque<CapturedLine>,
+    lines: VecDeque<Observation>,
     error: Option<String>,
     connected: bool,
     total_lines: usize,
+    cursor: SourceCursor,
+}
+
+/// One atomic read of the connection, cursor and its bounded observations.
+#[derive(Debug, Clone)]
+pub struct SourceSnapshot {
+    pub connected: bool,
+    pub cursor: SourceCursor,
+    pub lines: Vec<Observation>,
 }
 
 impl HookHost {
@@ -78,7 +90,36 @@ impl HookHost {
     /// The captured lines, oldest first.
     pub async fn lines(&self) -> Vec<CapturedLine> {
         let inner = self.inner.lock().await;
-        inner.lines.iter().cloned().collect()
+        inner
+            .lines
+            .iter()
+            .map(|line| CapturedLine {
+                text: line.text.clone(),
+                thread: 0,
+                at: line.at,
+            })
+            .collect()
+    }
+
+    pub async fn snapshot(&self) -> SourceSnapshot {
+        let inner = self.inner.lock().await;
+        SourceSnapshot {
+            connected: inner.connected,
+            cursor: inner.cursor,
+            lines: inner.lines.iter().cloned().collect(),
+        }
+    }
+
+    /// Synchronous invalidation check for streamed callbacks. It never reads
+    /// text and does not contend with the async source lock.
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    fn next_generation(&self, inner: &mut HookInner) {
+        inner.cursor.generation += 1;
+        self.generation
+            .store(inner.cursor.generation, Ordering::Release);
     }
 
     /// Forget everything, for a clean disconnect.
@@ -88,6 +129,7 @@ impl HookHost {
         inner.error = None;
         inner.connected = false;
         inner.total_lines = 0;
+        self.next_generation(&mut inner);
     }
 
     /// Record a line captured by the `LunaTranslator` network service.
@@ -95,26 +137,35 @@ impl HookHost {
     /// Oversized and empty lines are dropped rather than stored, so a misbehaving
     /// source cannot grow the ring past `MAX_LINE_BYTES` per entry.
     pub async fn push_external(&self, text: &str) {
+        self.push_for(None, text).await;
+    }
+
+    /// A socket can only append to the generation it opened. A late frame from
+    /// a cancelled connection must not acquire a newer source's identity.
+    pub async fn push_external_for(&self, generation: u64, text: &str) {
+        self.push_for(Some(generation), text).await;
+    }
+
+    async fn push_for(&self, generation: Option<u64>, text: &str) {
         let trimmed = text.trim();
         if trimmed.is_empty() || text.len() > MAX_LINE_BYTES {
             return;
         }
-        {
-            let inner = self.inner.lock().await;
-            if inner.lines.back().is_some_and(|last| last.text == trimmed) {
-                return;
-            }
-        }
-        self.push_line(CapturedLine {
-            text: trimmed.to_owned(),
-            thread: 0,
-            at: now_ms(),
-        })
-        .await;
-    }
-
-    async fn push_line(&self, line: CapturedLine) {
         let mut inner = self.inner.lock().await;
+        if generation
+            .is_some_and(|expected| !inner.connected || expected != inner.cursor.generation)
+            || inner.lines.back().is_some_and(|last| {
+                last.cursor.generation == inner.cursor.generation && last.text == trimmed
+            })
+        {
+            return;
+        }
+        inner.cursor.sequence += 1;
+        let line = Observation {
+            text: trimmed.to_owned(),
+            at: now_ms(),
+            cursor: inner.cursor,
+        };
         inner.total_lines += 1;
         if inner.lines.len() >= MAX_LINES {
             inner.lines.pop_front();
@@ -129,9 +180,13 @@ impl HookHost {
     }
 
     /// Mark the source connected or disconnected.
-    pub async fn set_connected(&self, connected: bool) {
+    pub async fn set_connected(&self, connected: bool) -> SourceCursor {
         let mut inner = self.inner.lock().await;
-        inner.connected = connected;
+        if inner.connected != connected {
+            inner.connected = connected;
+            self.next_generation(&mut inner);
+        }
+        inner.cursor
     }
 }
 
@@ -245,5 +300,29 @@ mod tests {
             0,
             "host.lines().await should be empty"
         );
+    }
+
+    #[tokio::test]
+    async fn reconnect_and_reset_never_reuse_a_cursor_or_accept_an_old_socket() {
+        let host = host();
+        let first = host.set_connected(true).await;
+        host.push_external_for(first.generation, "same dialogue")
+            .await;
+        let first_line = host.snapshot().await.lines[0].clone();
+        host.reset().await;
+        let second = host.set_connected(true).await;
+        host.push_external_for(first.generation, "late old game")
+            .await;
+        host.push_external_for(second.generation, "same dialogue")
+            .await;
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot.lines.len(), 1);
+        assert!(snapshot.lines[0].cursor.sequence > first_line.cursor.sequence);
+        assert!(second.generation > first.generation);
+        assert_eq!(snapshot.lines[0].text, "same dialogue");
+        host.set_connected(false).await;
+        host.push_external_for(second.generation, "after disconnect")
+            .await;
+        assert_eq!(host.snapshot().await.lines.len(), 1);
     }
 }

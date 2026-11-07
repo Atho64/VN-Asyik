@@ -668,11 +668,12 @@ pub async fn promote_pending_session(
     Ok(())
 }
 
-/// Pending sessions left behind by a crash.
+/// Desktop checkpoints left behind by a crash. Android owns and replays its
+/// checkpoints separately, retaining their source and continuous-interval identity.
 pub async fn list_pending_sessions(pool: &SqlitePool) -> Result<Vec<Segment>, DbError> {
     let rows: Vec<PendingRow> = sqlx::query_as(
         "SELECT id, game_id, chapter_id, started_at, ended_at, counted_ms, afk_ms \
-         FROM pending_sessions ORDER BY started_at ASC",
+         FROM pending_sessions WHERE source = 'desktop' ORDER BY started_at ASC",
     )
     .fetch_all(pool)
     .await?;

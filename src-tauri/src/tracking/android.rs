@@ -3,8 +3,9 @@
 //! Play selects the library game; `UsageStatsManager` supplies the package's
 //! foreground intervals. A shared runner cannot identify its current ROM.
 //! Query replay starts at Play so an activity spanning polls keeps its context;
-//! the persisted cursor clips already credited time. Session rows and the cursor
-//! commit together. Denied/missing usage data never becomes a timer estimate.
+//! the persisted cursor clips already credited time. An unfinished foreground
+//! stretch updates one local checkpoint; only a real boundary publishes its
+//! immutable session. Checkpoints, session rows, and the cursor commit together. Denied/missing usage data never becomes a timer estimate.
 
 use std::sync::LazyLock;
 
@@ -125,11 +126,17 @@ pub async fn active_target(pool: &SqlitePool, now_ms: i64) -> Option<ActiveAndro
     // later than it began, while a previous selection's last session may end
     // exactly at the boundary and must not count as fresh foreground.
     let last_foreground: Option<i64> = sqlx::query_scalar(
-        "SELECT MAX(ended_at) FROM play_sessions \
-         WHERE game_id = ? AND source = 'android_usage' AND ended_at > ?",
+        "SELECT MAX(s.ended_at) FROM (\
+             SELECT game_id, ended_at, counted_ms, source FROM play_sessions WHERE deleted = 0 \
+             UNION ALL \
+             SELECT game_id, ended_at, counted_ms, source FROM pending_sessions\
+         ) s JOIN games g ON g.id = s.game_id \
+         WHERE g.id = ? AND g.deleted = 0 AND s.source = 'android_usage' \
+           AND s.ended_at > ? AND s.counted_ms >= ?",
     )
     .bind(&selection.game_id)
     .bind(selection.started_at_ms)
+    .bind(vn_core::usage::MIN_SESSION_MS)
     .fetch_one(pool)
     .await
     .ok()
@@ -207,7 +214,7 @@ pub async fn launch(
     Ok(())
 }
 
-/// Replay foreground events; a recorded return or reboot ends the selection.
+/// Replay foreground events; Stop or a device boundary ends the selection.
 pub async fn reconcile(
     pool: &SqlitePool,
     device: &DeviceId,
@@ -346,7 +353,8 @@ async fn apply_query_result(
 
 /// Apply foreground events for the active selection in one transaction.
 ///
-/// Cursor changes become visible only after the session rows commit successfully.
+/// Poll boundaries are checkpoints, not reading sessions. Final rows remain
+/// immutable once published so folder sync never sees a growing session UUID.
 pub async fn commit_events(
     pool: &SqlitePool,
     device: &DeviceId,
@@ -363,32 +371,64 @@ pub async fn commit_events(
     }
 
     let packages = vec![selection.package.clone()];
-    let intervals = intervals_for(&packages, events, until_ms);
+    // Replay one extra millisecond to distinguish a real event at the cutoff
+    // (notably returning to VN Asyik) from an interval closed only by this poll.
+    // Crediting is still strictly capped at `until_ms` below.
+    let intervals = intervals_for(&packages, events, until_ms.saturating_add(1));
     let mut tx = pool.begin().await?;
+    let mut pending = android_checkpoints(&mut tx).await?;
     let mut added_ms = 0_i64;
 
-    if game_is_live(&mut tx, &selection.game_id).await? {
+    let live_game = game_is_live(&mut tx, &selection.game_id).await?;
+    if live_game {
         for interval in intervals {
+            let existing = pending
+                .iter()
+                .position(|row| {
+                    row.game_id == selection.game_id
+                        && row.device_id == device.as_str()
+                        && row.started_at >= selection.started_at_ms
+                        && row.started_at >= interval.start_ms
+                        && row.started_at < interval.end_ms
+                })
+                .map(|index| pending.remove(index));
+            let previous_counted = existing.as_ref().map_or(0, AndroidCheckpoint::credited_ms);
             let started_at = interval.start_ms.max(selection.cursor_ms);
             let ended_at = interval.end_ms.min(until_ms);
-            let counted_ms = ended_at - started_at;
-            // A glance is not a session. `UsageStats` reports every foreground
-            // switch, so without this floor the list fills with `0:00` rows for
-            // games that were never played (see `MIN_SESSION_MS`).
-            if !vn_core::usage::is_session_worth_recording(counted_ms) {
+            let delta = ended_at.saturating_sub(started_at).max(0);
+            if delta == 0 && existing.is_none() {
                 continue;
             }
-            insert_android_session(
-                &mut tx,
-                device,
-                &selection.game_id,
+            let mut row = existing.unwrap_or_else(|| AndroidCheckpoint {
+                id: EntityId::new().to_string(),
+                game_id: selection.game_id.clone(),
                 started_at,
-                ended_at,
-                counted_ms,
-                until_ms,
-            )
-            .await?;
-            added_ms = added_ms.saturating_add(counted_ms);
+                ended_at: started_at,
+                counted_ms: 0,
+                device_id: device.as_str().to_owned(),
+                written_at: until_ms,
+            });
+            row.ended_at = row.ended_at.max(ended_at);
+            row.counted_ms = row.counted_ms.saturating_add(delta);
+            row.written_at = until_ms;
+            added_ms = added_ms.saturating_add(row.credited_ms() - previous_counted);
+            if keep_active && interval.end_ms > until_ms {
+                save_checkpoint(&mut tx, &row).await?;
+            } else {
+                finalize_checkpoint(&mut tx, &row).await?;
+            }
+            if row.credited_ms() > 0 {
+                mark_game_started(&mut tx, &row).await?;
+            }
+        }
+    }
+
+    // A reboot can discard the open activity from the replay. Its already
+    // checkpointed foreground time is still known; publish only that saved
+    // portion when closing, never guess the missing shutdown tail.
+    if !keep_active || !live_game {
+        for row in pending {
+            finalize_checkpoint(&mut tx, &row).await?;
         }
     }
 
@@ -406,43 +446,104 @@ pub async fn commit_events(
     Ok(added_ms)
 }
 
-async fn insert_android_session(
-    tx: &mut Transaction<'_, Sqlite>,
-    device: &DeviceId,
-    game_id: &str,
+#[derive(Debug, sqlx::FromRow)]
+struct AndroidCheckpoint {
+    id: String,
+    game_id: String,
     started_at: i64,
     ended_at: i64,
     counted_ms: i64,
-    now_ms: i64,
-) -> Result<(), DbError> {
-    let session_id = EntityId::new().to_string();
-    sqlx::query(
-        "INSERT INTO play_sessions \
-         (id, game_id, chapter_id, started_at, ended_at, counted_ms, afk_ms, source, updated_at, device_id, deleted) \
-         VALUES (?, ?, NULL, ?, ?, ?, 0, 'android_usage', ?, ?, 0)",
+    device_id: String,
+    written_at: i64,
+}
+
+impl AndroidCheckpoint {
+    fn credited_ms(&self) -> i64 {
+        if vn_core::usage::is_session_worth_recording(self.counted_ms) {
+            self.counted_ms
+        } else {
+            0
+        }
+    }
+}
+
+async fn android_checkpoints(
+    tx: &mut Transaction<'_, Sqlite>,
+) -> Result<Vec<AndroidCheckpoint>, DbError> {
+    Ok(sqlx::query_as(
+        "SELECT id, game_id, started_at, ended_at, counted_ms, device_id, written_at \
+         FROM pending_sessions WHERE source = 'android_usage' ORDER BY started_at",
     )
-    .bind(session_id)
-    .bind(game_id)
-    .bind(started_at)
-    .bind(ended_at)
-    .bind(counted_ms)
-    .bind(now_ms)
-    .bind(device.as_str())
+    .fetch_all(&mut **tx)
+    .await?)
+}
+
+async fn save_checkpoint(
+    tx: &mut Transaction<'_, Sqlite>,
+    row: &AndroidCheckpoint,
+) -> Result<(), DbError> {
+    sqlx::query(
+        "INSERT INTO pending_sessions \
+         (id, game_id, chapter_id, started_at, ended_at, counted_ms, afk_ms, source, device_id, written_at) \
+         VALUES (?, ?, NULL, ?, ?, ?, 0, 'android_usage', ?, ?) \
+         ON CONFLICT(id) DO UPDATE SET ended_at = excluded.ended_at, \
+           counted_ms = excluded.counted_ms, written_at = excluded.written_at",
+    )
+    .bind(&row.id)
+    .bind(&row.game_id)
+    .bind(row.started_at)
+    .bind(row.ended_at)
+    .bind(row.counted_ms)
+    .bind(&row.device_id)
+    .bind(row.written_at)
     .execute(&mut **tx)
     .await?;
+    Ok(())
+}
 
+async fn finalize_checkpoint(
+    tx: &mut Transaction<'_, Sqlite>,
+    row: &AndroidCheckpoint,
+) -> Result<(), DbError> {
+    if row.credited_ms() > 0 && game_is_live(tx, &row.game_id).await? {
+        sqlx::query(
+            "INSERT INTO play_sessions \
+             (id, game_id, chapter_id, started_at, ended_at, counted_ms, afk_ms, source, updated_at, device_id, deleted) \
+             VALUES (?, ?, NULL, ?, ?, ?, 0, 'android_usage', ?, ?, 0) \
+             ON CONFLICT(id) DO NOTHING",
+        )
+        .bind(&row.id)
+        .bind(&row.game_id)
+        .bind(row.started_at)
+        .bind(row.ended_at)
+        .bind(row.counted_ms)
+        .bind(row.written_at)
+        .bind(&row.device_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    sqlx::query("DELETE FROM pending_sessions WHERE id = ? AND source = 'android_usage'")
+        .bind(&row.id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn mark_game_started(
+    tx: &mut Transaction<'_, Sqlite>,
+    row: &AndroidCheckpoint,
+) -> Result<(), DbError> {
     sqlx::query(
         "UPDATE games SET started_at = COALESCE(started_at, ?), \
          updated_at = MAX(updated_at, ?), device_id = ? \
          WHERE id = ? AND deleted = 0",
     )
-    .bind(started_at)
-    .bind(now_ms)
-    .bind(device.as_str())
-    .bind(game_id)
+    .bind(row.started_at)
+    .bind(row.written_at)
+    .bind(&row.device_id)
+    .bind(&row.game_id)
     .execute(&mut **tx)
     .await?;
-
     Ok(())
 }
 
@@ -492,14 +593,16 @@ async fn save_selection_tx(
 }
 
 async fn clear_selection(pool: &SqlitePool) -> Result<(), DbError> {
-    sqlx::query("DELETE FROM sync_state WHERE key = ?")
-        .bind(ACTIVE_SELECTION_KEY)
-        .execute(pool)
-        .await?;
+    let mut tx = pool.begin().await?;
+    clear_selection_tx(&mut tx).await?;
+    tx.commit().await?;
     Ok(())
 }
 
 async fn clear_selection_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<(), DbError> {
+    for row in android_checkpoints(tx).await? {
+        finalize_checkpoint(tx, &row).await?;
+    }
     sqlx::query("DELETE FROM sync_state WHERE key = ?")
         .bind(ACTIVE_SELECTION_KEY)
         .execute(&mut **tx)
@@ -884,6 +987,251 @@ mod tests {
             20_000,
             "already credited 8s must not replay"
         );
+    }
+
+    #[tokio::test]
+    async fn repeated_polls_checkpoint_one_foreground_stretch_until_it_really_ends() {
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Continuous reading").await;
+        let mut selected = selection(game);
+        let open = vec![event(Some("org.example.runner"), 1, 2_000)];
+        let mut checkpoint_id = None;
+        for until in [17_000, 32_000, 47_000] {
+            apply_query_result(db.pool(), &device, selected, until, false, Ok(open.clone()))
+                .await
+                .expect("poll");
+            // Reload exactly as the next background poll or app restart does.
+            selected = load_selection(db.pool()).await.unwrap().unwrap();
+            assert_eq!(selected.counted_ms, until - 2_000);
+            assert_eq!(
+                total(db.pool(), game).await,
+                0,
+                "an unfinished stretch is not a final session"
+            );
+            let ids: Vec<String> = sqlx::query_scalar(
+                "SELECT id FROM pending_sessions WHERE source = 'android_usage'",
+            )
+            .fetch_all(db.pool())
+            .await
+            .unwrap();
+            assert_eq!(ids.len(), 1, "polling updates one checkpoint");
+            if let Some(previous) = &checkpoint_id {
+                assert_eq!(&ids[0], previous);
+            } else {
+                checkpoint_id = Some(ids[0].clone());
+            }
+            assert!(
+                mapping::list_pending_sessions(db.pool())
+                    .await
+                    .unwrap()
+                    .is_empty(),
+                "desktop recovery must not promote Android checkpoints with a desktop source"
+            );
+        }
+        let mut ended = open;
+        ended.push(event(Some("org.example.runner"), 2, 55_000));
+        let final_view = apply_query_result(db.pool(), &device, selected, 60_000, false, Ok(ended))
+            .await
+            .unwrap();
+        assert_eq!(final_view.counted_ms, 53_000);
+        let rows: Vec<(String, i64, i64, i64)> = sqlx::query_as(
+            "SELECT id, started_at, ended_at, counted_ms FROM play_sessions WHERE game_id = ?",
+        )
+        .bind(game.to_string())
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(rows, vec![(checkpoint_id.unwrap(), 2_000, 55_000, 53_000)]);
+        let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pending_sessions")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(pending, 0);
+    }
+
+    #[tokio::test]
+    async fn the_minimum_duration_applies_to_the_whole_stretch_not_each_poll_tail() {
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Short poll tails").await;
+        let first = apply_query_result(
+            db.pool(),
+            &device,
+            selection(game),
+            4_000,
+            false,
+            Ok(vec![event(Some("org.example.runner"), 1, 2_000)]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            first.counted_ms, 0,
+            "a two-second checkpoint is not yet credited"
+        );
+        let selected = load_selection(db.pool()).await.unwrap().unwrap();
+        let ended = apply_query_result(
+            db.pool(),
+            &device,
+            selected,
+            8_000,
+            false,
+            Ok(vec![
+                event(Some("org.example.runner"), 1, 2_000),
+                event(Some("org.example.runner"), 2, 7_000),
+            ]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(ended.counted_ms, 5_000);
+        assert_eq!(total(db.pool(), game).await, 5_000);
+    }
+
+    #[tokio::test]
+    async fn a_real_close_at_the_previous_cursor_finalizes_without_adding_time() {
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Close at cursor").await;
+        apply_query_result(
+            db.pool(),
+            &device,
+            selection(game),
+            17_000,
+            false,
+            Ok(vec![event(Some("org.example.runner"), 1, 2_000)]),
+        )
+        .await
+        .unwrap();
+        let selected = load_selection(db.pool()).await.unwrap().unwrap();
+        let view = apply_query_result(
+            db.pool(),
+            &device,
+            selected,
+            18_000,
+            false,
+            Ok(vec![
+                event(Some("org.example.runner"), 1, 2_000),
+                event(Some("org.example.runner"), 2, 17_000),
+            ]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(view.counted_ms, 15_000);
+        assert_eq!(total(db.pool(), game).await, 15_000);
+        let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pending_sessions")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(pending, 0);
+    }
+
+    #[tokio::test]
+    async fn deleting_the_game_drops_its_checkpoint_without_publishing_an_orphan() {
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Deleted before finish").await;
+        apply_query_result(
+            db.pool(),
+            &device,
+            selection(game),
+            17_000,
+            false,
+            Ok(vec![event(Some("org.example.runner"), 1, 2_000)]),
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE games SET deleted = 1 WHERE id = ?")
+            .bind(game.to_string())
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let selected = load_selection(db.pool()).await.unwrap().unwrap();
+        apply_query_result(
+            db.pool(),
+            &device,
+            selected,
+            18_000,
+            false,
+            Ok(vec![event(Some("org.example.runner"), 1, 2_000)]),
+        )
+        .await
+        .unwrap();
+        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pending_sessions")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(rows, 0);
+        assert_eq!(total(db.pool(), game).await, 0);
+        assert!(active_target(db.pool(), 18_000).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn stopping_at_the_last_cursor_promotes_the_checkpoint_once() {
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Stop at checkpoint").await;
+        apply_query_result(
+            db.pool(),
+            &device,
+            selection(game),
+            17_000,
+            false,
+            Ok(vec![event(Some("org.example.runner"), 1, 2_000)]),
+        )
+        .await
+        .unwrap();
+        let mut selected = load_selection(db.pool()).await.unwrap().unwrap();
+        assert_eq!(
+            commit_events(db.pool(), &device, &mut selected, &[], 17_000, false)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(total(db.pool(), game).await, 15_000);
+        assert!(load_selection(db.pool()).await.unwrap().is_none());
+        clear_selection(db.pool()).await.unwrap();
+        assert_eq!(
+            total(db.pool(), game).await,
+            15_000,
+            "repeated cleanup must not duplicate time"
+        );
+    }
+
+    #[tokio::test]
+    async fn unavailable_usage_keeps_verified_checkpoints_until_recovery_or_expiry() {
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Verified before interruption").await;
+        apply_query_result(
+            db.pool(),
+            &device,
+            selection(game),
+            17_000,
+            false,
+            Ok(vec![event(Some("org.example.runner"), 1, 2_000)]),
+        )
+        .await
+        .unwrap();
+        let mut selected = load_selection(db.pool()).await.unwrap().unwrap();
+        selected.stopped_at_ms = Some(19_000);
+        save_selection(db.pool(), &selected).await.unwrap();
+        assert!(
+            apply_query_result(
+                db.pool(),
+                &device,
+                selected,
+                19_000,
+                true,
+                Err(AndroidUsageError::NotGranted)
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(total(db.pool(), game).await, 0);
+        // The expiration path clears the selection without having trustworthy
+        // events to extend it. Preserve only the 15 seconds already verified.
+        clear_selection(db.pool()).await.unwrap();
+        assert_eq!(total(db.pool(), game).await, 15_000);
     }
 
     #[tokio::test]

@@ -77,6 +77,11 @@ Usage Access permission, whether running games natively or inside emulators.
 Android cannot see inside another app's windows, so chapters there are set by
 hand and the app says so rather than guessing.
 
+While a game stays in the foreground, each periodic check updates one local
+checkpoint. History receives a completed session when that reading stretch ends,
+such as when switching apps, locking the screen, or pressing Stop. Older
+15-second history fragments are preserved; the fix applies to new recording.
+
 ## Chapters from the window title
 
 On desktop, chapters come from what the game writes in its own window caption:
@@ -140,7 +145,85 @@ What to know before saving:
 Android never reads captions (the OS does not allow it), so chapters there are
 set by hand.
 
+## Beta features
+
+Companion, Discover (VN search with an API key), and VN Chat are hidden by
+default. Enable **Settings → General → Beta features** to show them and their
+setup tools. This choice is local to each device; library imports do not enable it.
+Turning it off pauses the companion, clears window capture, cancels chat replies,
+disconnects Luna live text, and hides the overlay. Saved keys, settings, memories,
+and history are kept. Enabling it again does not resume a companion session or
+window capture automatically. Further companion development is currently paused.
+Normal library search, VNDB lookup/import, and tracking remain available.
+
 ## Companion chat
+
+Choose **Read with companion** on a game page, or open **Companion**, to start a
+reading session. Select a game and personality, then choose typed
+passages or a LunaTranslator feed you have explicitly matched to that game.
+Expand **Reading context** for the optional session name and reading boundary.
+Replies continue while you navigate or minimize the Windows app. Pause stops
+new dialogue and replies; **Stop reply** interrupts the current answer; **End
+session** closes the context. After loading an earlier save or changing routes,
+open **Session options** (the gear) and choose **New session** to start a fresh
+context and transcript. Model details, history and End session live in that
+panel; Pause and Send remain beside the conversation. Send becomes Stop reply
+while an answer is running. Completed tool details are available under Sources.
+
+Knowledge is explicit: **Metadata only**, **Only what I share**, or
+**All spoilers**. Luna input is limited to fresh lines received after starting
+or resuming. A lost or replaced connection pauses the session and requires
+confirmation before reading resumes. Questions use your selected provider;
+automatic reactions and recap suggestions require separate opt-ins. Sessions are
+local, excluded from sync and library exports, and keep up to 200 recent messages each. Ended histories
+can be read or deleted, including after removing their game. Restarting the app
+never resumes a session automatically.
+
+On desktop, **Open overlay** opens a small, movable, resizable window that stays
+on top, with the same conversation and pause/end controls. **Hide** or the window
+close button hides it while the reply continues; reopen it to catch up. Setup,
+settings and library links open in the main app. Use windowed or borderless games:
+exclusive fullscreen can cover native windows. Android has no floating overlay.
+
+Choose from twelve personalities, or use **Customize** to save a local profile
+with its own speaking style, interests, reply length, language and tone. Sample
+replies are authored examples; viewing them makes no model call. In **Session
+options**, **Apply personality** changes the current session and stops any reply
+still using its previous personality. Saving or deleting a profile alone leaves
+session copies intact. Profiles and companion history are excluded from library
+exports and sync.
+
+**Session options → Review memories** adds local durable memory (20C). Use
+**Remember this** for a preference or a reviewed passage, then choose its scope:
+all companions, this identity, or this game and playthrough. **Use saved memories**
+is a separate opt-in, off by default. Review, search, edit and pin saved items.
+**Suggest a recap** calls the selected model only when requested; automatic
+recap suggestions have a separate opt-in and may incur provider charges.
+Suggestions never enter retrieval until approved. Interrupted recaps pause
+until explicitly retried, and saved evidence survives the 200-message window.
+
+**Forget** clears the selected memory and evidence. Corrections and Forget also
+invalidate derived recaps and exclude all earlier companion exchanges from
+future prompts, while retaining readable local transcripts. This deliberately
+loses recent conversational continuity; it cannot retract content already sent
+to a provider. New sessions never inherit another playthrough's story memories.
+Memory is excluded from sync, backups and exports. Deleting a session removes
+its derived memories; independently authored preferences remain.
+
+**Vision** adds selected-window scenes on Windows (20D). Choose one game window,
+inspect the local preview and optional crop, then explicitly **Test image support**
+for your selected provider. Send one image with a question, or enable **Watch and
+react** for occasional text reactions while that game is foreground. Image calls
+may cost money. Automatic calls are at least 60 seconds apart, capped at 12/hour
+and 30/session; silence, failures and cancelled dispatched requests count too.
+**Quiet** stops automatic replies; **Stop watching**, session Pause/End and Forget
+clear capture. Watching never restarts at app launch. Images stay in memory only;
+history retains text labelled as visual inference and minimal source metadata.
+Windows SDR capture is supported; HDR and other platforms report unavailable.
+
+This includes text sessions (20A), friend identities (20B), durable memory (20C),
+and vision with occasional reactions (20D). Voice remains planned. Android does
+not guarantee background operation; keep the app open there.
 
 The chat is not a general assistant bolted onto a library. It can read two
 things and cite them:
@@ -157,8 +240,9 @@ of its own previous outline for continuity, then their segment digests merge
 into one. Progress is saved per chunk, so closing the app mid-run and coming
 back resumes where it stopped instead of starting over.
 
-Digests are withheld unless the chat's spoiler level is set to _All_. Live text
-is not, because you already read it.
+Digests are withheld unless the chat's spoiler level is set to _All_. Ordinary
+chat can read live text at every spoiler level; companion sessions additionally
+withhold captured dialogue in **Metadata only** mode.
 
 ### Providers
 
@@ -170,10 +254,10 @@ before this list is migrated into a profile on first run, key included.
 
 Two endpoints are known to work through the compatibility layer:
 
-| Provider | Endpoint | Example model |
-| --- | --- | --- |
+| Provider         | Endpoint                                                  | Example model      |
+| ---------------- | --------------------------------------------------------- | ------------------ |
 | Google AI Studio | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` |
-| Local runtime | `http://127.0.0.1:11434/v1` (Ollama) | `qwen3` |
+| Local runtime    | `http://127.0.0.1:11434/v1` (Ollama)                      | `qwen3`            |
 
 Plain `http` is accepted only on localhost, because anywhere else it would send
 the key in clear text.
@@ -193,15 +277,19 @@ tells you rather than pretending.
 
 ## Install
 
-Builds are produced locally; there is no signed public release yet.
+Download the latest prerelease from [GitHub Releases](https://github.com/Atho64/VN-Asyik/releases).
+Windows has `.exe` and `.msi` installers; both are unsigned and may show a
+SmartScreen warning. Android uses the signed `app-universal-release.apk`.
+
+To build from source:
 
 ```
 pnpm install --frozen-lockfile
 pnpm tauri build
 ```
 
-Output lands in `src-tauri/target/release/bundle/`. Android needs JDK 21, the
-Android SDK and NDK, and the Android Rust target:
+Output lands in `target/release/bundle/` unless a Cargo target directory is
+configured. Android needs JDK 21, the Android SDK and NDK, and the Android Rust target:
 
 ```
 pnpm tauri android build --apk --target aarch64

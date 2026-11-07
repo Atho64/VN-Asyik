@@ -54,7 +54,13 @@ function gallery(overrides: Partial<ScreenshotGallery> = {}): ScreenshotGallery 
 
 function setPolicy(nsfw: NsfwMode) {
   useAppStore.setState({
-    prefs: { theme: "dark", language: "en", nsfw, reduce_effects: false },
+    prefs: {
+      theme: "dark",
+      language: "en",
+      nsfw,
+      reduce_effects: false,
+      beta_features: false,
+    },
   });
 }
 
@@ -82,13 +88,17 @@ describe("screenshot gallery", () => {
   it("does not request anything for a hand-added game with no VN", async () => {
     renderGallery(null);
     expect(mocks.vndbScreenshots).not.toHaveBeenCalled();
-    expect(await screen.findByText("VNDB has no screenshots for this visual novel.")).toBeTruthy();
+    expect(
+      await screen.findByText("VNDB has no screenshots for this visual novel."),
+    ).toBeTruthy();
   });
 
   it("says so when VNDB has no screenshots", async () => {
     mocks.vndbScreenshots.mockResolvedValue(gallery({ shots: [], reported: 0 }));
     renderGallery();
-    expect(await screen.findByText("VNDB has no screenshots for this visual novel.")).toBeTruthy();
+    expect(
+      await screen.findByText("VNDB has no screenshots for this visual novel."),
+    ).toBeTruthy();
   });
 
   it("paints what the backend resolved, without second-guessing the policy", async () => {
@@ -119,7 +129,9 @@ describe("screenshot gallery", () => {
       gallery({ shots: [shot({ explicit: true })] }),
     );
     const { container } = renderGallery();
-    await waitFor(() => expect(screen.getByText("Explicit screenshot hidden")).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText("Explicit screenshot hidden")).toBeTruthy(),
+    );
     expect(tiles(container)).toHaveLength(0);
     expect(container.querySelector(".gallery__neutral")).toBeTruthy();
   });
@@ -144,9 +156,7 @@ describe("screenshot gallery", () => {
     );
     const { container } = renderGallery();
     await waitFor(() => expect(tiles(container)[0]).toHaveAttribute("src", blurred));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Show this screenshot" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Show this screenshot" }));
     await waitFor(() => expect(tiles(container)[0]).toHaveAttribute("src", sharp));
     expect(mocks.vndbScreenshots).toHaveBeenCalledTimes(1);
   });
@@ -177,9 +187,7 @@ describe("screenshot gallery", () => {
 
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Open screenshot 1 of 1" }),
-      ).toBeTruthy(),
+      expect(screen.getByRole("button", { name: "Open screenshot 1 of 1" })).toBeTruthy(),
     );
   });
 
@@ -208,7 +216,9 @@ describe("screenshot gallery", () => {
     // The rest of the detail screen is still readable, so this must not throw.
     mocks.vndbScreenshots.mockRejectedValue(new Error("offline"));
     renderGallery();
-    expect(await screen.findByText("VNDB has no screenshots for this visual novel.")).toBeTruthy();
+    expect(
+      await screen.findByText("VNDB has no screenshots for this visual novel."),
+    ).toBeTruthy();
   });
 
   it("re-reads the list when the payload is refreshed", async () => {
@@ -226,7 +236,9 @@ describe("screenshot gallery", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Open screenshot 1 of 1" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Open this screenshot on VNDB" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open this screenshot on VNDB" }),
+    );
     expect(mocks.openExternal).toHaveBeenCalledWith("https://vndb.org/sf1");
   });
 });

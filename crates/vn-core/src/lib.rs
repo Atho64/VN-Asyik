@@ -9,6 +9,7 @@ pub mod afk;
 pub mod chapter;
 pub mod chat;
 pub mod clock;
+pub mod companion;
 pub mod emulator;
 pub mod ids;
 pub mod library;
