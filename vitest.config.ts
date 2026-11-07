@@ -11,16 +11,13 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    // Cold jsdom starts can time out when too many workers read a slow disk.
-    // Keep a small pool while preserving the default per-file isolation.
-    maxWorkers: 2,
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     restoreMocks: true,
-    // Cold parallel jsdom startup timed out on the project's HDD before files
-    // could run; two workers keep the suite deterministic on that machine.
-    // Vitest 5 has no `minWorkers` anymore: this is a cap, not a floor.
+    // Cold jsdom starts can time out when too many workers read a slow disk;
+    // two workers keep the suite deterministic. Vitest 5 has no `minWorkers`
+    // anymore, so this is a cap, not a floor.
     pool: "forks",
     maxWorkers: 2,
   },
