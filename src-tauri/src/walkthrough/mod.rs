@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use vn_core::walkthrough::{
-    Walkthrough, WalkthroughIndexEntry, WalkthroughRoute, decode_shift_jis, parse_index_links,
+    Walkthrough, WalkthroughIndexEntry, WalkthroughRoute, decode_html_bytes, parse_index_links,
 };
 
 use crate::ai::chat::{ChatConfig, complete};
@@ -21,7 +21,13 @@ const SEIYA_PC_KOURYAKU_URL: &str = "https://seiya-saiga.com/game/kouryaku.html"
 const SEIYA_GALGE_URL: &str = "https://galge.seiya-saiga.com/game/galge.html";
 const SEIYA_MAIN_URL: &str = "https://seiya-saiga.com/";
 const SEIYA_BEKKAN_KOURYAKU_URL: &str = "https://galge.seiya-saiga.com/game/kouryaku.html";
-pub const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+/// Identifies the app honestly; a faked browser user agent would misrepresent
+/// who is fetching and could get the site's bots policy applied against it.
+pub const USER_AGENT: &str = concat!(
+    "VN-Tracker/",
+    env!("CARGO_PKG_VERSION"),
+    " (walkthrough fetcher; +https://seiya-saiga.com/)"
+);
 
 type CachedIndex = (std::time::Instant, Vec<WalkthroughIndexEntry>);
 static INDEX_CACHE: LazyLock<RwLock<Option<CachedIndex>>> = LazyLock::new(|| RwLock::new(None));
@@ -65,11 +71,12 @@ pub struct WalkthroughView {
 /// Create an HTTP client configured to connect to Seiya-Saiga.
 ///
 /// Direct IP resolution for `seiya-saiga.com` and `galge.seiya-saiga.com` defeats
-/// ISP DNS tampering (such as Indonesian ISP Internet Positif redirection).
+/// ISP DNS tampering (such as Indonesian ISP Internet Positif redirection). URLs
+/// keep the real hostname, so certificate validation still checks the name the
+/// server presents and must never be bypassed: the pin only replaces DNS.
 pub fn build_seiya_client() -> Result<reqwest::Client, WalkthroughError> {
     let mut builder = crate::vndb::http_client_builder()
         .user_agent(USER_AGENT)
-        .danger_accept_invalid_certs(true)
         .timeout(Duration::from_secs(15));
 
     if let Ok(addr_443) = SEIYA_IP_PORT_443.parse::<SocketAddr>() {
@@ -93,7 +100,7 @@ pub async fn fetch_seiya_html(
     };
     let resp = client.get(&normalized).send().await?.error_for_status()?;
     let bytes = resp.bytes().await?;
-    Ok(decode_shift_jis(&bytes))
+    Ok(decode_html_bytes(&bytes))
 }
 
 /// Fetch and parse the combined Seiya-Saiga master index across main, galge, and all-ages PC catalogs.

@@ -6,6 +6,7 @@
 //! imports for no reason.
 
 use serde::{Deserialize, Serialize};
+use vn_core::model::is_explicit_at_level;
 
 /// A `POST /vn` request body.
 #[derive(Debug, Clone, Serialize)]
@@ -106,21 +107,23 @@ impl Image {
 
     /// Whether the community voted this image sexually explicit or violent.
     ///
-    /// The threshold is the same one `flag_level` in the importer applies: a
-    /// rounded level of 1 or higher. VNDB returns 0.93 for covers that are
-    /// plainly explicit, so a stricter test would leak them.
+    /// The rounding is [`flag_level_from_vote`]; the comparison is the shared
+    /// `vn_core` threshold. VNDB returns 0.93 for covers that are plainly
+    /// explicit, so a stricter test would leak them.
     #[must_use]
     pub fn is_explicit(&self) -> bool {
-        flag_level_from_vote(self.sexual) >= 1 || flag_level_from_vote(self.violence) >= 1
+        is_explicit_at_level(Some(flag_level_from_vote(self.sexual)))
+            || is_explicit_at_level(Some(flag_level_from_vote(self.violence)))
     }
 }
 
 /// Round VNDB's 0.0..2.0 vote onto the 0..2 flag level.
 ///
 /// The only copy of this rounding. `import::flag_level` handles the same vote already
-/// multiplied by 100, and both callers of the policy (the importer and the screenshot
-/// cache) go through one of these two. A third copy used to sit in `dto`, a fourth in
-/// TypeScript, and a threshold change meant finding all of them.
+/// multiplied by 100, and every caller of the policy (the importer, the screenshot
+/// cache and `Image::is_explicit`) goes through one of these two. A duplicate used to
+/// sit in `dto`, a fourth copy in TypeScript, and a threshold change meant finding
+/// all of them.
 #[must_use]
 pub fn flag_level_from_vote(value: Option<f32>) -> u8 {
     let Some(value) = value.filter(|value| value.is_finite()) else {
