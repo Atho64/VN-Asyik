@@ -1030,7 +1030,7 @@ mod tests {
         assert_eq!(b_total, 0);
     }
 
-    // ---- Discord presence follows the foreground, not the open selection ----
+    // Discord presence follows the foreground, not the open selection.
 
     #[tokio::test]
     async fn presence_dies_when_the_game_leaves_the_foreground() {

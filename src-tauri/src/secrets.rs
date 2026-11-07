@@ -718,7 +718,6 @@ pub fn is_supported() -> bool {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn entry() -> Result<keyring::Entry, SecretError> {
     if keyring::Entry::store_status().is_err() {
         return Err(SecretError::Unsupported);

@@ -9,7 +9,7 @@
 //! `/api/ws/text/origin` streams every extracted original text as a plain
 //! WebSocket text frame — the raw string, no JSON wrapper. Frames are fed into
 //! the shared [`HookHost`] ring, so the companion chat tool and the live-text
-//! UI see Luna's text exactly like our own injected hook's output.
+//! UI read Luna's text the same way they read any other live source.
 //!
 //! Plain HTTP/WebSocket means this works on every platform, Android included —
 //! unlike the Windows named pipe.
