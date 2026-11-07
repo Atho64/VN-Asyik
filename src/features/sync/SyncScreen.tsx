@@ -276,7 +276,7 @@ export function SyncScreen() {
             {!account.permissions.includes("listwrite") ? (
               <p className="settings__hint">{t("sync.permMissingWrite")}</p>
             ) : null}
-            <div className="captions" style={{ display: "grid", gap: 4 }}>
+            <div className="captions">
               <span className="caption">
                 {t("sync.lastPull")}:{" "}
                 {account.last_pull_at

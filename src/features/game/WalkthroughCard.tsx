@@ -250,7 +250,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
       {inSwitchMode && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600 }}>
-            {locale === "id" ? "Cari Panduan Lain di Seiya-Saiga" : "Search Another Guide on Seiya-Saiga"}
+            {t("walkthrough.searchOtherGuide")}
           </span>
           <Button size="icon" variant="ghost" onClick={() => setShowSwitchSearch(false)}>
             <Icon name="close" size={12} />
@@ -351,8 +351,8 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                           fontWeight: 600,
                           padding: "1px 6px",
                           borderRadius: "var(--radius-sm)",
-                          background: getPlatformBadge(entry.url).isConsole ? "rgba(100, 150, 255, 0.15)" : "rgba(50, 200, 100, 0.15)",
-                          color: getPlatformBadge(entry.url).isConsole ? "var(--color-accent)" : "var(--color-success, #34d399)",
+                          background: getPlatformBadge(entry.url).isConsole ? "var(--accent-soft)" : "var(--success-soft)",
+                          color: getPlatformBadge(entry.url).isConsole ? "var(--accent)" : "var(--success)",
                           letterSpacing: "0.03em",
                           flexShrink: 0,
                         }}
@@ -434,8 +434,8 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                         fontWeight: 600,
                         padding: "1px 6px",
                         borderRadius: "var(--radius-sm)",
-                        background: getPlatformBadge(cand.url).isConsole ? "rgba(100, 150, 255, 0.15)" : "rgba(50, 200, 100, 0.15)",
-                        color: getPlatformBadge(cand.url).isConsole ? "var(--color-accent)" : "var(--color-success, #34d399)",
+                        background: getPlatformBadge(cand.url).isConsole ? "var(--accent-soft)" : "var(--success-soft)",
+                        color: getPlatformBadge(cand.url).isConsole ? "var(--accent)" : "var(--success)",
                         letterSpacing: "0.03em",
                         flexShrink: 0,
                       }}
@@ -503,12 +503,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               e.preventDefault();
               const trimmed = customUrl.trim();
               if (!trimmed) {
-                pushToast(
-                  "error",
-                  locale === "id"
-                    ? "Silakan masukkan URL panduan Seiya-Saiga terlebih dahulu"
-                    : "Please enter a Seiya-Saiga guide URL first",
-                );
+                pushToast("error", t("walkthrough.urlRequired"));
                 return;
               }
               void handleFetch(trimmed);
@@ -566,7 +561,8 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                 size="icon"
                 variant={showSwitchSearch ? "secondary" : "ghost"}
                 onClick={() => setShowSwitchSearch((prev) => !prev)}
-                title={locale === "id" ? "Cari / Ganti panduan Seiya-Saiga" : "Search / Switch Seiya-Saiga guide"}
+                title={t("walkthrough.switchGuide")}
+                aria-label={t("walkthrough.switchGuide")}
               >
                 <Icon name="search" size={14} />
               </Button>
@@ -609,7 +605,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               }}
             >
               <Icon name="search" size={13} />
-              <span>{locale === "id" ? "Mencari kecocokan di direktori Seiya-Saiga..." : "Searching Seiya-Saiga directory..."}</span>
+              <span>{t("walkthrough.searchingDirectory")}</span>
             </div>
           )}
 
@@ -903,8 +899,8 @@ function WalkthroughItemRow({
             display: "inline-block",
             fontSize: "var(--font-size-xs)",
             fontWeight: 700,
-            color: "#e53e3e",
-            background: "rgba(229, 62, 62, 0.12)",
+            color: "var(--danger)",
+            background: "var(--danger-soft)",
             padding: "2px 6px",
             borderRadius: "var(--radius-sm)",
             letterSpacing: "0.03em",
@@ -935,8 +931,8 @@ function WalkthroughItemRow({
             display: "inline-block",
             fontSize: "var(--font-size-xs)",
             fontWeight: 700,
-            color: "#3182ce",
-            background: "rgba(49, 130, 206, 0.12)",
+            color: "var(--accent)",
+            background: "var(--accent-soft)",
             padding: "2px 6px",
             borderRadius: "var(--radius-sm)",
             letterSpacing: "0.03em",

@@ -598,7 +598,7 @@
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  color: var(--accent-contrast, #08110f);
+  color: var(--accent-contrast);
   font: inherit;
   font-size: var(--text-s);
   font-weight: 600;

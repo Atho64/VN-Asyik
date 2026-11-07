@@ -59,8 +59,8 @@ function ToastItem({
           color: "var(--text-muted)",
           display: "grid",
           placeItems: "center",
-          minWidth: 24,
-          minHeight: 24,
+          minWidth: "var(--touch-target)",
+          minHeight: "var(--touch-target)",
         }}
       >
         <Icon name="close" size={14} />

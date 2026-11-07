@@ -538,9 +538,13 @@ export function ChatScreen() {
                   padding: "2px 8px",
                   borderRadius: "999px",
                   fontWeight: 600,
-                  background: hookStatus?.connected ? "rgba(34, 197, 94, 0.15)" : "rgba(148, 163, 184, 0.15)",
-                  color: hookStatus?.connected ? "#22c55e" : "var(--color-text-subtle)",
-                  border: hookStatus?.connected ? "1px solid rgba(34, 197, 94, 0.3)" : "1px solid var(--color-border)",
+                  background: hookStatus?.connected
+                    ? "var(--success-soft)"
+                    : "color-mix(in srgb, var(--text-muted) 15%, transparent)",
+                  color: hookStatus?.connected ? "var(--success)" : "var(--text-muted)",
+                  border: hookStatus?.connected
+                    ? "1px solid color-mix(in srgb, var(--success) 30%, transparent)"
+                    : "1px solid var(--border)",
                 }}
               >
                 {hookStatus?.connected

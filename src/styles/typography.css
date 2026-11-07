@@ -68,6 +68,12 @@
   color: var(--text-muted);
 }
 
+/* A stack of caption lines: sync timestamps, small facts that read as a list. */
+.captions {
+  display: grid;
+  gap: var(--space-1);
+}
+
 /* Playtime and any column of numbers: tabular so digits do not jitter. */
 .tnum {
   font-variant-numeric: tabular-nums;

@@ -479,7 +479,7 @@
   font-size: var(--text-xs);
   font-weight: 550;
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
+  transition: background var(--dur-fast) var(--ease);
 }
 
 .detail__art-edit-btn:hover {
@@ -995,6 +995,13 @@
   margin-top: var(--space-2);
 }
 
+/* A labelled select for the presence preview: a column, not a settings__row,
+   so the hint keeps its own line above the select. */
+.settings__preview-game {
+  display: grid;
+  gap: var(--space-1);
+}
+
 /* Saved provider profiles: one block per endpoint.
  *
  * A `settings__row` would put the name and five controls on one line, which on a
@@ -1066,6 +1073,13 @@
 .llm-form__actions {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.llm-form__presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
 }
 

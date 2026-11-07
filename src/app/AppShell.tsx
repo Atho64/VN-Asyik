@@ -29,9 +29,9 @@ interface NavEntry {
 }
 
 /**
- * Top-level navigation: Library, Tracking, Stats, Discover, and Settings.
- * VNDB Sync and Device Data Transfer live inside Settings to keep the main
- * navigation uncluttered.
+ * Top-level navigation: Library, Tracking, Stats, Recommend, Chat, Presence,
+ * Guide, and Settings. VNDB Sync and Device Data Transfer live inside Settings
+ * to keep the main navigation uncluttered.
  */
 const navEntries: NavEntry[] = [
   { to: "/", labelKey: "nav.library", icon: "library" },

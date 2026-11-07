@@ -163,9 +163,9 @@ export function StatsScreen() {
             </p>
             {locale === "en" ? (
               <p className="stats__unit">
-                hours
+                {t("stats.unitHours")}
                 {totalMs % 3_600_000 > 0
-                  ? ` · ${Math.floor((totalMs % 3_600_000) / MS_PER_MINUTE)} min`
+                  ? ` · ${Math.floor((totalMs % 3_600_000) / MS_PER_MINUTE)} ${t("stats.unitMin")}`
                   : ""}
               </p>
             ) : null}

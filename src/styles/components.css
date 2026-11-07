@@ -745,6 +745,14 @@ select optgroup {
   outline: none;
 }
 
+/* The input suppresses its own ring so the modal, the focused surface, carries
+   it: same pattern as .discover__field, one visible indicator per focus stop. */
+.palette:focus-within {
+  box-shadow:
+    var(--shadow-2),
+    0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
 .palette__list {
   max-height: 52vh;
   overflow-y: auto;
@@ -1900,7 +1908,7 @@ select optgroup {
 }
 
 .cast__summary:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1910,7 +1918,7 @@ select optgroup {
   block-size: 48px;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: var(--surface-raised);
+  background: var(--surface-2);
 }
 
 .cast__art img {
@@ -1918,6 +1926,14 @@ select optgroup {
   block-size: 100%;
   object-fit: cover;
   object-position: top;
+}
+
+/* No photo from VNDB: the span fills the tile so the raised surface reads as
+   an intentional empty frame rather than a missing image. */
+.cast__art--empty {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
 }
 
 .cast__text {
@@ -2028,7 +2044,7 @@ select optgroup {
   object-fit: contain;
   object-position: top;
   border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  background: var(--surface-2);
 }
 
 .cast__sheet-original {

@@ -31,6 +31,13 @@
   flex-wrap: wrap;
   gap: var(--space-3);
 }
+.session-history__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .session-history__session {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
