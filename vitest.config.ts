@@ -15,5 +15,10 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     restoreMocks: true,
+    // Cold parallel jsdom startup timed out on the project's HDD before files
+    // could run; two workers keep the suite deterministic on that machine.
+    // Vitest 5 has no `minWorkers` anymore: this is a cap, not a floor.
+    pool: "forks",
+    maxWorkers: 2,
   },
 });

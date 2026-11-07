@@ -47,15 +47,15 @@ answer for a game that reports nothing.
 rotating through whatever fields you configure. Explicit cover art is blurred
 before it is ever sent anywhere, if you opt into an image host at all.
 
-**Walkthroughs.** Pull route choices directly from the Seiya-Saiga index
-covering over 4,800 PC and console titles. Step-by-step choices, route branches,
-and ending badges are organized into clean tabs, backed by normalized Japanese
-title search and inline translation options.
+**Walkthroughs.** Pull route choices directly from the Seiya-Saiga index.
+Step-by-step choices, route branches, and ending badges are organized into
+clean tabs, backed by normalized Japanese title search and inline translation
+options.
 
-**Recommendations.** Ask what to read next. Suggestions are shaped by your
-taste profile and local vector embeddings, or through open-web searches via
-Tavily that always link back to cited sources rather than guessing without
-receipts.
+**Recommendations.** Ask what to read next. A taste profile is computed
+locally from the VNDB tags of the games in your library, and questions can
+reach the open web through Tavily searches that always link back to cited
+sources rather than guessing without receipts.
 
 **Sync and backups.** Sync libraries and sessions across devices over a shared
 folder on your local network (LAN) without third-party servers. Or export your
@@ -69,11 +69,11 @@ trigger common actions.
 **Background operation & System Tray.** On desktop, hide VN Asyik into the taskbar
 notification area (system tray) using the sidebar button, `Ctrl+Shift+H`, the Command
 Palette, or simply by closing the window ('X'). Playtime tracking and LunaTranslator
-text hooking continue seamlessly in the background while you read your visual novel,
+text hooking continue in the background while you read your visual novel,
 and the window can be instantly restored by clicking the tray icon.
 
 **Android.** Playtime comes from `UsageStats` foreground events, which needs the
-Usage Access permission — whether running games natively or inside emulators.
+Usage Access permission, whether running games natively or inside emulators.
 Android cannot see inside another app's windows, so chapters there are set by
 hand and the app says so rather than guessing.
 
@@ -90,7 +90,7 @@ anemoi アネモイ Ｃｈａｐｔｅｒ ０１            route アネモイ, 
 ```
 
 Full-width characters are folded before matching, so `Ｄａｙ １` and `Day 1` read
-the same. A caption with no marker — the title screen, a menu — attributes
+the same. A caption with no marker (the title screen, a menu) attributes
 nothing rather than inventing a chapter, a bare number is not a chapter, and a
 caption that does not name the game you track is ignored.
 
@@ -98,15 +98,15 @@ caption that does not name the game you track is ignored.
 
 If your game writes a shape none of those cover, open **Settings → General →
 Reading chapters from window titles**, set **Source** to **Custom pattern**, and
-fill in a pattern. It is Rust [`regex`](https://docs.rs/regex) 1.x syntax —
+fill in a pattern. It is Rust [`regex`](https://docs.rs/regex) 1.x syntax:
 linear-time, no look-around, no backreferences, at most 512 bytes (about 170
-Japanese characters) — and it runs against the whole caption the way the game
+Japanese characters). It runs against the whole caption the way the game
 wrote it, game name included.
 
 - **Two groups:** the first is the route, the second is the chapter.
 - **One group:** it is the chapter.
 
-At least one group is required — a pattern without one is refused when you save.
+At least one group is required; a pattern without one is refused when you save.
 Groups that did not take part in the match are skipped, so an optional route
 group leaves just the chapter.
 
@@ -125,19 +125,19 @@ What to know before saving:
 
 - The pattern is not anchored: it matches anywhere in the caption unless you
   write `^` and `$` yourself.
-- A match whose group captured nothing is treated as no match — an empty chapter
+- A match whose group captured nothing is treated as no match: an empty chapter
   name is worse than none.
 - Custom patterns do **not** fold full-width characters: `Day` never matches
   `Ｄａｙ`, because they are different characters. For a caption written that way,
   either put those characters in the pattern or leave the source on **Siglus**,
   which folds them.
 - **Test** runs the pattern against the sample caption, prefilled from whichever
-  window was in front when the panel opened — edit it to try another. Test
+  window was in front when the panel opened; edit it to try another. Test
   before saving: a pattern that never matches looks exactly like a game that
   writes no chapter, and nothing else in the app can tell them apart.
 
 **Off** stops reading captions. The choice is stored locally on this device.
-Android never reads captions — the OS does not allow it — so chapters there are
+Android never reads captions (the OS does not allow it), so chapters there are
 set by hand.
 
 ## Companion chat
@@ -147,8 +147,8 @@ things and cite them:
 
 - **Live text.** Text LunaTranslator extracted from the game you are playing
   right now.
-- **Imported scripts.** Drop in a script you extracted yourself — plain text, a
-  name/message JSON array, or the Asyik JSON format — and the app compacts it
+- **Imported scripts.** Drop in a script you extracted yourself: plain text, a
+  name/message JSON array, or the Asyik JSON format. The app compacts it
   into a story digest it can answer from.
 
 Compaction is a map-reduce over the script split into byte-budgeted chunks. Up
@@ -252,8 +252,8 @@ cargo check --target aarch64-linux-android -p vn-tracker
 
 ## Reading the code
 
-`crates/vn-core` is the place to start: it holds the pure domain logic — the
-session state machine, sync merge, chapter mapping, script compaction — with no
+`crates/vn-core` is the place to start: it holds the pure domain logic (the
+session state machine, sync merge, chapter mapping, script compaction) with no
 Tauri and no OS calls, so it tests with plain `cargo test`. `src-tauri/src` wraps
 that in commands, storage and platform adapters. `src/` is the React frontend and
 talks to the backend only through `src/lib/ipc`.
@@ -269,30 +269,30 @@ constants were copied and carry provenance comments in the source. _Inspiration_
 means the project was read to understand a problem; nothing was copied, and no
 obligation attaches to an idea.
 
-**[VaternID/EwE](https://github.com/VaternID/EwE) — GPL-3.0 — ported.**
+**[VaternID/EwE](https://github.com/VaternID/EwE)** (GPL-3.0, ported).
 The Discord presence card is modelled on EwE. `crates/vn-core/src/presence.rs`
 records what was taken: the per-field text transform pipeline (remove, replace,
 prefix/suffix, trim, in that order) and the independent rotation cursor per
-field. What was deliberately not taken is recorded too — EwE's custom Python
+field. What was deliberately not taken is recorded too: EwE's custom Python
 variable scripts, which execute arbitrary code from a directory beside the
 executable, and its upload of cover art without a separate opt-in.
 
-**[dead8309/Kizzy](https://github.com/dead8309/Kizzy) — GPL-3.0 — inspiration.**
+**[dead8309/Kizzy](https://github.com/dead8309/Kizzy)** (GPL-3.0, inspiration).
 The reference for talking to Discord on Android, where the desktop IPC socket
 does not exist. The Android presence path connects to the Discord Gateway
 directly instead, which is the approach Kizzy demonstrated. No code is shared.
 
-**[Yukin0a/KireiBox](https://github.com/Yukin0a/KireiBox) — GPL-3.0 — inspiration.**
+**[Yukin0a/KireiBox](https://github.com/Yukin0a/KireiBox)** (GPL-3.0, inspiration).
 A reference for how Android VN launchers approach externally installed engines.
 Its README draws the line between bundled engine runners and launching a
 separately installed app; VN Asyik takes the second path and bundles nothing.
 
-**[LunaTranslator](https://github.com/HIllya51/LunaTranslator) — GPL-3.0 — integrated.**
+**[LunaTranslator](https://github.com/HIllya51/LunaTranslator)** (GPL-3.0, integrated).
 Connected through its documented network service: the websocket endpoint streams
 extracted text as plain frames, which the app consumes. No code is copied; the
 integration is a client for a documented API.
 
-**LunaBox — AGPL-3.0 — inspiration only.**
+**LunaBox** (AGPL-3.0, inspiration only).
 Read as prior art for what an AI feature over a VN library could present, and for
 which failure modes matter (spoilers, invented conclusions). Ideas and functional
 behaviour are not copyrightable, so this created no obligation either way.

@@ -39,7 +39,7 @@ kover yang terlihat yang dirender. Buka dari library atau dengan Ctrl+Shift+B.
 **Rute dan ending.** Rute sepenuhnya milikmu: kamu yang memberi nama, dan ending
 menggantung padanya. Deteksi bab membaca judul jendela game saat engine-nya
 menuliskannya (lihat [Bab dari judul jendela](#bab-dari-judul-jendela)), dan
-jatuh ke atribusi tingkat gim saat tidak ada — jawaban yang jujur untuk gim yang
+jatuh ke atribusi tingkat gim saat tidak ada, jawaban yang jujur untuk gim yang
 tidak melaporkan apa pun.
 
 **Statistik.** Waktu baca per gim, per rute, dan per bulan, dihitung dari
@@ -50,15 +50,15 @@ sedang kamu baca, bergiliran sesuai kolom yang kamu atur. Kover eksplisit
 diblur dulu sebelum dikirim ke mana pun, kalau kamu memang mengaktifkan host
 gambar.
 
-**Panduan rute.** Ambil panduan pilihan rute langsung dari indeks Seiya-Saiga
-(mencakup lebih dari 4.800 judul PC dan konsol). Langkah pilihan, rute, dan
-lencana ending disajikan rapi per tab, lengkap dengan pencarian judul Jepang
-yang dinormalisasi dan opsi terjemahan.
+**Panduan rute.** Ambil panduan pilihan rute langsung dari indeks
+Seiya-Saiga. Langkah pilihan, rute, dan lencana ending disajikan rapi per
+tab, lengkap dengan pencarian judul Jepang yang dinormalisasi dan opsi
+terjemahan.
 
-**Rekomendasi bacaan.** Tanya apa yang layak dibaca berikutnya. Jawaban diramu
-dari preferensi seleramu dan model embedding lokal, atau pencarian web terbuka
-via Tavily yang selalu menyertakan tautan sumber halamannya, bukan tebakan
-tanpa rujukan.
+**Rekomendasi bacaan.** Tanya apa yang layak dibaca berikutnya. Profil selera
+dihitung lokal dari tag VNDB gim-gim di pustakamu, dan pertanyaan bisa
+menjangkau web terbuka lewat pencarian Tavily yang selalu menyertakan tautan
+sumber halamannya, bukan tebakan tanpa rujukan.
 
 **Sinkronisasi dan cadangan.** Selaraskan pustaka dan sesi baca antarperangkat
 lewat folder bersama di jaringan lokal (LAN) tanpa bergantung pada server pihak
@@ -78,7 +78,7 @@ mengganggu visual novel yang sedang dibaca, dan jendela dapat dipanggil kembali
 dengan sekali klik pada ikon tray.
 
 **Android.** Waktu baca diambil dari event foreground `UsageStats`, yang butuh
-izin Usage Access — baik untuk gim langsung maupun yang dijalankan lewat
+izin Usage Access, baik untuk gim langsung maupun yang dijalankan lewat
 emulator. Android tidak bisa melihat isi jendela aplikasi lain, jadi bab di
 sana diatur manual dan aplikasi mengatakannya terang-terangan alih-alih
 menebak.
@@ -96,7 +96,7 @@ anemoi アネモイ Ｃｈａｐｔｅｒ ０１            rute アネモイ, b
 ```
 
 Karakter full-width dilipat dulu sebelum dicocokkan, jadi `Ｄａｙ １` dan
-`Day 1` dibaca sama. Judul tanpa penanda — layar judul, menu — tidak
+`Day 1` dibaca sama. Judul tanpa penanda (layar judul, menu) tidak
 menghasilkan apa pun daripada mengarang bab; angka telanjang bukan bab; dan
 judul yang tidak menyebut nama game yang sedang dilacak diabaikan.
 
@@ -104,15 +104,15 @@ judul yang tidak menyebut nama game yang sedang dilacak diabaikan.
 
 Kalau game-mu menulis bentuk yang tidak tercakup di atas, buka **Pengaturan →
 Umum → Membaca bab dari judul jendela**, ubah **Sumber** ke **Pola khusus**,
-lalu isi polanya. Sintaksnya Rust [`regex`](https://docs.rs/regex) 1.x — waktu
+lalu isi polanya. Sintaksnya Rust [`regex`](https://docs.rs/regex) 1.x: waktu
 linear, tanpa look-around, tanpa backreference, maksimal 512 byte (sekitar 170
-karakter Jepang) — dan dijalankan pada seluruh judul apa adanya, termasuk nama
+karakter Jepang), dan dijalankan pada seluruh judul apa adanya, termasuk nama
 game.
 
 - **Dua grup:** yang pertama rute, yang kedua bab.
 - **Satu grup:** itu babnya.
 
-Minimal harus ada satu grup — pola tanpa grup ditolak saat disimpan. Grup yang
+Minimal harus ada satu grup; pola tanpa grup ditolak saat disimpan. Grup yang
 tidak ikut dalam kecocokan dilewati, jadi grup rute opsional menyisakan babnya
 saja.
 
@@ -131,21 +131,21 @@ Yang perlu diketahui sebelum menyimpan:
 
 - Pola tidak di-anchor: pola itu cocok di mana pun dalam judul kecuali kamu
   menulis `^` dan `$` sendiri.
-- Kecocokan yang grupnya menangkap string kosong dianggap tidak cocok — nama bab
+- Kecocokan yang grupnya menangkap string kosong dianggap tidak cocok, nama bab
   kosong lebih buruk daripada tidak ada bab.
 - Pola khusus **tidak** melipat karakter full-width: `Day` tidak pernah cocok
   dengan `Ｄａｙ`, karena keduanya karakter berbeda. Untuk caption yang ditulis
   begitu, tulis karakter tersebut di polanya, atau biarkan sumbernya di
   **Siglus** yang melipatnya.
 - **Uji** menjalankan pola pada judul contoh, yang sudah terisi dari jendela
-  yang ada di depan saat panel dibuka — ubah isinya untuk mencoba judul lain.
+  yang ada di depan saat panel dibuka; ubah isinya untuk mencoba judul lain.
   Uji dulu sebelum menyimpan: pola yang tidak pernah cocok terlihat persis
   seperti game yang tidak menulis bab, dan tidak ada bagian lain di app yang
   bisa membedakannya.
 
 **Mati** berhenti membaca judul sama sekali. Pilihannya disimpan lokal di
-perangkat ini. Android tidak pernah membaca judul jendela — OS tidak
-mengizinkannya — jadi bab di sana diisi manual.
+perangkat ini. Android tidak pernah membaca judul jendela (OS tidak
+mengizinkannya), jadi bab di sana diisi manual.
 
 ## Obrolan pendamping
 
@@ -154,8 +154,8 @@ dan menyebut sumbernya:
 
 - **Teks langsung.** Teks yang diekstrak LunaTranslator dari gim yang sedang
   kamu mainkan.
-- **Skrip hasil impor.** Masukkan skrip yang kamu ekstrak sendiri — teks biasa,
-  array JSON nama/pesan, atau format JSON Asyik — lalu aplikasi merangkumnya
+- **Skrip hasil impor.** Masukkan skrip yang kamu ekstrak sendiri: teks biasa,
+  array JSON nama/pesan, atau format JSON Asyik. Aplikasi merangkumnya
   jadi digest cerita yang bisa dijadikan rujukan jawaban.
 
 Perangkuman berjalan sebagai map-reduce atas skrip yang dipecah per anggaran
@@ -188,7 +188,7 @@ terkirim tanpa enkripsi.
 
 ## Yang tidak akan dilakukan
 
-Sebagian karena batas platform, sebagian karena memang diputuskan begitu — tapi
+Sebagian karena batas platform, sebagian karena memang diputuskan begitu; tapi
 apa pun alasannya, aplikasi mengatakannya, bukan berpura-pura.
 
 - **Tidak ada deteksi bab di Android.** Sistem operasi tidak mengizinkan satu
@@ -261,8 +261,8 @@ cargo check --target aarch64-linux-android -p vn-tracker
 
 ## Membaca kodenya
 
-Mulai dari `crates/vn-core`: di situ logika domain murninya — state machine sesi,
-penggabungan sinkronisasi, pemetaan bab, perangkuman skrip — tanpa Tauri dan
+Mulai dari `crates/vn-core`: di situ logika domain murninya (state machine sesi,
+penggabungan sinkronisasi, pemetaan bab, perangkuman skrip), tanpa Tauri dan
 tanpa panggilan OS, jadi bisa dites dengan `cargo test` biasa. `src-tauri/src`
 membungkusnya jadi command, penyimpanan, dan adapter platform. `src/` adalah
 frontend React yang hanya bicara ke backend lewat `src/lib/ipc`.
@@ -278,31 +278,31 @@ _Diport_ berarti kode atau konstanta disalin dan membawa komentar asal-usul di
 sumbernya. _Inspirasi_ berarti proyeknya dibaca untuk memahami masalahnya; tidak
 ada yang disalin, dan sebuah ide tidak menimbulkan kewajiban apa pun.
 
-**[VaternID/EwE](https://github.com/VaternID/EwE) — GPL-3.0 — diport.**
+**[VaternID/EwE](https://github.com/VaternID/EwE)** (GPL-3.0, diport).
 Kartu presence Discord dimodelkan dari EwE. `crates/vn-core/src/presence.rs`
 mencatat apa yang diambil: pipeline transformasi teks per kolom (hapus, ganti,
 awalan/akhiran, rapikan, dalam urutan itu) dan kursor rotasi terpisah per kolom.
-Yang sengaja tidak diambil juga dicatat — skrip variabel Python kustom EwE, yang
+Yang sengaja tidak diambil juga dicatat: skrip variabel Python kustom EwE, yang
 menjalankan kode sembarang dari folder di sebelah executable, dan pengunggahan
 kover tanpa persetujuan tersendiri.
 
-**[dead8309/Kizzy](https://github.com/dead8309/Kizzy) — GPL-3.0 — inspirasi.**
+**[dead8309/Kizzy](https://github.com/dead8309/Kizzy)** (GPL-3.0, inspirasi).
 Rujukan untuk bicara ke Discord di Android, tempat soket IPC desktop tidak ada.
 Jalur presence Android langsung terhubung ke Discord Gateway, pendekatan yang
 ditunjukkan Kizzy. Tidak ada kode yang dipakai bersama.
 
-**[Yukin0a/KireiBox](https://github.com/Yukin0a/KireiBox) — GPL-3.0 — inspirasi.**
+**[Yukin0a/KireiBox](https://github.com/Yukin0a/KireiBox)** (GPL-3.0, inspirasi).
 Rujukan bagaimana peluncur VN Android menyikapi mesin yang terpasang terpisah.
 README-nya menarik garis antara penyerta mesin bawaan dan meluncurkan aplikasi
 yang dipasang sendiri; VN Asyik mengambil jalur kedua dan tidak membundel apa pun.
 
-**[LunaTranslator](https://github.com/HIllya51/LunaTranslator) — GPL-3.0 — terintegrasi.**
+**[LunaTranslator](https://github.com/HIllya51/LunaTranslator)** (GPL-3.0, terintegrasi).
 Tersambung lewat layanan jaringannya yang terdokumentasi: endpoint websocket
 mengalirkan teks hasil ekstraksi sebagai frame teks biasa, yang dikonsumsi
 aplikasi ini. Tidak ada kode yang disalin; integrasinya adalah klien untuk API
 yang terdokumentasi.
 
-**LunaBox — AGPL-3.0 — hanya inspirasi.**
+**LunaBox** (AGPL-3.0, hanya inspirasi).
 Dibaca sebagai karya yang mendahului untuk membayangkan fitur AI di atas pustaka
 VN, dan untuk tahu mode kegagalan apa yang penting (spoiler, kesimpulan karangan).
 Ide dan perilaku fungsional tidak bisa dihakciptakan, jadi ini tidak menimbulkan
