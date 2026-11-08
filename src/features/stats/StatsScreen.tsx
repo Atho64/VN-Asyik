@@ -4,10 +4,12 @@ import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { TastePanel } from "@/features/stats/TastePanel";
 import { TimeStats } from "@/features/stats/TimeStats";
+import { YearReview } from "@/features/stats/YearReview";
 import { Card, CardHeader } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
 import { api } from "@/lib/ipc/client";
 import { statusOrder } from "@/lib/library";
+import { currentStreak, longestStreak } from "@/lib/streak";
 import { MS_PER_DAY, MS_PER_MINUTE, dayIndex, formatDurationLong } from "@/lib/time";
 import type { StatusBreakdown } from "@/lib/ipc/types";
 
@@ -88,6 +90,18 @@ export function StatsScreen() {
     }
     const max = Math.max(1, ...cells.map((cell) => cell.ms));
     return { cells, max };
+  }, [byDay, todayIndex]);
+
+  // Streaks run over the whole recorded history, not the 53-week window: a
+  // long streak from last year is still the longest streak.
+  const streak = useMemo(() => {
+    const dayTuples = byDay.map(
+      ({ day, ms }) => [day, ms] as [number, number],
+    );
+    return {
+      current: currentStreak(dayTuples, todayIndex),
+      longest: longestStreak(dayTuples),
+    };
   }, [byDay, todayIndex]);
 
   if (!loaded) {
@@ -236,12 +250,25 @@ export function StatsScreen() {
         </div>
       </Card>
 
+      <YearReview byDay={byDay} />
+
       <Card>
         <CardHeader
           title={t("stats.heatmap")}
           aside={
-            <span className="caption" aria-hidden="true">
-              {t("stats.heatmapLegend")} · {t("stats.heatmapLegendMore")}
+            // One container, not a fragment: the header is space-between, so
+            // fragment children each claimed a flex slot and the legend floated
+            // to the middle of the card.
+            <span className="heatmap__aside">
+              {/* The legend names the color scale, which the cells already show;
+                  the streaks are figures, so they stay readable by AT. */}
+              <span className="caption" aria-hidden="true">
+                {t("stats.heatmapLegend")} · {t("stats.heatmapLegendMore")}
+              </span>
+              <span className="heatmap__streaks caption tnum">
+                <span>{t("stats.streakCurrent", { days: streak.current })}</span>
+                <span>{t("stats.streakLongest", { days: streak.longest })}</span>
+              </span>
             </span>
           }
         />

@@ -126,6 +126,79 @@ export const gameSessionsPageSchema = z.object({
 });
 export type GameSessionsPage = z.infer<typeof gameSessionsPageSchema>;
 
+/**
+ * One cross-game event on the Timeline: a reading sitting, a journal entry, an
+ * achieved ending, or a game's finish. Which fields carry a value follows
+ * `kind`; the rest arrive as null.
+ */
+export const timelineEventSchema = z.object({
+  kind: z.enum(["session", "journal", "ending", "finished"]),
+  /** Session start / entry creation / ending date / finish date, UTC ms. */
+  ts: z.number(),
+  /** Row id of the event, unique per source table. */
+  id: z.string(),
+  /** The live game the event belongs to; rows render its cover and link it. */
+  game: gameSchema,
+  countedMs: z.number().nullable(),
+  afkMs: z.number().nullable(),
+  source: sessionSourceSchema.nullable(),
+  /** Journal note (or a session's latest note preview), 240 chars + ellipsis. */
+  note: z.string().nullable(),
+  routeName: z.string().nullable(),
+  chapterName: z.string().nullable(),
+  endingName: z.string().nullable(),
+});
+export type TimelineEvent = z.infer<typeof timelineEventSchema>;
+
+export const timelinePageSchema = z.object({
+  events: timelineEventSchema.array(),
+  /** True when older events exist; the last event is the next cursor. */
+  hasMore: z.boolean(),
+});
+export type TimelinePage = z.infer<typeof timelinePageSchema>;
+
+/** One game inside a Year in Review's top list. */
+export const yearReviewGameSchema = z.object({
+  gameId: z.string(),
+  title: z.string(),
+  countedMs: z.number(),
+});
+export type YearReviewGame = z.infer<typeof yearReviewGameSchema>;
+
+/** The Rust DTO renames to camelCase, unlike the plain domain types. */
+export const yearReviewSchema = z.object({
+  year: z.number(),
+  totalMs: z.number(),
+  afkMs: z.number(),
+  sessionCount: z.number(),
+  /** Distinct local days with recorded time. */
+  activeDays: z.number(),
+  endingsReached: z.number(),
+  journalEntries: z.number(),
+  /** Games whose first-ever session falls in the year. */
+  gamesStarted: z.number(),
+  /** Games finished in the year (`finished_at`, else first achieved ending). */
+  gamesFinished: z.number(),
+  /** Mean decivote rating of games finished in the year, when any has one. */
+  avgRatingDecivotes: z.number().nullable(),
+  longestSession: z
+    .object({
+      gameId: z.string(),
+      title: z.string(),
+      countedMs: z.number(),
+    })
+    .nullable(),
+  firstGame: z
+    .object({
+      gameId: z.string(),
+      title: z.string(),
+      startedAt: z.number(),
+    })
+    .nullable(),
+  topGames: yearReviewGameSchema.array(),
+});
+export type YearReview = z.infer<typeof yearReviewSchema>;
+
 export const endingSchema = z.object({
   meta: syncMetaSchema,
   game_id: z.string(),

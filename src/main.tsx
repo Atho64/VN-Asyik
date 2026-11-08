@@ -54,6 +54,13 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: "timeline",
+        lazy: async () => {
+          const { TimelineScreen } = await import("@/features/timeline/TimelineScreen");
+          return { Component: TimelineScreen };
+        },
+      },
+      {
         path: "guide",
         lazy: async () => {
           const { GuideScreen } = await import("@/features/guide/GuideScreen");

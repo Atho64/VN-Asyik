@@ -20,6 +20,8 @@ import {
   type AndroidSessionView,
   afkConfigSchema,
   applyResultSchema,
+  timelinePageSchema,
+  yearReviewSchema,
   chapterSchema,
   chapterCapabilityViewSchema,
   routeViewSchema,
@@ -130,6 +132,8 @@ import {
   type PlaySession,
   type Prefs,
   type StatusBreakdown,
+  type TimelinePage,
+  type YearReview,
   presenceActivitySchema,
   presenceSettingsSchema,
   presenceStatusSchema,
@@ -234,6 +238,10 @@ export interface Api {
   listSessions(gameId: string): Promise<PlaySession[]>;
   /** A bounded session page plus exact totals over all sessions. */
   listGameSessions(gameId: string, before?: { startedAt: number; id: string }): Promise<GameSessionsPage>;
+  /** A bounded page of cross-game Timeline events, newest first. */
+  timelinePage(before?: { ts: number; id: string }): Promise<TimelinePage>;
+  /** Yearly aggregates for the review card on the Stats page. */
+  yearReview(year: number): Promise<YearReview>;
   listEndings(gameId: string): Promise<Ending[]>;
   gameRoutes(gameId: string): Promise<RouteView[]>;
   createRoute(gameId: string, name: string): Promise<string>;
@@ -504,6 +512,9 @@ export const api: Api = {
   listSessions: (gameId) => call("list_sessions", playSessionSchema.array(), { gameId }),
   listGameSessions: (gameId, before) =>
     call("list_game_sessions", gameSessionsPageSchema, { gameId, before: before ?? null }),
+  timelinePage: (before) =>
+    call("timeline_page", timelinePageSchema, { before: before ?? null }),
+  yearReview: (year) => call("year_review", yearReviewSchema, { year }),
   listEndings: (gameId) => call("list_endings", endingSchema.array(), { gameId }),
   gameRoutes: (gameId) => call("game_routes", routeViewSchema.array(), { gameId }),
   createRoute: (gameId, name) => call("create_route", z.string(), { gameId, name }),

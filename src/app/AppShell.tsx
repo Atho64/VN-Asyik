@@ -22,6 +22,7 @@ interface NavEntry {
     | "nav.library"
     | "nav.tracking"
     | "nav.stats"
+    | "nav.timeline"
     | "nav.recommend"
     | "vnchat.title"
     | "companion.title"
@@ -33,14 +34,15 @@ interface NavEntry {
 }
 
 /**
- * Top-level navigation: Library, Tracking, Stats, Recommend, Chat, Presence,
- * Guide, and Settings. VNDB Sync and Device Data Transfer live inside Settings
- * to keep the main navigation uncluttered.
+ * Top-level navigation: Library, Tracking, Stats, Timeline, Recommend, Chat,
+ * Presence, Guide, and Settings. VNDB Sync and Device Data Transfer live inside
+ * Settings to keep the main navigation uncluttered.
  */
 const navEntries: NavEntry[] = [
   { to: "/", labelKey: "nav.library", icon: "library" },
   { to: "/tracking", labelKey: "nav.tracking", icon: "play" },
   { to: "/stats", labelKey: "nav.stats", icon: "stats" },
+  { to: "/timeline", labelKey: "nav.timeline", icon: "clock" },
   { to: "/recommend", beta: true, labelKey: "nav.recommend", icon: "spark" },
   { to: "/chat", beta: true, labelKey: "vnchat.title", icon: "chat" },
   { to: "/companion", beta: true, labelKey: "companion.title", icon: "shelf" },

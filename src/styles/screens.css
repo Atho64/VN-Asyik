@@ -1575,6 +1575,81 @@
   outline-offset: 1px;
 }
 
+/* Year in review: the chip list mirrors the period tabs' pill so the two
+ * selectors on this page read as one system. */
+.review__years {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  flex-wrap: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.review__years::-webkit-scrollbar {
+  display: none;
+}
+
+.review__year {
+  min-height: 32px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+@media (max-width: 599px) {
+  .review__year {
+    min-height: var(--touch-target);
+  }
+}
+
+.review__year[data-active="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 500;
+}
+
+.review__year:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.review__figures {
+  margin-top: var(--space-3);
+}
+
+.review__first {
+  margin: var(--space-3) 0 0;
+}
+
+/* Legend and streaks travel as one aside on the header's right edge. */
+.heatmap__aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Streak chips beside the heatmap legend. Real information, so unlike the
+ * decorative legend they stay visible to assistive tech. */
+.heatmap__streaks {
+  display: flex;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
 /* Bars grow from the baseline: the container is the full height and each bar
  * takes a percentage of it. */
 .time__chart {

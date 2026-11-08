@@ -83,6 +83,14 @@ export function CommandPalette() {
         },
       },
       {
+        id: "nav-timeline",
+        label: t("nav.timeline"),
+        run: () => {
+          void navigate("/timeline");
+          close();
+        },
+      },
+      {
         id: "nav-settings",
         label: t("palette.goSettings"),
         run: () => {

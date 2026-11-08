@@ -1,0 +1,137 @@
+/* Timeline: the cross-game reading journey. Its own block on purpose (AGENTS
+   §11): the library's `.row` is a different feature's layout, and borrowing it
+   is how the route-merge button ended up clipped inside a 44px art cell. */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.timeline__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.timeline__day-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--text-s);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The rule that runs out from the day label: it groups the day visually
+   without a full-width bar of solid color. */
+.timeline__day-head::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.timeline__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline__row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-m);
+  border: 1px solid transparent;
+  text-decoration: none;
+  color: inherit;
+  min-height: var(--touch-target);
+}
+
+.timeline__row:hover {
+  background: var(--surface-1);
+  border-color: var(--border);
+}
+
+.timeline__thumb {
+  width: 44px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+}
+
+.timeline__concealed {
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+
+.timeline__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.timeline__title {
+  display: block;
+  font-size: var(--text-s);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline__event {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.timeline__position {
+  display: block;
+}
+
+/* A session's latest journal note. Same truncation intent as the position
+   line, but italic to read as quoted prose rather than metadata. */
+.timeline__note {
+  font-size: var(--text-xs);
+  font-style: italic;
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.timeline__reveal {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.timeline__aside {
+  white-space: nowrap;
+}
+
+.timeline__pages {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) 0;
+}
