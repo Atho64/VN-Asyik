@@ -12,6 +12,8 @@ use vn_core::model::{Chapter, Ending, Game, GameStatus, PlaySession, Route, Sess
 use crate::db::models::{ChapterRow, EndingRow, GameRow, PrefsSnapshot, RouteRow, SessionRow};
 use crate::db::pool::DbError;
 
+pub mod journey;
+
 fn corrupt(err: &vn_core::model::ModelError) -> DbError {
     DbError::Corrupt(err.to_string())
 }

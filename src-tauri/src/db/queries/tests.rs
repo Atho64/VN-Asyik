@@ -9,6 +9,7 @@ use vn_core::model::{
 
 use super::*;
 use crate::db::Db;
+use crate::db::reading;
 
 async fn fixture() -> (Db, DeviceId) {
     let db = Db::open_memory().await.expect("open in-memory db");
@@ -880,4 +881,361 @@ async fn a_vndb_refresh_does_not_replace_a_user_chosen_cover() {
         reloaded.custom_cover_path.as_deref(),
         Some("covers/custom/mine.jpg")
     );
+}
+
+// Timeline (journey)
+
+fn journal_entry(
+    device: &DeviceId,
+    game: EntityId,
+    created_ms: i64,
+    note: &str,
+    route: &str,
+    chapter: &str,
+) -> vn_core::reading::ReadingEntry {
+    vn_core::reading::ReadingEntry {
+        meta: vn_core::model::SyncMeta::new(device, Timestamp::from_millis(created_ms)),
+        game_id: game,
+        session_id: None,
+        created_at: Timestamp::from_millis(created_ms),
+        played_at: None,
+        note: note.to_owned(),
+        save_slot: String::new(),
+        route_name: route.to_owned(),
+        chapter_name: chapter.to_owned(),
+    }
+}
+
+#[tokio::test]
+async fn timeline_orders_mixed_events_newest_first() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Ordered", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+
+    let session = PlaySession::new(
+        &device,
+        now(),
+        game.meta.id,
+        Timestamp::from_millis(1_000),
+        Timestamp::from_millis(2_000),
+        1_000,
+        SessionSource::Desktop,
+    )
+    .unwrap();
+    insert_session(db.pool(), &session).await.expect("session");
+
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, game.meta.id, 3_000, "note", "Mio", "Chapter 1"),
+    )
+    .await
+    .expect("entry");
+
+    let mut ending = Ending::new(&device, now(), game.meta.id, "True End").unwrap();
+    ending.achieved = true;
+    ending.achieved_at = Some(Timestamp::from_millis(5_000));
+    upsert_ending(db.pool(), &ending).await.expect("ending");
+
+    let mut finished = game.clone();
+    finished.finished_at = Some(Timestamp::from_millis(9_000));
+    finished.meta = finished.meta.touch(now());
+    upsert_game(db.pool(), &finished).await.expect("update");
+
+    let page = journey::timeline_page(db.pool(), None).await.expect("page");
+    let kinds: Vec<&str> = page.events.iter().map(|e| e.kind.as_str()).collect();
+    assert_eq!(kinds, vec!["finished", "ending", "journal", "session"]);
+    assert_eq!(page.events[0].ts, 9_000);
+    assert_eq!(page.events[0].game.title, "Ordered");
+    let ending_event = &page.events[1];
+    assert_eq!(ending_event.ending_name.as_deref(), Some("True End"));
+    assert_eq!(ending_event.route_name.as_deref(), None);
+    let journal_event = &page.events[2];
+    assert_eq!(journal_event.note.as_deref(), Some("note"));
+    assert_eq!(journal_event.route_name.as_deref(), Some("Mio"));
+    let session_event = &page.events[3];
+    assert_eq!(session_event.counted_ms, Some(1_000));
+    assert_eq!(session_event.source, Some(SessionSource::Desktop));
+    assert!(!page.has_more);
+
+    // The tie-break and ordering are a property of the query, not of luck:
+    // two reads must agree.
+    let again = journey::timeline_page(db.pool(), None)
+        .await
+        .expect("again");
+    assert_eq!(again.events, page.events);
+}
+
+#[tokio::test]
+async fn timeline_keyset_pages_walk_backwards_without_skipping() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Paged", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+
+    // 51 sessions one second apart: exactly one more event than a page holds.
+    let base = 1_700_000_000_000_i64;
+    for i in 0..51_i64 {
+        let session = PlaySession::new(
+            &device,
+            now(),
+            game.meta.id,
+            Timestamp::from_millis(base + i * 1_000),
+            Timestamp::from_millis(base + i * 1_000 + 500),
+            500,
+            SessionSource::Desktop,
+        )
+        .unwrap();
+        insert_session(db.pool(), &session).await.expect("session");
+    }
+
+    let first = journey::timeline_page(db.pool(), None)
+        .await
+        .expect("page 1");
+    assert_eq!(first.events.len(), 50);
+    assert!(first.has_more);
+
+    // The cursor is the last row's (ts, id); the next page continues from it.
+    let last = first.events.last().expect("nonempty");
+    let cursor = crate::commands::journey::TimelineCursor {
+        ts: last.ts,
+        id: EntityId::parse(&last.id).expect("event id"),
+    };
+    let second = journey::timeline_page(db.pool(), Some(cursor))
+        .await
+        .expect("page 2");
+    assert_eq!(second.events.len(), 1);
+    assert!(!second.has_more);
+    assert_eq!(
+        second.events[0].ts, base,
+        "the oldest event is exactly one step past page 1's last"
+    );
+}
+
+#[tokio::test]
+async fn timeline_hides_a_deleted_games_history() {
+    let (db, device) = fixture().await;
+    let mut game = Game::new(&device, now(), "Ghosted", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+    let session = PlaySession::new(
+        &device,
+        now(),
+        game.meta.id,
+        Timestamp::from_millis(1_000),
+        Timestamp::from_millis(2_000),
+        1_000,
+        SessionSource::Desktop,
+    )
+    .unwrap();
+    insert_session(db.pool(), &session).await.expect("session");
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, game.meta.id, 3_000, "gone soon", "", ""),
+    )
+    .await
+    .expect("entry");
+    let mut ending = Ending::new(&device, now(), game.meta.id, "End").unwrap();
+    ending.achieved = true;
+    ending.achieved_at = Some(Timestamp::from_millis(5_000));
+    upsert_ending(db.pool(), &ending).await.expect("ending");
+
+    // Soft delete: the tombstone hides the game and every event joins it.
+    game.meta.deleted = true;
+    game.meta = game.meta.touch(now());
+    upsert_game(db.pool(), &game).await.expect("delete");
+
+    let page = journey::timeline_page(db.pool(), None).await.expect("page");
+    assert!(
+        page.events.is_empty(),
+        "a deleted game's history must not surface: {page:?}"
+    );
+
+    // An orphan inserted the way one really appears: `PRAGMA foreign_keys` is
+    // per connection, so the insert needs its own connection. Both timeline
+    // queries must still decline it — a sum over unjoined children once
+    // reported 8.8 hours of playtime from games that did not exist.
+    let mut conn = db.pool().acquire().await.expect("connection");
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *conn)
+        .await
+        .expect("pragma");
+    sqlx::query(
+        "INSERT INTO play_sessions (id, game_id, chapter_id, started_at, ended_at, \
+         counted_ms, afk_ms, source, updated_at, device_id, deleted) \
+         VALUES (?, ?, NULL, ?, ?, ?, 0, 'desktop', ?, ?, 0)",
+    )
+    .bind(uuid::Uuid::now_v7().to_string())
+    .bind(uuid::Uuid::now_v7().to_string())
+    .bind(9_000_i64)
+    .bind(10_000_i64)
+    .bind(1_000_i64)
+    .bind(now().as_millis())
+    .bind(device.to_string())
+    .execute(&mut *conn)
+    .await
+    .expect("orphan insert");
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&mut *conn)
+        .await
+        .expect("pragma");
+    drop(conn);
+
+    let page = journey::timeline_page(db.pool(), None).await.expect("page");
+    assert!(
+        page.events.is_empty(),
+        "an orphaned session is not a journey event: {page:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_finished_falls_back_to_the_first_achieved_ending() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Manually finished", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+
+    // A zero-time sitting is a game-page detail, not a journey event.
+    let empty = PlaySession::new(
+        &device,
+        now(),
+        game.meta.id,
+        Timestamp::from_millis(1_000),
+        Timestamp::from_millis(1_000),
+        0,
+        SessionSource::Desktop,
+    )
+    .unwrap();
+    insert_session(db.pool(), &empty).await.expect("session");
+
+    let mut ignored = Ending::new(&device, now(), game.meta.id, "Not reached").unwrap();
+    ignored.achieved = false;
+    upsert_ending(db.pool(), &ignored).await.expect("ending");
+    let mut reached = Ending::new(&device, now(), game.meta.id, "First End").unwrap();
+    reached.achieved = true;
+    reached.achieved_at = Some(Timestamp::from_millis(7_000));
+    upsert_ending(db.pool(), &reached).await.expect("ending");
+
+    // `finished_at` stays unset: it is written only by VNDB sync, so a
+    // manually completed game would otherwise never reach the timeline. The
+    // fallback dates the finish by the first achieved ending, so the day
+    // legitimately carries both events: the ending reached, and the game it
+    // completed.
+    let page = journey::timeline_page(db.pool(), None).await.expect("page");
+    let kinds: Vec<&str> = page.events.iter().map(|e| e.kind.as_str()).collect();
+    assert_eq!(kinds, vec!["ending", "finished"], "{page:?}");
+    assert_eq!(page.events[0].ts, 7_000);
+    assert_eq!(page.events[1].ts, 7_000);
+    assert_eq!(page.events[1].game.meta.id, game.meta.id);
+}
+
+#[tokio::test]
+async fn year_review_aggregates_one_local_year() {
+    let (db, device) = fixture().await;
+    let mut autumn = Game::new(&device, now(), "Autumn VN", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &autumn).await.expect("insert");
+
+    // 2023-11-14 06:00Z and 06:30Z: one local calendar day and one local year
+    // from every real timezone, which keeps the assertion deterministic
+    // without pinning the test machine's timezone (same trick as
+    // `playtime_buckets_one_local_day_together_and_reports_day_indexes`).
+    let mut first = PlaySession::new(
+        &device,
+        now(),
+        autumn.meta.id,
+        Timestamp::from_millis(1_699_941_600_000),
+        Timestamp::from_millis(1_699_941_600_000 + 40_000),
+        40_000,
+        SessionSource::Desktop,
+    )
+    .unwrap();
+    first.afk_ms = 1_000;
+    insert_session(db.pool(), &first).await.expect("session");
+    let second = PlaySession::new(
+        &device,
+        now(),
+        autumn.meta.id,
+        Timestamp::from_millis(1_699_943_400_000),
+        Timestamp::from_millis(1_699_943_400_000 + 20_000),
+        20_000,
+        SessionSource::Desktop,
+    )
+    .unwrap();
+    insert_session(db.pool(), &second).await.expect("session");
+
+    reading::upsert(
+        db.pool(),
+        &journal_entry(
+            &device,
+            autumn.meta.id,
+            1_699_950_000_000,
+            "At the gate",
+            "Shiroha",
+            "",
+        ),
+    )
+    .await
+    .expect("entry");
+
+    let mut ending = Ending::new(&device, now(), autumn.meta.id, "True End").unwrap();
+    ending.achieved = true;
+    ending.achieved_at = Some(Timestamp::from_millis(1_700_049_600_000));
+    upsert_ending(db.pool(), &ending).await.expect("ending");
+
+    autumn.set_rating(Some(85)).unwrap();
+    autumn.finished_at = Some(Timestamp::from_millis(1_700_049_600_000));
+    autumn.meta = autumn.meta.touch(now());
+    upsert_game(db.pool(), &autumn).await.expect("update");
+
+    let summer = Game::new(&device, now(), "Summer VN", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &summer).await.expect("insert");
+    let midyear = PlaySession::new(
+        &device,
+        now(),
+        summer.meta.id,
+        Timestamp::from_millis(1_717_456_000_000), // 2024-06-04T00:00Z: June in every timezone
+        Timestamp::from_millis(1_717_456_000_000 + 5_000),
+        5_000,
+        SessionSource::Desktop,
+    )
+    .unwrap();
+    insert_session(db.pool(), &midyear).await.expect("session");
+
+    let review = journey::year_review(db.pool(), 2023).await.expect("review");
+    assert_eq!(review.year, 2023);
+    assert_eq!(review.total_ms, 60_000);
+    assert_eq!(review.afk_ms, 1_000);
+    assert_eq!(review.session_count, 2);
+    assert_eq!(review.active_days, 1);
+    assert_eq!(review.endings_reached, 1);
+    assert_eq!(review.journal_entries, 1);
+    assert_eq!(
+        review.games_started, 1,
+        "only Autumn VN's first session is 2023"
+    );
+    assert_eq!(review.games_finished, 1);
+    assert_eq!(review.avg_rating_decivotes, Some(85));
+    let longest = review.longest_session.expect("longest");
+    assert_eq!(longest.counted_ms, 40_000);
+    assert_eq!(longest.game_id, autumn.meta.id);
+    let begun = review.first_game.expect("first game");
+    assert_eq!(begun.game_id, autumn.meta.id);
+    assert_eq!(begun.started_at, 1_699_941_600_000);
+    assert_eq!(review.top_games.len(), 1);
+    assert_eq!(review.top_games[0].game_id, autumn.meta.id);
+    assert_eq!(review.top_games[0].counted_ms, 60_000);
+
+    let review_2024 = journey::year_review(db.pool(), 2024).await.expect("review");
+    assert_eq!(review_2024.total_ms, 5_000);
+    assert_eq!(review_2024.session_count, 1);
+    assert_eq!(review_2024.games_started, 1, "Summer VN starts in 2024");
+    assert_eq!(review_2024.games_finished, 0);
+    assert_eq!(review_2024.avg_rating_decivotes, None);
+    assert_eq!(review_2024.top_games[0].game_id, summer.meta.id);
+
+    let quiet = journey::year_review(db.pool(), 2025).await.expect("review");
+    assert_eq!(quiet.total_ms, 0);
+    assert_eq!(quiet.session_count, 0);
+    assert_eq!(quiet.active_days, 0);
+    assert_eq!(quiet.games_started, 0);
+    assert_eq!(quiet.games_finished, 0);
+    assert!(quiet.longest_session.is_none());
+    assert!(quiet.first_game.is_none());
+    assert!(quiet.top_games.is_empty());
 }

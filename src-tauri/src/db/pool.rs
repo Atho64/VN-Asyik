@@ -663,6 +663,35 @@ mod migration_0025_tests {
 }
 
 #[cfg(test)]
+mod migration_0034_tests {
+    use super::Db;
+
+    /// The Timeline's cross-game keyset walk lives or dies by these two partial
+    /// indexes: without them every page sorts the whole history. Both must exist
+    /// after a fresh migrate, and re-running the migration file must be a no-op
+    /// (`IF NOT EXISTS`) so replaying a backup never errors.
+    #[tokio::test]
+    async fn timeline_indexes_exist_and_migrate_twice() {
+        let db = Db::open_memory().await.expect("open in-memory db");
+        let (count,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master \
+             WHERE type = 'index' \
+               AND name IN ('idx_sessions_started', 'idx_entries_created')",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("count indexes");
+        assert_eq!(count, 2, "both timeline indexes exist");
+
+        let sql = include_str!("migrations/0034_timeline_indexes.sql");
+        sqlx::query(sqlx::AssertSqlSafe(sql))
+            .execute(db.pool())
+            .await
+            .expect("re-running the migration is idempotent");
+    }
+}
+
+#[cfg(test)]
 mod migration_0026_tests {
     use super::migration_0025_tests::run_migration_file;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};

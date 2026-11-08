@@ -58,6 +58,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::library::list_chapters,
         commands::library::list_sessions,
         commands::library::list_game_sessions,
+        commands::journey::timeline_page,
+        commands::journey::year_review,
         commands::reading::reading_context,
         commands::reading::reading_session_context,
         commands::reading::reading_save,

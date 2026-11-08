@@ -7,6 +7,7 @@ pub mod chat;
 pub mod companion;
 pub mod data;
 pub mod hook;
+pub mod journey;
 pub mod launch;
 pub mod library;
 pub mod luna;
