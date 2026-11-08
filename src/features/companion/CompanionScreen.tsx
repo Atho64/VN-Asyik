@@ -253,7 +253,7 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
               aria-label={t("companion.options")}
               title={t("companion.options")}
               aria-haspopup="dialog"
-              aria-expanded={optionsOpen}
+              aria-expanded={optionsOpen && !memoryRequested}
               onClick={() => setOptionsOpen(true)}
             >
               <Icon name="settings" />
@@ -372,7 +372,6 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
                   {messages.slice(-visible).map((message) => (
                     <div className="companion-memory__message" key={message.id}>
                       <ChatMessageView
-                        key={message.id}
                         message={message}
                         compactTools
                         onOpenGame={

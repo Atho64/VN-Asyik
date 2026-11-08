@@ -193,7 +193,7 @@ still using its previous personality. Saving or deleting a profile alone leaves
 session copies intact. Profiles and companion history are excluded from library
 exports and sync.
 
-**Session options → Review memories** adds local durable memory (20C). Use
+**Session options → Review memories** adds local durable memory. Use
 **Remember this** for a preference or a reviewed passage, then choose its scope:
 all companions, this identity, or this game and playthrough. **Use saved memories**
 is a separate opt-in, off by default. Review, search, edit and pin saved items.
@@ -210,7 +210,7 @@ to a provider. New sessions never inherit another playthrough's story memories.
 Memory is excluded from sync, backups and exports. Deleting a session removes
 its derived memories; independently authored preferences remain.
 
-**Vision** adds selected-window scenes on Windows (20D). Choose one game window,
+**Vision** adds selected-window scenes on Windows. Choose one game window,
 inspect the local preview and optional crop, then explicitly **Test image support**
 for your selected provider. Send one image with a question, or enable **Watch and
 react** for occasional text reactions while that game is foreground. Image calls
@@ -221,8 +221,8 @@ clear capture. Watching never restarts at app launch. Images stay in memory only
 history retains text labelled as visual inference and minimal source metadata.
 Windows SDR capture is supported; HDR and other platforms report unavailable.
 
-This includes text sessions (20A), friend identities (20B), durable memory (20C),
-and vision with occasional reactions (20D). Voice remains planned. Android does
+This includes text sessions, friend identities, durable memory, and vision
+with occasional reactions. Voice remains planned. Android does
 not guarantee background operation; keep the app open there.
 
 The chat is not a general assistant bolted onto a library. It can read two

@@ -153,3 +153,17 @@ fn navigation_does_not_own_the_turn_but_pause_end_and_rebind_revoke_it() {
     assert!(!machine.accepts(third));
     assert_eq!(machine.lifecycle, Lifecycle::Active);
 }
+
+#[test]
+fn every_preset_snapshot_resolves_by_its_position_in_all() {
+    // The reserved UUIDs and display names are position-derived, so the
+    // `expect` in `snapshot()` must hold for every variant, not just the ones
+    // a session happens to use.
+    for (index, preset) in profile::Preset::ALL.iter().enumerate() {
+        let snapshot = preset.snapshot();
+        let expected_id = format!("20b00000-0000-4000-8000-{:012}", index + 1);
+        assert_eq!(snapshot.id, expected_id);
+        assert!(!snapshot.settings.name.is_empty());
+        assert_eq!(snapshot.settings.preset, *preset);
+    }
+}

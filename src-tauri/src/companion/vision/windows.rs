@@ -31,7 +31,7 @@ use windows::{
                 },
                 CreateDXGIFactory1, IDXGIDevice, IDXGIFactory1, IDXGIOutput6,
             },
-            Gdi::{MONITOR_DEFAULTTONULL, MonitorFromWindow},
+            Gdi::{HMONITOR, MONITOR_DEFAULTTONULL, MonitorFromWindow},
         },
         System::{
             Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
@@ -191,6 +191,7 @@ pub struct Capture {
     size: SizeInt32,
     target: Target,
     last_time: i64,
+    sdr_monitor: HMONITOR,
     // Last field: COM objects release before the apartment is uninitialized.
     _apartment: Apartment,
 }
@@ -203,10 +204,29 @@ pub struct Pixels {
 
 impl Capture {
     pub fn start(target: Target) -> Result<Self> {
-        target.validate()?;
+        Self::confirm_binding(&target)?;
         unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.map_err(|_| "vision_unavailable")?;
         let apartment = Apartment;
         Self::create(target, apartment).map_err(|_| "vision_unavailable")
+    }
+    /// The reader approved the title listed at bind time, so the window must
+    /// still show it when the capture is created: pid and process creation
+    /// time cannot tell a recycled window from the listed one. Per-tick
+    /// validation deliberately skips the title, because engines like Siglus
+    /// rewrite their caption live during reading.
+    fn confirm_binding(target: &Target) -> Result<()> {
+        #[cfg(test)]
+        if target.synthetic {
+            return Ok(());
+        }
+        let actual = Target::inspect(target.handle)?;
+        if actual.pid != target.pid
+            || actual.created != target.created
+            || actual.title != target.title
+        {
+            return Err("vision_window_changed");
+        }
+        Ok(())
     }
     fn create(target: Target, apartment: Apartment) -> windows::core::Result<Self> {
         if !GraphicsCaptureSession::IsSupported()? {
@@ -267,6 +287,7 @@ impl Capture {
             size,
             target,
             last_time: -1,
+            sdr_monitor: HMONITOR::default(),
             _apartment: apartment,
         })
     }
@@ -279,7 +300,16 @@ impl Capture {
         if self.closed.load(Ordering::Acquire) {
             return Err("vision_window_changed");
         }
-        check_sdr(HWND(self.target.handle as *mut _)).map_err(|_| "vision_hdr_unavailable")?;
+        // The SDR verdict only changes when the window moves to another
+        // monitor, so re-run the cheap monitor lookup per frame and the
+        // expensive adapter enumeration only when that lookup answers
+        // differently.
+        let monitor =
+            unsafe { MonitorFromWindow(HWND(self.target.handle as *mut _), MONITOR_DEFAULTTONULL) };
+        if monitor != self.sdr_monitor {
+            check_sdr(HWND(self.target.handle as *mut _)).map_err(|_| "vision_hdr_unavailable")?;
+            self.sdr_monitor = monitor;
+        }
         let mut newest = None;
         for _ in 0..2 {
             if let Ok(frame) = self.pool.TryGetNextFrame()

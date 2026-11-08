@@ -43,11 +43,22 @@ mod windows {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(super) struct Identity {
     config: ChatConfig,
     profile: Option<String>,
     credential: Vec<u8>,
+}
+impl std::fmt::Debug for Identity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The credential is a key digest; Debug output must never carry it,
+        // same redaction rule as the neighbouring transient types.
+        f.debug_struct("Identity")
+            .field("config", &self.config)
+            .field("profile", &self.profile)
+            .field("credential", &"[redacted]")
+            .finish()
+    }
 }
 impl Identity {
     fn of(provider: &crate::ai::profiles::Resolved) -> Self {

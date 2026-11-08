@@ -19,6 +19,7 @@ pub async fn chat_create(
     state: State<'_, AppState>,
     options: ChatOptions,
 ) -> CommandResult<ChatThread> {
+    super::prefs::require_beta(&state).await?;
     store::create(state.db().pool(), options)
         .await
         .map_err(error)
@@ -41,6 +42,7 @@ pub async fn chat_update(
     title: String,
     options: ChatOptions,
 ) -> CommandResult<ChatThread> {
+    super::prefs::require_beta(&state).await?;
     crate::companion::store::require_regular_chat(state.db().pool(), &id)
         .await
         .map_err(error)?;
@@ -74,6 +76,7 @@ pub async fn chat_update(
 }
 #[tauri::command]
 pub async fn chat_delete(state: State<'_, AppState>, id: String) -> CommandResult<()> {
+    super::prefs::require_beta(&state).await?;
     crate::companion::store::require_regular_chat(state.db().pool(), &id)
         .await
         .map_err(error)?;
@@ -115,6 +118,7 @@ pub async fn chat_send(
 }
 #[tauri::command]
 pub async fn chat_cancel(state: State<'_, AppState>, id: String) -> CommandResult<()> {
+    super::prefs::require_beta(&state).await?;
     crate::companion::store::require_regular_chat(state.db().pool(), &id)
         .await
         .map_err(error)?;

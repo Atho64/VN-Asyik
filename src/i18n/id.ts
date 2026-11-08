@@ -1140,6 +1140,15 @@ export const id: Messages = {
     "Ringkasan skrip disimpan bertahap, jadi menutup aplikasi tidak menghapus progres.",
   "guide.chat.p4":
     "Lebih dari satu penyedia bisa disimpan dan dipilih dari Pengaturan; tiap kuncinya tinggal di credential store perangkat.",
+  "guide.companion.title": "Pendamping baca",
+  "guide.companion.body":
+    "Pendamping baca yang mengikuti satu gim dan playthrough: mengobrol dengan teks langsung atau hasil impor, menyimpan memori lokal yang bisa kamu tinjau, dan di Windows bisa melihat satu jendela pilihanmu.",
+  "guide.companion.p1":
+    "Semuanya berada di balik fitur Beta di Pengaturan, mati secara bawaan; mematikannya menjeda sesi dan menyimpan riwayatmu.",
+  "guide.companion.p2":
+    "Memori dan rekap hanya lokal dan tidak pernah masuk sinkronisasi, cadangan, atau ekspor; Forget juga memblokir retensi dari diputar ulang.",
+  "guide.companion.p3":
+    "Vision hanya di Windows, satu jendela pilihan pembaca dengan border capture yang terlihat, dan tidak ada yang tersimpan.",
   "guide.settings.title": "Pengaturan",
   "guide.settings.body":
     "Tema, bahasa, sensor gambar, deteksi diam, dan pembacaan chapter dari judul jendela.",

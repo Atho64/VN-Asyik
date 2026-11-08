@@ -277,7 +277,12 @@ export function CompanionVision({
             {current && (
               <>
                 <figure className="companion-vision__preview">
-                  <img src={current.dataUrl} alt={t("vision.previewAlt")} />
+                  <img
+                    src={current.dataUrl}
+                    alt={t("vision.previewAlt")}
+                    width={current.width}
+                    height={current.height}
+                  />
                   <figcaption>
                     {t("vision.previewSize", {
                       width: current.width,

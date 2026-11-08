@@ -43,7 +43,7 @@ const navEntries: NavEntry[] = [
   { to: "/stats", labelKey: "nav.stats", icon: "stats" },
   { to: "/recommend", beta: true, labelKey: "nav.recommend", icon: "spark" },
   { to: "/chat", beta: true, labelKey: "vnchat.title", icon: "chat" },
-  { to: "/companion", beta: true, labelKey: "companion.title", icon: "spark" },
+  { to: "/companion", beta: true, labelKey: "companion.title", icon: "shelf" },
   { to: "/presence", labelKey: "nav.presence", icon: "gamepad" },
   { to: "/guide", labelKey: "nav.guide", icon: "guide" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },

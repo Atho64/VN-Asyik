@@ -1136,6 +1136,15 @@ export const en = {
     "Script digests are saved per chunk, so closing the app does not lose progress.",
   "guide.chat.p4":
     "More than one provider can be saved and picked from Settings; each key stays in the device credential store.",
+  "guide.companion.title": "Reading companion",
+  "guide.companion.body":
+    "A reading companion that follows one game and playthrough: it chats with live or imported text, keeps a local memory you can review, and on Windows can look at one window you choose.",
+  "guide.companion.p1":
+    "Everything is behind Beta features in Settings, off by default; turning it off pauses the session and keeps your history.",
+  "guide.companion.p2":
+    "Memory and recaps are local-only and never enter sync, backups or exports; Forget also blocks what was retained from replay.",
+  "guide.companion.p3":
+    "Vision is Windows-only, one reader-selected window with a visible capture border, and nothing captured is ever stored.",
   "guide.settings.title": "Settings",
   "guide.settings.body":
     "Theme, language, artwork concealment, idle detection, and reading chapters from window titles.",

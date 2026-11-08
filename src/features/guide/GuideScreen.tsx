@@ -16,7 +16,8 @@ import trackingShot from "@/assets/guide/tracking.jpg";
  * The pictures are real captures of the running app, not mockups: a guide that
  * shows a screen the user cannot find is worse than no guide. Each section states
  * what the feature does and the three things about it that are easy to get wrong,
- * because those are the questions the app itself cannot answer.
+ * because those are the questions the app itself cannot answer. The companion
+ * section ships text-only until a real capture of that screen replaces it.
  */
 const sections = [
   { key: "library", shot: libraryShot },
@@ -26,6 +27,7 @@ const sections = [
   { key: "stats", shot: statsShot },
   { key: "discover", shot: discoverShot },
   { key: "chat", shot: chatShot },
+  { key: "companion", shot: undefined },
   { key: "settings", shot: settingsShot },
 ] as const;
 
@@ -41,16 +43,21 @@ export function GuideScreen() {
       </header>
 
       {sections
-        .filter(({ key }) => beta || (key !== "chat" && key !== "discover"))
+        .filter(
+          ({ key }) =>
+            beta || (key !== "chat" && key !== "discover" && key !== "companion"),
+        )
         .map(({ key, shot }) => (
           <article key={key} className="guide__section">
-            <img
-              className="guide__shot"
-              src={shot}
-              alt=""
-              loading="lazy"
-              decoding="async"
-            />
+            {shot ? (
+              <img
+                className="guide__shot"
+                src={shot}
+                alt=""
+                loading="lazy"
+                decoding="async"
+              />
+            ) : null}
             <div className="guide__body">
               <h2 className="guide__title">{t(`guide.${key}.title`)}</h2>
               <p className="guide__text">{t(`guide.${key}.body`)}</p>

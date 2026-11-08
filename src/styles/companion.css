@@ -217,9 +217,16 @@
   padding: var(--space-5);
   color: var(--text-muted);
 }
-.companion__empty h3 {
+.companion__empty h2 {
   margin-block: var(--space-3) var(--space-2);
   color: var(--text);
+}
+
+/* Offscreen transcript entries skip layout and paint; the intrinsic size
+   keeps the scrollbar stable while an entry is unseen. */
+.companion-memory__message {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
 }
 .companion__empty svg {
   color: var(--accent);

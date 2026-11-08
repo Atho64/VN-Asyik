@@ -81,7 +81,7 @@ impl Preset {
         let index = Self::ALL
             .iter()
             .position(|item| *item == self)
-            .expect("known preset");
+            .expect("every Preset variant is listed in Preset::ALL");
         let names = [
             "Companion",
             "Kawaii",

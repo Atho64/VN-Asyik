@@ -31,6 +31,7 @@ pub async fn companion_save_profile(
     expected_version: Option<i32>,
     settings: vn_core::companion::profile::ProfileSettings,
 ) -> CommandResult<vn_core::companion::profile::ProfileSnapshot> {
+    super::prefs::require_beta(&state).await?;
     crate::companion::profiles::save(state.db().pool(), id.as_deref(), expected_version, settings)
         .await
         .map_err(error)
@@ -42,6 +43,7 @@ pub async fn companion_delete_profile(
     id: String,
     version: i32,
 ) -> CommandResult<()> {
+    super::prefs::require_beta(&state).await?;
     crate::companion::profiles::delete(state.db().pool(), &id, version)
         .await
         .map_err(error)
@@ -53,6 +55,7 @@ pub async fn companion_apply_profile(
     id: String,
     profile: vn_core::companion::profile::ProfileSnapshot,
 ) -> CommandResult<Snapshot> {
+    super::prefs::require_beta(&state).await?;
     state
         .companion()
         .apply_profile(&state, &id, profile)
@@ -85,6 +88,8 @@ pub async fn companion_control(
     id: String,
     action: Action,
 ) -> CommandResult<Snapshot> {
+    // Resume needs Beta; Pause and End stay reachable while Beta is off so a
+    // disabled session can still be torn down (AGENTS section 9c).
     if matches!(action, Action::Resume) {
         super::prefs::require_beta(&state).await?;
     }
@@ -133,6 +138,7 @@ pub async fn companion_messages(
 
 #[tauri::command]
 pub async fn companion_delete(state: State<'_, AppState>, id: String) -> CommandResult<()> {
+    super::prefs::require_beta(&state).await?;
     state.companion().delete(&state, &id).await.map_err(error)
 }
 
@@ -153,6 +159,7 @@ pub async fn companion_memory_save(
     state: State<'_, AppState>,
     request: crate::companion::memory::Save,
 ) -> CommandResult<vn_core::companion::memory::Memory> {
+    super::prefs::require_beta(&state).await?;
     state
         .companion()
         .memory_save(&state, request)
@@ -166,6 +173,7 @@ pub async fn companion_memory_forget(
     target: crate::companion::memory::Forget,
     revision: i64,
 ) -> CommandResult<()> {
+    super::prefs::require_beta(&state).await?;
     state
         .companion()
         .memory_forget(&state, target, revision)
@@ -180,6 +188,7 @@ pub async fn companion_memory_settings(
     automatic: bool,
     revision: i64,
 ) -> CommandResult<()> {
+    super::prefs::require_beta(&state).await?;
     state
         .companion()
         .memory_settings(&state, retrieval, automatic, revision)
@@ -231,6 +240,7 @@ pub async fn companion_recap_review(
     pinned: bool,
     revision: i64,
 ) -> CommandResult<()> {
+    super::prefs::require_beta(&state).await?;
     state
         .companion()
         .review_recap(&state, &id, body.as_deref(), pinned, revision)
@@ -270,6 +280,9 @@ pub fn spawn_monitor(app: AppHandle) {
                 }) {
                     let _ = state.companion().suspend_beta(&state).await;
                 }
+                // Nothing below this line needs 500 ms reactivity while Beta
+                // is off; idle at a slower rate until the pref turns on.
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 continue;
             }
             let _ = state.companion().refresh(&state).await;
@@ -339,6 +352,8 @@ pub async fn companion_vision_control(
     generation: u64,
     preview: Option<String>,
 ) -> CommandResult<Snapshot> {
+    // "watch" arms capture and needs Beta; the release actions stay reachable
+    // while Beta is off so capture can be torn down (AGENTS section 9c).
     if action == "watch" {
         super::prefs::require_beta(&state).await?;
     }

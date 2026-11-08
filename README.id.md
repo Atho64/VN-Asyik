@@ -205,7 +205,7 @@ balasan yang masih memakai kepribadian sebelumnya. Menyimpan atau menghapus prof
 saja tidak mengubah salinan dalam sesi. Profil dan riwayat teman baca tidak ikut
 ekspor koleksi maupun sinkronisasi.
 
-**Opsi sesi → Tinjau ingatan** menambahkan ingatan lokal berkelanjutan (20C).
+**Opsi sesi → Tinjau ingatan** menambahkan ingatan lokal berkelanjutan.
 Gunakan **Ingat ini** untuk preferensi atau kutipan yang ditinjau, lalu pilih
 cakupannya: semua pendamping, identitas ini, atau game dan alur pembacaan ini.
 **Gunakan ingatan tersimpan** adalah pilihan terpisah yang awalnya nonaktif.
@@ -224,7 +224,7 @@ dari alur pembacaan lain. Ingatan tidak ikut sinkronisasi, cadangan, atau ekspor
 Menghapus sesi menghapus ingatan turunannya; preferensi yang ditulis mandiri
 tetap tersimpan.
 
-**Penglihatan** menambahkan adegan dari satu jendela terpilih di Windows (20D).
+**Penglihatan** menambahkan adegan dari satu jendela terpilih di Windows.
 Pilih jendela game, periksa pratinjau lokal dan potongan opsional, lalu uji dukungan
 gambar pada penyedia yang dipilih. Kirim satu gambar dengan pertanyaan, atau
 aktifkan pengamatan dan reaksi otomatis sesekali saat game berada di depan.
@@ -236,8 +236,8 @@ otomatis saat aplikasi dibuka. Gambar hanya berada di memori; riwayat menyimpan
 teks berlabel inferensi visual dan metadata sumber minimal. Tangkapan SDR Windows
 didukung; HDR dan platform lain menampilkan status tidak tersedia.
 
-Ini mencakup sesi teks (20A), identitas teman (20B), ingatan berkelanjutan (20C),
-serta penglihatan dan reaksi sesekali (20D). Suara masih direncanakan. Android tidak
+Ini mencakup sesi teks, identitas teman, ingatan berkelanjutan, serta
+penglihatan dan reaksi sesekali. Suara masih direncanakan. Android tidak
 menjamin proses tetap berjalan di latar belakang; biarkan aplikasi terbuka di sana.
 
 Obrolan ini bukan asisten umum yang ditempel ke pustaka. Ia bisa membaca dua hal

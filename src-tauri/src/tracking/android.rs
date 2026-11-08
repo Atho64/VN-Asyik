@@ -290,19 +290,10 @@ async fn apply_query_result(
         .map(RawUsageEvent::to_usage_event)
         .collect();
     events.sort_by_key(|event| event.at_ms);
-    // Only a device boundary ends the selection.
-    //
-    // Our own `Resumed` used to count as one, on the theory that returning to VN
-    // Asyik means the game is no longer in front. That is true, but it is not the
-    // end of the *session*: the user launches a game, alt-tabs to check something,
-    // and comes back to keep reading. Treating the return as an endpoint ended the
-    // session on every trip away, so the next stretch never accrued -- while the
-    // time spent in the other app was counted, because the game's interval stays
-    // open until a different package resumes.
-    //
-    // The interval replay already handles the away stretch correctly: another
-    // package resuming closes the game's interval. What was missing is stopping
-    // *time* at that point, which is what the resumed-away cutoff below does.
+    // Only a device boundary ends the selection. Our own `Resumed` used to
+    // count as one, which ended the session on every trip away; the interval
+    // replay already closes the game's interval when another package resumes,
+    // so the resumed-away cutoff below is what stops the time.
     let boundary = events
         .iter()
         .find(|event| event.kind == vn_core::usage::UsageEventKind::DeviceBoundary);

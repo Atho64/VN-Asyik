@@ -363,7 +363,7 @@ export function CompanionMemory({
                     onChange={(e) => setEditor({ ...editor, body: e.target.value })}
                   />
                 </label>
-                <small role="status">{t("memory.bytes", { count: bytes })}</small>
+                <small aria-live="off">{t("memory.bytes", { count: bytes })}</small>
                 <label className="companion-memory__toggle">
                   <input
                     type="checkbox"
@@ -455,23 +455,21 @@ export function CompanionMemory({
                           {t("memory.resumeJob")}
                         </Button>
                       )}
-                      {
-                        <Button
-                          disabled={pending}
-                          onClick={() =>
-                            void action(() =>
-                              memoryApi.review(
-                                job.id,
-                                null,
-                                false,
-                                data.settings.revision,
-                              ),
-                            )
-                          }
-                        >
-                          {t("memory.discard")}
-                        </Button>
-                      }
+                      <Button
+                        disabled={pending}
+                        onClick={() =>
+                          void action(() =>
+                            memoryApi.review(
+                              job.id,
+                              null,
+                              false,
+                              data.settings.revision,
+                            ),
+                          )
+                        }
+                      >
+                        {t("memory.discard")}
+                      </Button>
                     </div>
                   </article>
                 ))}

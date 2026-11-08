@@ -12,6 +12,8 @@ interface PaletteAction {
   id: string;
   label: string;
   hint?: string;
+  /** Beta-gated surfaces disappear together with the rest of the companion UI. */
+  beta?: boolean;
   run: () => void;
 }
 
@@ -39,8 +41,18 @@ export function CommandPalette() {
   const actions = useMemo<PaletteAction[]>(() => {
     const entries: PaletteAction[] = [
       {
+        id: "nav-companion",
+        label: t("companion.title"),
+        beta: true,
+        run: () => {
+          void navigate("/companion");
+          close();
+        },
+      },
+      {
         id: "nav-chat",
         label: t("vnchat.title"),
+        beta: true,
         run: () => {
           void navigate("/chat");
           close();
@@ -138,7 +150,7 @@ export function CommandPalette() {
       },
     ];
 
-    const visible = entries.filter((entry) => beta || entry.id !== "nav-chat");
+    const visible = entries.filter((entry) => beta || !entry.beta);
     const needle = query.trim();
     if (needle.length === 0) return visible;
 
