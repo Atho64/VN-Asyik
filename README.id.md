@@ -43,7 +43,16 @@ jatuh ke atribusi tingkat gim saat tidak ada, jawaban yang jujur untuk gim yang
 tidak melaporkan apa pun.
 
 **Statistik.** Waktu baca per gim, per rute, dan per bulan, dihitung dari
-sesinya sendiri.
+sesinya sendiri. Peta panas hari baca dengan streak baca saat ini dan
+terpanjang, plus kartu rekap tahunan yang merangkum tahun mana pun yang punya
+catatan: waktu membaca, hari membaca, akhir yang dicapai, catatan jurnal, gim
+yang dimulai dan diselesaikan, sesi terpanjang, gim pertama tahun itu, dan
+lima gim dengan waktu terbanyak.
+
+**Lini Masa.** Perjalanan membaca dari semua gim dalam satu aliran: sesi,
+catatan jurnal, akhir yang dicapai, dan gim yang selesai, terbaru dulu,
+dikelompokkan per hari. Kover mengikuti pengaturan konten yang sama dengan
+koleksi, dan setiap baris membuka halaman gim.
 
 **Discord Rich Presence.** Opsional, mati secara bawaan. Menampilkan apa yang
 sedang kamu baca, bergiliran sesuai kolom yang kamu atur. Kover eksplisit

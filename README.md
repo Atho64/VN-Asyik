@@ -41,7 +41,16 @@ one (see [Chapters from the window title](#chapters-from-the-window-title)) and
 falls back to game-level attribution where it does not, which is the honest
 answer for a game that reports nothing.
 
-**Stats.** Playtime by game, route and month, from the sessions themselves.
+**Stats.** Playtime by game, route and month, from the sessions themselves. A
+play-day heatmap with current and longest reading streaks, and a year-in-review
+card that sums up any recorded year: time read, days read, endings reached,
+journal entries, games started and finished, the longest sitting, the first
+game of the year, and the five games you spent the most time in.
+
+**Timeline.** Your reading journey across every game in one feed: sessions,
+journal notes, endings reached and finished games, newest first, grouped by
+day. Covers follow the same content setting as the library, and every row
+opens the game page.
 
 **Discord Rich Presence.** Optional, off by default. Shows what you are reading,
 rotating through whatever fields you configure. Explicit cover art is blurred
