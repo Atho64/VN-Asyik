@@ -135,3 +135,203 @@
   justify-content: center;
   padding: var(--space-3) 0;
 }
+
+/* "On this day" on the Stats page.
+ *
+ * Same row anatomy as a Timeline row (44 px cover, text column) because it is the
+ * same kind of object: a past moment attached to a game. It is deliberately not
+ * the Timeline's class — that grid has a third `auto` column for a duration this
+ * card never has, and reusing it would leave a dead column and clip the text.
+ */
+.memory-card {
+  margin-bottom: var(--space-5);
+}
+
+.memory__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.memory__row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-m);
+  border: 1px solid transparent;
+  text-decoration: none;
+  color: inherit;
+  min-height: var(--touch-target);
+}
+
+.memory__row:hover {
+  background: var(--surface-1);
+  border-color: var(--border);
+}
+
+.memory__thumb {
+  width: 44px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+}
+
+.memory__concealed {
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+
+.memory__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.memory__when {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.memory__title {
+  display: block;
+  font-size: var(--text-s);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory__event {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.memory__position {
+  display: block;
+}
+
+/* Journal search: the same row anatomy as a timeline row (44px cover, text
+   column), minus the duration aside a checkpoint never has. Its own classes,
+   not the timeline's, for the same reason the timeline keeps its own. */
+
+.timeline__search {
+  margin-bottom: var(--space-4);
+}
+
+.jsearch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.jsearch__count {
+  margin: 0;
+}
+
+.jsearch__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.jsearch__row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-m);
+  border: 1px solid transparent;
+  text-decoration: none;
+  color: inherit;
+  min-height: var(--touch-target);
+}
+
+.jsearch__row:hover {
+  background: var(--surface-1);
+  border-color: var(--border);
+}
+
+.jsearch__thumb {
+  width: 44px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+}
+
+.jsearch__concealed {
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+
+.jsearch__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jsearch__title {
+  display: block;
+  font-size: var(--text-s);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The note is what the reader searched for, so it leads: three lines of the
+   actual text, not a one-line stub. */
+.jsearch__note {
+  font-size: var(--text-sm);
+  color: var(--text);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.jsearch__note--empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.jsearch__hit {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-radius: var(--radius-xs);
+  padding: 0 2px;
+}
+
+.jsearch__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-faint);
+}
+
+.jsearch__reveal {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}

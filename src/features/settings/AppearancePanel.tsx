@@ -4,7 +4,6 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
-import { Card, CardHeader } from "@/components/Card";
 import { Chip } from "@/components/Chip";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { AppearanceView } from "@/lib/ipc/types";
@@ -13,18 +12,23 @@ import type { AppearanceView } from "@/lib/ipc/types";
 const ACCENTS = [
   { hex: "#65d8c5", key: "appearance.accentTeal" },
   { hex: "#8fb4ff", key: "appearance.accentBlue" },
+  { hex: "#7ad9e8", key: "appearance.accentCyan" },
   { hex: "#c79bff", key: "appearance.accentViolet" },
-  { hex: "#ffb27a", key: "appearance.accentAmber" },
   { hex: "#ff8fa3", key: "appearance.accentRose" },
+  { hex: "#ffb27a", key: "appearance.accentAmber" },
+  { hex: "#ffd166", key: "appearance.accentGold" },
   { hex: "#9ee493", key: "appearance.accentGreen" },
 ] as const;
 
+const DEFAULT_ACCENT = "#65d8c5";
+
 /**
- * Appearance: the accent colour and the background image.
+ * Appearance: the accent colour and the background image, as rows inside the
+ * Settings appearance group (theme mode and effects sit above them).
  *
  * Both are stored on the Rust side and applied by `AppProvider`, so they survive a
- * reload and apply before the first screen paints. Nothing here is a theme mode:
- * dark/light/system stays where it was, in the Appearance section above.
+ * reload and apply before the first screen paints. The chosen hex is kept exactly
+ * as picked; the provider adapts it to the active theme so it stays readable.
  */
 export function AppearancePanel() {
   const { t } = useI18n();
@@ -72,12 +76,13 @@ export function AppearancePanel() {
     }
   };
 
-  return (
-    <Card>
-      <CardHeader title={t("appearance.title")} />
-      <p className="card__intro">{t("appearance.intro")}</p>
+  const currentAccent = appearance?.accent ?? DEFAULT_ACCENT;
 
-      <div className="settings__row settings__row--top">
+  return (
+    <>
+      <p className="settings__hint">{t("appearance.intro")}</p>
+
+      <div className="settings__row settings__row--stack">
         <div className="settings__label">
           <span>{t("appearance.accent")}</span>
           <span className="settings__hint">{t("appearance.accentHint")}</span>
@@ -102,11 +107,12 @@ export function AppearancePanel() {
             <input
               type="color"
               className="input appearance__color"
-              value={appearance?.accent ?? "#65d8c5"}
+              value={currentAccent}
               onChange={(event) => void apply({ accent: event.target.value })}
               disabled={busy}
               aria-label={t("appearance.accentCustom")}
             />
+            <code className="appearance__hex">{currentAccent}</code>
           </label>
           {appearance?.accent ? (
             <Button onClick={() => void apply({ accent: null })} disabled={busy}>
@@ -160,7 +166,7 @@ export function AppearancePanel() {
           <span className="field__hint">{t("appearance.dimHint")}</span>
         </label>
       ) : null}
-    </Card>
+    </>
   );
 }
 

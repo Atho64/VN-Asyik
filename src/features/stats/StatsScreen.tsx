@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
+import { OnThisDay } from "@/features/stats/OnThisDay";
 import { TastePanel } from "@/features/stats/TastePanel";
 import { TimeStats } from "@/features/stats/TimeStats";
 import { YearReview } from "@/features/stats/YearReview";
@@ -121,7 +122,15 @@ export function StatsScreen() {
   }
 
   if (totalMs === 0) {
-    return <EmptyState title={t("stats.emptyTitle")} body={t("stats.emptyBody")} />;
+    // An anniversary is not a statistic: a reader who wrote checkpoints but
+    // recorded no time still has memories worth resurfacing, so the card sits
+    // above the empty state rather than behind it.
+    return (
+      <>
+        <OnThisDay />
+        <EmptyState title={t("stats.emptyTitle")} body={t("stats.emptyBody")} />
+      </>
+    );
   }
 
   const maxTop = top[0]?.total_ms ?? 1;
@@ -159,6 +168,7 @@ export function StatsScreen() {
       <header className="page-head">
         <h1 className="page-title">{t("stats.title")}</h1>
       </header>
+      <OnThisDay />
       <TimeStats />
       <TastePanel />
       {/* The total and the status split are one thought ("how much, and of

@@ -200,6 +200,9 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
 
 /** Point the palette variables at an artwork's accent. */
 export function applyAccent(palette: ReturnType<typeof fallbackPalette>): void {
+  // A reader who chose an app accent asked for a fixed colour; hovering a cover
+  // must not quietly replace it. With no choice made, the cover's accent leads.
+  if (useAppStore.getState().appearance?.accent) return;
   const root = document.documentElement;
   root.style.setProperty("--accent", palette.accent);
   root.style.setProperty("--accent-soft", palette.accentSoft);

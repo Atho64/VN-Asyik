@@ -35,7 +35,8 @@ export type IconName =
   | "guide"
   | "gamepad"
   | "screen"
-  | "trash";
+  | "trash"
+  | "sync";
 
 interface IconProps {
   name: IconName;
@@ -159,6 +160,15 @@ const paths: Record<IconName, ReactNode> = {
       <path d="M4 7h16" />
       <path d="M9.5 7V4.5h5V7" />
       <path d="M6.5 7l.9 12.2h9.2L17.5 7" />
+    </>
+  ),
+  // Two arrows chasing each other around a cycle: sync, not "next".
+  sync: (
+    <>
+      <path d="M4.5 9a7.5 7.5 0 0 1 12.9-3.4L20 8" />
+      <path d="M20 3.5V8h-4.5" />
+      <path d="M19.5 15a7.5 7.5 0 0 1-12.9 3.4L4 16" />
+      <path d="M4 20.5V16h4.5" />
     </>
   ),
 };

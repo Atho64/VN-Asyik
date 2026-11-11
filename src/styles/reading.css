@@ -210,3 +210,109 @@
     padding-top: var(--space-4);
   }
 }
+
+/* A screenshot pinned to a checkpoint.
+ *
+ * Sized by aspect ratio rather than a fixed height so a portrait or 4:3 source
+ * keeps its shape; the file is the 640 px tile from Rust, not the 1920 px
+ * lightbox copy, because this paints at card width.
+ */
+.reading__photo-field {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.reading__photo-chosen {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 22rem;
+}
+.reading__photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.reading__picker-more {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  margin-top: var(--space-4);
+}
+.reading__export-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block: var(--space-4) var(--space-3);
+}
+
+.journal-photo {
+  margin: 0 0 var(--space-3);
+  max-width: 22rem;
+}
+.journal-photo--gap {
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+.journal-photo__tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+  cursor: zoom-in;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.journal-photo__tile:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.journal-photo__tile:active {
+  transform: none;
+}
+.journal-photo__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* The file is already the pre-blurred copy generated in Rust; this only softens the
+ * upscaling edge. Never `filter: blur()` — that is the expensive path the pipeline
+ * exists to avoid on low-end Android. */
+.journal-photo__img--concealed {
+  transform: scale(1.06);
+}
+.journal-photo__neutral {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: linear-gradient(160deg, var(--surface-2), var(--bg-elevated) 72%);
+}
+.journal-photo__scrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 58%, transparent);
+  color: var(--text-muted);
+}
+
+/* Picker grid: the gallery's tiles, without the lightbox affordances. */
+.gallery--picker .gallery__tile {
+  cursor: pointer;
+}
+.gallery__tile--selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.gallery__scrim--selected {
+  background: color-mix(in srgb, var(--accent) 42%, transparent);
+  color: var(--text-on-accent);
+}

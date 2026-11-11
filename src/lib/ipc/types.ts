@@ -199,6 +199,42 @@ export const yearReviewSchema = z.object({
 });
 export type YearReview = z.infer<typeof yearReviewSchema>;
 
+/**
+ * One past moment that shares today's month and day, for the Stats card.
+ *
+ * Two kinds, because both carry something worth re-reading: a journal
+ * checkpoint and an achieved ending. Sessions are absent on purpose — "you read
+ * for 40 minutes" is not a memory.
+ */
+export const memoryEventSchema = z.object({
+  kind: z.enum(["journal", "ending"]),
+  /** Event timestamp, UTC ms. */
+  ts: z.number(),
+  /** Row id of the event, unique per source table. */
+  id: z.string(),
+  game: gameSchema,
+  /** Journal note, 240 chars + ellipsis. */
+  note: z.string().nullable(),
+  routeName: z.string().nullable(),
+  chapterName: z.string().nullable(),
+  endingName: z.string().nullable(),
+  /** Whole calendar years between the moment and today, at least 1. */
+  yearsAgo: z.number(),
+});
+export type MemoryEvent = z.infer<typeof memoryEventSchema>;
+
+/** What a journal export wrote, or that the picker was cancelled. */
+export const journalExportOutcomeSchema = z.object({
+  saved: z.boolean(),
+  filename: z.string(),
+  entries: z.number(),
+  /** Pinned photos embedded in the document. */
+  photos: z.number(),
+  /** Pinned photos left out because the content setting conceals them. */
+  concealed: z.number(),
+});
+export type JournalExportOutcome = z.infer<typeof journalExportOutcomeSchema>;
+
 export const endingSchema = z.object({
   meta: syncMetaSchema,
   game_id: z.string(),

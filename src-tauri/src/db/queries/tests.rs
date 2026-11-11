@@ -903,6 +903,7 @@ fn journal_entry(
         save_slot: String::new(),
         route_name: route.to_owned(),
         chapter_name: chapter.to_owned(),
+        photo_image_id: String::new(),
     }
 }
 
@@ -1238,4 +1239,380 @@ async fn year_review_aggregates_one_local_year() {
     assert!(quiet.longest_session.is_none());
     assert!(quiet.first_game.is_none());
     assert!(quiet.top_games.is_empty());
+}
+
+// On this day
+
+/// A timestamp whose *local* date is one year before today, at noon.
+///
+/// Built by `SQLite` rather than by arithmetic here: the query matches on the
+/// local month and day, and only the same calendar authority can produce a value
+/// that lands on it.
+async fn one_year_ago_noon(pool: &sqlx::SqlitePool) -> Option<i64> {
+    let (today, target): (String, String) = sqlx::query_as(
+        "SELECT strftime('%m-%d', 'now', 'localtime'), \
+                strftime('%m-%d', 'now', 'localtime', '-1 year')",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("calendar");
+    // 29 February has no anniversary in a common year; SQLite normalizes it to
+    // 1 March, so there is no "same day last year" to test on that date.
+    if today != target {
+        return None;
+    }
+    let (ms,): (i64,) = sqlx::query_as(
+        "SELECT CAST(strftime('%s', 'now', 'localtime', '-1 year', 'start of day', \
+                               '+12 hours', 'utc') AS INTEGER) * 1000",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("timestamp");
+    Some(ms)
+}
+
+#[tokio::test]
+async fn on_this_day_resurfaces_last_years_checkpoint_and_ending() {
+    let (db, device) = fixture().await;
+    let Some(anniversary) = one_year_ago_noon(db.pool()).await else {
+        return;
+    };
+    let game = Game::new(&device, now(), "Anniversary", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+
+    reading::upsert(
+        db.pool(),
+        &journal_entry(
+            &device,
+            game.meta.id,
+            anniversary,
+            "A year ago today",
+            "Mio",
+            "",
+        ),
+    )
+    .await
+    .expect("entry");
+    let mut ending = Ending::new(&device, now(), game.meta.id, "True End").unwrap();
+    ending.achieved = true;
+    ending.achieved_at = Some(Timestamp::from_millis(anniversary + 1_000));
+    upsert_ending(db.pool(), &ending).await.expect("ending");
+
+    // Today's own checkpoint is not a memory: the card must not resurface
+    // something written this morning as a year-old anniversary. The fixture's
+    // `now()` is a fixed 2023 instant, so this row needs the real clock to land
+    // on today's date at all.
+    let real_now = Timestamp::now().expect("clock").as_millis();
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, game.meta.id, real_now, "Written today", "", ""),
+    )
+    .await
+    .expect("today entry");
+
+    let memories = journey::on_this_day(db.pool()).await.expect("memories");
+    assert_eq!(
+        memories.len(),
+        2,
+        "one journal entry and one ending: {memories:?}"
+    );
+    assert!(memories.iter().all(|memory| memory.years_ago == 1));
+    assert_eq!(memories[0].kind, "ending", "newest first");
+    assert_eq!(memories[0].ending_name.as_deref(), Some("True End"));
+    assert_eq!(memories[1].kind, "journal");
+    assert_eq!(memories[1].note.as_deref(), Some("A year ago today"));
+    assert_eq!(memories[1].game.title, "Anniversary");
+    assert!(
+        memories
+            .iter()
+            .all(|memory| memory.note.as_deref() != Some("Written today")),
+        "today's rows are excluded"
+    );
+}
+
+#[tokio::test]
+async fn on_this_day_hides_a_deleted_games_memories() {
+    let (db, device) = fixture().await;
+    let Some(anniversary) = one_year_ago_noon(db.pool()).await else {
+        return;
+    };
+    let mut game = Game::new(&device, now(), "Ghosted", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, game.meta.id, anniversary, "gone", "", ""),
+    )
+    .await
+    .expect("entry");
+
+    game.meta.deleted = true;
+    game.meta = game.meta.touch(now());
+    upsert_game(db.pool(), &game).await.expect("delete");
+
+    let memories = journey::on_this_day(db.pool()).await.expect("memories");
+    assert!(
+        memories.is_empty(),
+        "a deleted game's memories must not surface: {memories:?}"
+    );
+}
+
+// Journal export
+
+#[tokio::test]
+async fn the_journal_export_reads_live_entries_in_reading_order() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Exportable", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+    for (created, note) in [(3_000_i64, "second"), (1_000, "first"), (2_000, "middle")] {
+        reading::upsert(
+            db.pool(),
+            &journal_entry(&device, game.meta.id, created, note, "", ""),
+        )
+        .await
+        .expect("entry");
+    }
+    let deleted = journal_entry(&device, game.meta.id, 4_000, "deleted", "", "");
+    reading::upsert(db.pool(), &deleted).await.expect("entry");
+    reading::delete(
+        db.pool(),
+        &device,
+        game.meta.id,
+        deleted.meta.id,
+        deleted.meta.updated_at.as_millis(),
+    )
+    .await
+    .expect("delete");
+
+    let rows = reading::list_for_export(db.pool(), game.meta.id)
+        .await
+        .expect("rows");
+    let notes: Vec<&str> = rows.iter().map(|row| row.entry.note.as_str()).collect();
+    assert_eq!(
+        notes,
+        ["first", "middle", "second"],
+        "oldest first, tombstones gone"
+    );
+    // Every row carries a local calendar date; the export renders these strings
+    // rather than formatting timestamps itself.
+    assert!(
+        rows.iter()
+            .all(|row| row.date.len() == 10 && row.date.contains('-'))
+    );
+    assert!(
+        rows.iter()
+            .all(|row| row.time.len() == 5 && row.time.contains(':'))
+    );
+}
+
+#[tokio::test]
+async fn a_pinned_photo_survives_the_round_trip_and_a_photo_only_entry_saves() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Photo diary", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+
+    let mut entry = journal_entry(&device, game.meta.id, 5_000, "", "", "");
+    entry.photo_image_id = "sf83040".to_owned();
+    reading::upsert(db.pool(), &entry)
+        .await
+        .expect("photo only");
+
+    let loaded = reading::list_all(db.pool(), game.meta.id)
+        .await
+        .expect("read");
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].photo_image_id, "sf83040");
+    assert!(loaded[0].note.is_empty(), "a photo needs no caption");
+
+    // A later edit can drop the photo again; the update path must write the
+    // column, not only the insert path.
+    let mut edited = loaded[0].clone();
+    edited.photo_image_id.clear();
+    edited.note = "caption instead".to_owned();
+    edited.meta = edited.meta.touch(now());
+    reading::upsert(db.pool(), &edited).await.expect("edit");
+    let reloaded = reading::list_all(db.pool(), game.meta.id)
+        .await
+        .expect("read");
+    assert_eq!(reloaded[0].photo_image_id, "");
+    assert_eq!(reloaded[0].note, "caption instead");
+}
+
+// Journal search
+
+#[tokio::test]
+async fn journal_search_matches_note_route_and_chapter_newest_first() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Searchable", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+    for (created, note, route, chapter) in [
+        (1_000_i64, "The fireworks scene", "Mio", ""),
+        (2_000, "A quiet morning", "Shizuku", "August 7"),
+        (3_000, "Fireworks again, one year later", "", ""),
+    ] {
+        reading::upsert(
+            db.pool(),
+            &journal_entry(&device, game.meta.id, created, note, route, chapter),
+        )
+        .await
+        .expect("entry");
+    }
+
+    // ASCII case folds; the note is the primary target.
+    let (hits, more) = reading::search(db.pool(), "FIREWORKS", None, None)
+        .await
+        .expect("search");
+    assert!(!more);
+    assert_eq!(hits.len(), 2);
+    assert_eq!(hits[0].created_at.as_millis(), 3_000, "newest first");
+    assert_eq!(hits[1].created_at.as_millis(), 1_000);
+
+    // Route and chapter snapshots are searchable too.
+    let (hits, _) = reading::search(db.pool(), "shizuku", None, None)
+        .await
+        .expect("route");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].note, "A quiet morning");
+    let (hits, _) = reading::search(db.pool(), "august", None, None)
+        .await
+        .expect("chapter");
+    assert_eq!(hits.len(), 1);
+
+    // CJK matches exactly, with no case folding to get wrong.
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, game.meta.id, 4_000, "花火の夜", "", ""),
+    )
+    .await
+    .expect("entry");
+    let (hits, _) = reading::search(db.pool(), "花火", None, None)
+        .await
+        .expect("cjk");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].note, "花火の夜");
+}
+
+#[tokio::test]
+async fn journal_search_treats_wildcards_as_literal_text() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Literal", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, game.meta.id, 1_000, "100% completed", "", ""),
+    )
+    .await
+    .expect("entry");
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, game.meta.id, 2_000, "1000 lines read", "", ""),
+    )
+    .await
+    .expect("entry");
+
+    // An unescaped `%` would match both rows; the reader typed a percent sign.
+    let (hits, _) = reading::search(db.pool(), "100%", None, None)
+        .await
+        .expect("search");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].note, "100% completed");
+    // `_` is a single-character wildcard unescaped; here it is an underscore.
+    let (hits, _) = reading::search(db.pool(), "0_", None, None)
+        .await
+        .expect("search");
+    assert!(hits.is_empty());
+}
+
+#[tokio::test]
+async fn journal_search_hides_deleted_rows_and_filters_by_game() {
+    let (db, device) = fixture().await;
+    let mut game = Game::new(&device, now(), "Live", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+    let other = Game::new(&device, now(), "Other", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &other).await.expect("insert");
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, game.meta.id, 1_000, "a shared word", "", ""),
+    )
+    .await
+    .expect("entry");
+    reading::upsert(
+        db.pool(),
+        &journal_entry(&device, other.meta.id, 2_000, "a shared word", "", ""),
+    )
+    .await
+    .expect("entry");
+    let deleted = journal_entry(&device, game.meta.id, 3_000, "a shared word", "", "");
+    reading::upsert(db.pool(), &deleted).await.expect("entry");
+    reading::delete(
+        db.pool(),
+        &device,
+        game.meta.id,
+        deleted.meta.id,
+        deleted.meta.updated_at.as_millis(),
+    )
+    .await
+    .expect("delete");
+
+    let (hits, _) = reading::search(db.pool(), "shared", None, None)
+        .await
+        .expect("search");
+    assert_eq!(hits.len(), 2, "the tombstone must not surface");
+
+    let (hits, _) = reading::search(db.pool(), "shared", Some(other.meta.id), None)
+        .await
+        .expect("filtered");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].game_id, other.meta.id);
+
+    // A deleted game's checkpoints stay hidden even though the rows exist.
+    game.meta.deleted = true;
+    game.meta = game.meta.touch(now());
+    upsert_game(db.pool(), &game).await.expect("delete");
+    let (hits, _) = reading::search(db.pool(), "shared", None, None)
+        .await
+        .expect("search");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].game_id, other.meta.id);
+}
+
+#[tokio::test]
+async fn journal_search_pages_with_a_cursor() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Paged", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("insert");
+    for index in 0..51_i64 {
+        reading::upsert(
+            db.pool(),
+            &journal_entry(
+                &device,
+                game.meta.id,
+                1_000 + index,
+                &format!("entry number {index}"),
+                "",
+                "",
+            ),
+        )
+        .await
+        .expect("entry");
+    }
+
+    let (first, more) = reading::search(db.pool(), "entry", None, None)
+        .await
+        .expect("first page");
+    assert!(more, "51 matches over a 50-row page");
+    assert_eq!(first.len(), 50);
+    assert_eq!(first[0].created_at.as_millis(), 1_050, "newest first");
+
+    let last = first.last().expect("last row");
+    let (second, more) = reading::search(
+        db.pool(),
+        "entry",
+        None,
+        Some((last.created_at.as_millis(), &last.meta.id.to_string())),
+    )
+    .await
+    .expect("second page");
+    assert!(!more);
+    assert_eq!(second.len(), 1);
+    assert_eq!(second[0].created_at.as_millis(), 1_000);
 }

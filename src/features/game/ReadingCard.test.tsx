@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppContext } from "@/app/AppProvider";
 import { createTranslator } from "@/i18n";
 import { IpcError } from "@/lib/ipc/client";
+import type * as ClientModule from "@/lib/ipc/client";
 import type { ReadingContext, ReadingEntry } from "@/lib/ipc/reading";
 import { ReadingCard } from "./ReadingCard";
 
@@ -13,8 +14,22 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   save: vi.fn(),
   remove: vi.fn(),
+  journalExport: vi.fn(),
+  screenshotTile: vi.fn(),
+  screenshots: vi.fn(),
 }));
 vi.mock("@/lib/ipc/reading", () => ({ readingApi: mocks }));
+// The export action and the pinned-photo tile go through the shared client, not
+// through `readingApi`. Keep the real module (the component imports `IpcError`
+// from it) and replace only the calls this screen makes.
+vi.mock("@/lib/ipc/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof ClientModule>()),
+  api: {
+    journalExport: mocks.journalExport,
+    vndbScreenshotTile: mocks.screenshotTile,
+    vndbScreenshots: mocks.screenshots,
+  },
+}));
 
 const entry: ReadingEntry = {
   meta: { id: "note-1", updated_at: 100, device_id_device: "test", deleted: false },
@@ -26,6 +41,7 @@ const entry: ReadingEntry = {
   save_slot: "12",
   route_name: "Shizuku",
   chapter_name: "August 7",
+  photo_image_id: "",
 };
 const initial: ReadingContext = {
   latestSession: {
@@ -49,6 +65,8 @@ function mount(sessionId: string | null = null, onEntriesChange = vi.fn()) {
     >
       <ReadingCard
         gameId="game-1"
+        vnId="v17"
+        title="Symphonic Rain"
         onWalkthrough={guide}
         selectedSessionId={sessionId}
         onEntriesChange={onEntriesChange}
@@ -89,6 +107,8 @@ describe("reading checkpoints", () => {
       >
         <ReadingCard
           gameId="game-1"
+          vnId="v17"
+          title="Symphonic Rain"
           onWalkthrough={() => undefined}
           selectedSessionId={sessionId}
         />
@@ -389,5 +409,100 @@ describe("reading checkpoints", () => {
     expect(
       screen.queryByRole("button", { name: "Show older entries" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+const shot = {
+  image_id: "sf83040",
+  vndb_url: "https://vndb.org/sf83040",
+  src: "data:image/jpeg;base64,AAAA",
+  blurred_src: "data:image/jpeg;base64,BBBB",
+  sharp: true,
+  explicit: false,
+  width: 640,
+  height: 480,
+};
+
+describe("journal photos and export", () => {
+  beforeEach(() => {
+    mocks.screenshots.mockResolvedValue({
+      shots: [shot],
+      reported: 1,
+      complete: true,
+      pending: 0,
+    });
+    mocks.screenshotTile.mockResolvedValue(shot);
+    mocks.journalExport.mockResolvedValue({
+      saved: true,
+      filename: "Symphonic-Rain-journal.md",
+      entries: 1,
+      photos: 1,
+      concealed: 0,
+    });
+  });
+
+  it("pins a screenshot to a checkpoint and saves its id", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Add checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Pin a screenshot" }));
+
+    const picker = await screen.findByRole("dialog", { name: "Pin a screenshot" });
+    await user.click(
+      await within(picker).findByRole("button", {
+        name: "Pin this screenshot to Symphonic Rain",
+      }),
+    );
+
+    // The chosen photo is painted in the form, and it alone is enough to save:
+    // a photo diary entry does not need a caption.
+    const form = screen.getByRole("dialog", { name: "Add checkpoint" });
+    expect(await within(form).findByAltText(/Screenshot pinned to a journal/)).toBeInTheDocument();
+    const save = within(form).getByRole("button", { name: "Save checkpoint" });
+    expect(save).toBeEnabled();
+    await user.click(save);
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ photo_image_id: "sf83040" }),
+    );
+  });
+
+  it("renders a pinned photo on an existing checkpoint, fetching each image once", async () => {
+    // A distinct id: the tile cache is module-level and survives between tests,
+    // which is the behaviour being pinned here — one fetch per image, not one per
+    // render.
+    const pinned = { ...shot, image_id: "sf99999" };
+    mocks.screenshotTile.mockResolvedValue(pinned);
+    mocks.context.mockResolvedValue({
+      ...initial,
+      entries: [{ ...entry, photo_image_id: "sf99999" }],
+    });
+    mount();
+    expect(
+      await screen.findByAltText(/Screenshot pinned to a journal/),
+    ).toBeInTheDocument();
+    expect(mocks.screenshotTile).toHaveBeenCalledWith("v17", "sf99999");
+    // The same image on a second checkpoint must not be fetched again.
+    mocks.screenshotTile.mockClear();
+    mocks.context.mockResolvedValue({
+      ...initial,
+      entries: [
+        { ...entry, photo_image_id: "sf99999" },
+        { ...entry, meta: { ...entry.meta, id: "note-2" }, photo_image_id: "sf99999" },
+      ],
+    });
+    fireEvent(window, new Event("focus"));
+    await waitFor(() => expect(mocks.context).toHaveBeenCalledTimes(2));
+    expect(mocks.screenshotTile).not.toHaveBeenCalled();
+  });
+
+  it("exports the journal in the format the reader picks", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Export journal" }));
+    const sheet = await screen.findByRole("dialog", { name: "Export journal" });
+    await user.click(within(sheet).getByRole("button", { name: "Markdown (.md)" }));
+    await waitFor(() =>
+      expect(mocks.journalExport).toHaveBeenCalledWith("game-1", "markdown"),
+    );
   });
 });

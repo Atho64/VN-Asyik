@@ -22,6 +22,7 @@ struct EntryRow {
     save_slot: String,
     route_name: String,
     chapter_name: String,
+    photo_image_id: String,
     updated_at: i64,
     device_id: String,
     deleted: bool,
@@ -50,6 +51,7 @@ impl TryFrom<EntryRow> for ReadingEntry {
             save_slot: row.save_slot,
             route_name: row.route_name,
             chapter_name: row.chapter_name,
+            photo_image_id: row.photo_image_id,
         })
     }
 }
@@ -190,6 +192,127 @@ where
     rows.into_iter().map(ReadingEntry::try_from).collect()
 }
 
+/// One checkpoint with its dates already in the reader's local calendar.
+#[derive(Debug)]
+pub struct JournalExportRow {
+    pub entry: ReadingEntry,
+    /// Local calendar date, `YYYY-MM-DD`.
+    pub date: String,
+    /// Local clock time, `HH:MM`.
+    pub time: String,
+    /// Local date of the linked reading session, when the checkpoint has one.
+    pub played_date: Option<String>,
+}
+
+/// Row shape for [`list_for_export`]: the entry columns plus `SQLite`'s local
+/// calendar rendering of the two timestamps.
+#[derive(Debug, FromRow)]
+struct ExportRow {
+    #[sqlx(flatten)]
+    entry: EntryRow,
+    local_date: String,
+    local_time: String,
+    played_date: Option<String>,
+}
+
+/// Live checkpoints in reading order, with local dates, for the journal document.
+///
+/// Separate from [`list_all`] on purpose: that one keeps tombstones because sync
+/// and backups must carry them, while an exported document must not resurrect a
+/// note the user deleted. Oldest first, because a diary is read forwards.
+///
+/// The calendar is `SQLite`'s `'localtime'`, the same authority `playtime_by_day`
+/// and the heatmap use, so a checkpoint written at 00:30 lands on the day the
+/// reader experienced rather than on the UTC date the timestamp carries.
+pub async fn list_for_export(
+    pool: &SqlitePool,
+    game: EntityId,
+) -> Result<Vec<JournalExportRow>, DbError> {
+    let rows = sqlx::query_as::<_, ExportRow>(
+        "SELECT e.*, \
+                strftime('%Y-%m-%d', e.created_at / 1000, 'unixepoch', 'localtime') AS local_date, \
+                strftime('%H:%M', e.created_at / 1000, 'unixepoch', 'localtime') AS local_time, \
+                CASE WHEN e.played_at IS NULL THEN NULL \
+                     ELSE strftime('%Y-%m-%d', e.played_at / 1000, 'unixepoch', 'localtime') \
+                END AS played_date \
+         FROM reading_entries e JOIN games g ON g.id = e.game_id AND g.deleted = 0 \
+         WHERE e.game_id = ? AND e.deleted = 0 \
+         ORDER BY e.created_at ASC, e.id ASC",
+    )
+    .bind(game.to_string())
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(JournalExportRow {
+                entry: ReadingEntry::try_from(row.entry)?,
+                date: row.local_date,
+                time: row.local_time,
+                played_date: row.played_date,
+            })
+        })
+        .collect()
+}
+
+/// Live checkpoints matching a plain-text query, newest first, in bounded pages.
+///
+/// Search stays plain text (ADR 0005): `LIKE` folds ASCII case, which covers the
+/// Latin scripts, and matches CJK exactly — a reader typing a Japanese phrase
+/// wants that phrase, not a stemmed approximation. `%`, `_` and `\` in the query
+/// are escaped so they search for themselves.
+///
+/// The note is the primary target; route and chapter snapshots are searched too,
+/// because "everything I wrote on Mio's route" is the same question. The parent
+/// game is joined live, so a deleted game's checkpoints cannot surface.
+pub async fn search(
+    pool: &SqlitePool,
+    query: &str,
+    game: Option<EntityId>,
+    before: Option<(i64, &str)>,
+) -> Result<(Vec<ReadingEntry>, bool), DbError> {
+    // 50 rows plus one probe row, the same exact `has_more` the timeline uses.
+    const PAGE_PLUS_ONE: i64 = 51;
+    let escaped = query
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    let pattern = format!("%{escaped}%");
+    let game_id = game.map(|id| id.to_string());
+    let before_ts = before.map(|(ts, _)| ts);
+    let before_id = before.map(|(_, id)| id);
+    let rows = sqlx::query_as::<_, EntryRow>(
+        "SELECT e.* FROM reading_entries e \
+         JOIN games g ON g.id = e.game_id AND g.deleted = 0 \
+         WHERE e.deleted = 0 \
+           AND (e.note LIKE ? ESCAPE '\\' \
+                OR e.route_name LIKE ? ESCAPE '\\' \
+                OR e.chapter_name LIKE ? ESCAPE '\\') \
+           AND (? IS NULL OR e.game_id = ?) \
+           AND (? IS NULL OR e.created_at < ? OR (e.created_at = ? AND e.id < ?)) \
+         ORDER BY e.created_at DESC, e.id DESC \
+         LIMIT ?",
+    )
+    .bind(&pattern)
+    .bind(&pattern)
+    .bind(&pattern)
+    .bind(&game_id)
+    .bind(&game_id)
+    .bind(before_ts)
+    .bind(before_ts)
+    .bind(before_ts)
+    .bind(before_id)
+    .bind(PAGE_PLUS_ONE)
+    .fetch_all(pool)
+    .await?;
+    let has_more = rows.len() > 50;
+    let entries = rows
+        .into_iter()
+        .take(50)
+        .map(ReadingEntry::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((entries, has_more))
+}
+
 /// Used inside the sync/restore transaction after games and sessions are stored.
 /// Reject cross-game session references even though `SQLite`'s single-column FK
 /// alone would accept them. Identity must not migrate to another parent.
@@ -200,12 +323,13 @@ where
     entry.validate().map_err(DbError::Corrupt)?;
     let changed = sqlx::query(
         "INSERT INTO reading_entries
-         (id, game_id, session_id, created_at, played_at, note, save_slot, route_name, chapter_name, updated_at, device_id, deleted)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         (id, game_id, session_id, created_at, played_at, note, save_slot, route_name, chapter_name, photo_image_id, updated_at, device_id, deleted)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
          WHERE EXISTS (SELECT 1 FROM games WHERE id = ?)
            AND (? IS NULL OR EXISTS (SELECT 1 FROM play_sessions WHERE id = ? AND game_id = ?))
          ON CONFLICT(id) DO UPDATE SET note = excluded.note, save_slot = excluded.save_slot,
            route_name = excluded.route_name, chapter_name = excluded.chapter_name,
+           photo_image_id = excluded.photo_image_id,
            updated_at = excluded.updated_at, device_id = excluded.device_id, deleted = excluded.deleted
          WHERE reading_entries.game_id = excluded.game_id
            AND reading_entries.session_id IS excluded.session_id
@@ -214,7 +338,8 @@ where
     ).bind(entry.meta.id.to_string()).bind(entry.game_id.to_string())
         .bind(entry.session_id.map(|id| id.to_string())).bind(entry.created_at.as_millis())
         .bind(entry.played_at.map(Timestamp::as_millis)).bind(&entry.note).bind(&entry.save_slot)
-        .bind(&entry.route_name).bind(&entry.chapter_name).bind(entry.meta.updated_at.as_millis())
+        .bind(&entry.route_name).bind(&entry.chapter_name).bind(&entry.photo_image_id)
+        .bind(entry.meta.updated_at.as_millis())
         .bind(entry.meta.device_id_device.device().as_str()).bind(entry.meta.deleted)
         .bind(entry.game_id.to_string()).bind(entry.session_id.map(|id| id.to_string()))
         .bind(entry.session_id.map(|id| id.to_string())).bind(entry.game_id.to_string())
@@ -237,6 +362,9 @@ pub struct SaveReadingInput {
     pub save_slot: String,
     pub route_name: String,
     pub chapter_name: String,
+    /// VNDB image id of a pinned screenshot, or empty for a text-only checkpoint.
+    #[serde(default)]
+    pub photo_image_id: String,
 }
 
 fn conflict() -> CommandError {
@@ -302,12 +430,14 @@ pub async fn save(
             save_slot: String::new(),
             route_name: String::new(),
             chapter_name: String::new(),
+            photo_image_id: String::new(),
         }
     };
     entry.note = input.note.trim().to_owned();
     entry.save_slot = input.save_slot.trim().to_owned();
     entry.route_name = input.route_name.trim().to_owned();
     entry.chapter_name = input.chapter_name.trim().to_owned();
+    entry.photo_image_id = input.photo_image_id.trim().to_owned();
     entry
         .validate()
         .map_err(|e| CommandError::new("invalid_reading_entry", e))?;

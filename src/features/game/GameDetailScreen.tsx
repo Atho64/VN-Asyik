@@ -669,6 +669,8 @@ export function GameDetailScreen() {
         <ReadingCard
           key={id}
           gameId={id}
+          vnId={game.vndb_id}
+          title={game.title}
           sessionVersion={sessions[0]?.meta.updated_at}
           selectedSessionId={selectedSession?.gameId === id ? selectedSession.id : null}
           onCloseSession={closeSessionDetails}

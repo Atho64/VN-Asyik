@@ -40,6 +40,7 @@ fn input(game: EntityId, session: Option<EntityId>) -> reading::SaveReadingInput
         save_slot: " 12 ".to_owned(),
         route_name: "Shizuku".to_owned(),
         chapter_name: "August 7".to_owned(),
+        photo_image_id: String::new(),
     }
 }
 

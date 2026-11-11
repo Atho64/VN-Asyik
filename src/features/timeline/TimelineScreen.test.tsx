@@ -1,16 +1,19 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MemoryRouter } from "react-router";
 
 import { AppContext } from "@/app/AppProvider";
+import { useAppStore } from "@/app/store";
 import { createTranslator } from "@/i18n";
 import type { Game, TimelineEvent, TimelinePage } from "@/lib/ipc/types";
 import { TimelineScreen } from "./TimelineScreen";
 
-const mocks = vi.hoisted(() => ({ timelinePage: vi.fn() }));
+const mocks = vi.hoisted(() => ({ timelinePage: vi.fn(), search: vi.fn() }));
 vi.mock("@/lib/ipc/client", () => ({ api: mocks }));
+vi.mock("@/lib/ipc/reading", () => ({ readingApi: { search: mocks.search } }));
 
 const game: Game = {
   meta: { id: "g1", updated_at: 1, device_id_device: "test", deleted: false },
@@ -80,7 +83,10 @@ function mount() {
   );
 }
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  useAppStore.setState({ timelineQuery: "" });
+});
 
 describe("timeline screen", () => {
   it("renders mixed events of one day under a shared header", async () => {
@@ -163,5 +169,67 @@ describe("timeline screen", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
     expect(mocks.timelinePage).toHaveBeenLastCalledWith({ ts: base, id: "s1" });
+  });
+
+  it("searches the journal from the timeline and returns to the feed when cleared", async () => {
+    const user = userEvent.setup();
+    mocks.timelinePage.mockResolvedValue(page([session], false));
+    mount();
+    await screen.findByText("Read for 1h");
+
+    const otherGame: Game = { ...game, meta: { ...game.meta, id: "g2" }, title: "Clannad" };
+    mocks.search.mockResolvedValue({
+      results: [
+        {
+          entry: {
+            meta: { id: "j9", updated_at: 1, device_id_device: "test", deleted: false },
+            game_id: "g2",
+            session_id: null,
+            created_at: base,
+            played_at: null,
+            note: "the fireworks after the festival",
+            save_slot: "",
+            route_name: "Nagisa",
+            chapter_name: "",
+            photo_image_id: "",
+          },
+          game: otherGame,
+        },
+      ],
+      hasMore: false,
+    });
+
+    const box = screen.getByLabelText("Search journal");
+    await user.type(box, "fireworks");
+    // The debounced search lands and replaces the feed.
+    expect(await screen.findByText("1 match", {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.getByText("Clannad")).toBeInTheDocument();
+    expect(screen.queryByText("Read for 1h")).not.toBeInTheDocument();
+    // The query survives in the store, so a navigation back keeps the search.
+    expect(useAppStore.getState().timelineQuery).toBe("fireworks");
+
+    await user.clear(box);
+    expect(await screen.findByText("Read for 1h")).toBeInTheDocument();
+    expect(screen.queryByText("1 match")).not.toBeInTheDocument();
+  });
+
+  it("loads the feed under StrictMode's double mount instead of stalling", async () => {
+    // The app renders in StrictMode. A ref guard that marks the feed "requested"
+    // on the first pass would cancel that fetch in cleanup and skip the second,
+    // leaving the page stuck on the loading skeleton.
+    mocks.timelinePage.mockResolvedValue(page([session], false));
+    render(
+      <StrictMode>
+        <AppContext.Provider
+          value={{ t: createTranslator("en"), locale: "en", ready: true, bootError: null }}
+        >
+          <MemoryRouter>
+            <TimelineScreen />
+          </MemoryRouter>
+        </AppContext.Provider>
+      </StrictMode>,
+    );
+    expect(await screen.findByText("Read for 1h")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Laying out your journey")).not.toBeInTheDocument();
   });
 });

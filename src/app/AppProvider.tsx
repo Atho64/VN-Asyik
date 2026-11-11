@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
 import { listenBetaFeatures } from "@/lib/ipc/prefs";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { GameCard } from "@/lib/ipc/types";
+import { accentForTheme, onAccentFor } from "@/lib/palette";
 import { createTranslator, resolveLocale, type Translator } from "@/i18n";
 import { createContext } from "react";
 import { focusArt } from "@/components/Backdrop";
@@ -32,23 +33,6 @@ async function loadLibrary(os: string | undefined): Promise<GameCard[]> {
     }
   }
   return api.listGames();
-}
-
-/**
- * Text colour that stays readable on top of a custom accent.
- *
- * The token sheet pairs the default accent with one `--on-accent`; a user-picked
- * colour breaks that pairing, and white label text on a pale yellow button is the
- * common result. The luminance threshold is the usual sRGB approximation.
- */
-function readableOn(hex: string): string {
-  const value = hex.replace("#", "");
-  const channel = (offset: number): number => {
-    const part = Number.parseInt(value.slice(offset, offset + 2), 16) / 255;
-    return part <= 0.03928 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4;
-  };
-  const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
-  return luminance > 0.45 ? "#102125" : "#08110f";
 }
 
 export function AppProvider({
@@ -208,30 +192,45 @@ export function AppProvider({
 
   /* The accent is a CSS variable override rather than a class per colour: the
    * token set already reads `--accent` everywhere, so one property recolours
-   * buttons, chips, focus rings and charts together. Clearing it removes the
-   * override and the theme's own accent comes back. */
+   * buttons, chips, focus rings and charts together. The reader's exact hex is
+   * adapted to the active theme so it stays readable as text and as a ring;
+   * clearing it removes the overrides and the theme's own accent comes back. */
   useEffect(() => {
     const root = document.documentElement;
-    if (appearance?.accent) {
-      root.style.setProperty("--accent", appearance.accent);
-      root.style.setProperty(
-        "--accent-soft",
-        `color-mix(in srgb, ${appearance.accent} 15%, transparent)`,
-      );
-      root.style.setProperty("--accent-strong", appearance.accent);
-    } else {
-      root.style.removeProperty("--accent");
-      root.style.removeProperty("--accent-soft");
-      root.style.removeProperty("--accent-strong");
-    }
-    // `--on-accent` is the text colour on top of the accent; a light accent needs
-    // dark text and a dark accent needs light text, which luminance decides.
-    if (appearance?.accent) {
-      root.style.setProperty("--on-accent", readableOn(appearance.accent));
-    } else {
-      root.style.removeProperty("--on-accent");
-    }
-  }, [appearance?.accent]);
+    const apply = (): void => {
+      const accent = appearance?.accent
+        ? accentForTheme(appearance.accent, resolveTheme(prefs.theme))
+        : null;
+      if (accent) {
+        const on = onAccentFor(accent);
+        root.style.setProperty("--accent", accent);
+        root.style.setProperty(
+          "--accent-soft",
+          `color-mix(in srgb, ${accent} 15%, transparent)`,
+        );
+        root.style.setProperty("--accent-strong", accent);
+        root.style.setProperty("--on-accent", on);
+        root.style.setProperty("--accent-contrast", on);
+      } else {
+        for (const name of [
+          "--accent",
+          "--accent-soft",
+          "--accent-strong",
+          "--on-accent",
+          "--accent-contrast",
+        ]) {
+          root.style.removeProperty(name);
+        }
+      }
+    };
+    apply();
+    // A system theme switch flips the surface the accent must read against, so
+    // re-adapt it live rather than waiting for the next prefs change.
+    if (prefs.theme !== "system" || !window.matchMedia) return;
+    const query = window.matchMedia("(prefers-color-scheme: light)");
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, [appearance?.accent, prefs.theme]);
 
   /* Ask GitHub once per launch; the answer is cached for six hours server-side,
    * so this is one request a day in practice. A failure is silent on purpose: a

@@ -12,6 +12,7 @@ pub mod clock;
 pub mod companion;
 pub mod emulator;
 pub mod ids;
+pub mod journal;
 pub mod library;
 pub mod locale_emulator;
 pub mod migration;

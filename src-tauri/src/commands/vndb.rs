@@ -1167,15 +1167,42 @@ pub async fn vndb_screenshot_fetch(
     vn_id: String,
     image_id: String,
 ) -> CommandResult<ScreenshotView> {
+    screenshot_view(&state, &vn_id, &image_id, ShotSize::Full).await
+}
+
+/// One screenshot at tile size, for a surface that is not the lightbox.
+///
+/// The journal pins a screenshot to a checkpoint and paints it at card width. Asking
+/// `vndb_screenshot_fetch` for that would ship the 1920 px copy for a 320 px slot, so
+/// this is the same resolution path with the tile group of files.
+///
+/// # Errors
+/// `not_found` when the image was never cached and is not in the VN's list.
+#[tauri::command]
+pub async fn vndb_screenshot_tile(
+    state: State<'_, AppState>,
+    vn_id: String,
+    image_id: String,
+) -> CommandResult<ScreenshotView> {
+    screenshot_view(&state, &vn_id, &image_id, ShotSize::Tile).await
+}
+
+/// Resolve one screenshot, caching it first when it is not on disk.
+async fn screenshot_view(
+    state: &AppState,
+    vn_id: &str,
+    image_id: &str,
+    size: ShotSize,
+) -> CommandResult<ScreenshotView> {
     let pool = state.db().pool();
     let prefs = queries::load_prefs(pool).await?;
     let policy = BlurPolicy::from_pref(&prefs.nsfw);
 
-    if let Some(row) = cache::get_screenshots(pool, &vn_id)
+    if let Some(row) = cache::get_screenshots(pool, vn_id)
         .await?
         .into_iter()
         .find(|row| row.image_id == image_id)
-        && let Some(view) = view_for(&row, ShotSize::Full).await
+        && let Some(view) = view_for(&row, size).await
     {
         return Ok(view);
     }
@@ -1184,7 +1211,7 @@ pub async fn vndb_screenshot_fetch(
     let entry: Option<crate::vndb::dto::Image> = {
         let row: Option<(String,)> =
             sqlx::query_as("SELECT screenshots_json FROM vndb_details WHERE vn_id = ?")
-                .bind(&vn_id)
+                .bind(vn_id)
                 .fetch_optional(pool)
                 .await
                 .map_err(crate::db::DbError::from)?;
@@ -1192,7 +1219,7 @@ pub async fn vndb_screenshot_fetch(
             .and_then(|images| {
                 images
                     .into_iter()
-                    .find(|image| image.id.as_deref() == Some(image_id.as_str()))
+                    .find(|image| image.id.as_deref() == Some(image_id))
             })
     };
     let Some(entry) = entry else {
@@ -1204,10 +1231,10 @@ pub async fn vndb_screenshot_fetch(
 
     let store = ScreenshotStore::new(state.data_dir());
     let cached = screenshots::cache_all(
-        &client(&state),
+        &state.vndb().clone(),
         pool,
         &store,
-        &vn_id,
+        vn_id,
         std::slice::from_ref(&entry),
         policy,
         now()?,
@@ -1219,7 +1246,7 @@ pub async fn vndb_screenshot_fetch(
         .into_iter()
         .next()
         .ok_or_else(|| CommandError::new("not_found", "that screenshot could not be fetched"))?;
-    view_for(&row, ShotSize::Full)
+    view_for(&row, size)
         .await
         .ok_or_else(|| CommandError::new("image", "that screenshot has no cached file"))
 }

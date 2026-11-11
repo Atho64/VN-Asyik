@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
+import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
 import { Card, CardHeader } from "@/components/Card";
 import { Icon } from "@/components/Icon";
 import { Sheet } from "@/components/Sheet";
-import { IpcError } from "@/lib/ipc/client";
+import { JournalPhoto } from "@/features/game/JournalPhoto";
+import { JournalPhotoPicker } from "@/features/game/JournalPhotoPicker";
+import { api, IpcError } from "@/lib/ipc/client";
 import {
   readingApi,
   type ReadingContext,
@@ -17,6 +20,13 @@ import { formatDateTime, formatDurationLong } from "@/lib/time";
 
 interface ReadingCardProps {
   gameId: string;
+  /**
+   * The game's VNDB id, when it has one. A pinned photo is a VNDB screenshot, so
+   * without a VN there is nothing to pin and the picker says so.
+   */
+  vnId: string | null;
+  /** Game title, used by the photo picker and the export document. */
+  title: string;
   onWalkthrough: () => void;
   /** Also refresh after Android has reconciled its foreground events. */
   sessionVersion?: number | undefined;
@@ -29,6 +39,8 @@ const noop = () => undefined;
 
 export function ReadingCard({
   gameId,
+  vnId,
+  title,
   onWalkthrough,
   sessionVersion,
   selectedSessionId = null,
@@ -36,6 +48,7 @@ export function ReadingCard({
   onEntriesChange = noop,
 }: ReadingCardProps) {
   const { t, locale } = useI18n();
+  const pushToast = useAppStore((state) => state.pushToast);
   const fieldId = useId();
   const [data, setData] = useState<ReadingContext | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +65,9 @@ export function ReadingCard({
   const [sessionLoading, setSessionLoading] = useState(false);
   const [failedSessionId, setFailedSessionId] = useState<string | null>(null);
   const [draftPlayedAt, setDraftPlayedAt] = useState<number | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const sessionRequest = useRef(0);
 
   const loadSession = useCallback(
@@ -199,7 +215,33 @@ export function ReadingCard({
       save_slot: entry?.save_slot ?? "",
       route_name: entry?.route_name ?? target?.routeName ?? "",
       chapter_name: entry?.chapter_name ?? target?.chapterName ?? "",
+      photo_image_id: entry?.photo_image_id ?? "",
     });
+  };
+
+  const exportJournal = async (format: "markdown" | "html") => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const outcome = await api.journalExport(gameId, format);
+      if (outcome.saved) {
+        pushToast(
+          "success",
+          t("reading.exportDone", {
+            filename: outcome.filename,
+            count: outcome.entries,
+          }),
+        );
+        setExportOpen(false);
+      }
+    } catch (caught) {
+      pushToast(
+        "error",
+        caught instanceof IpcError ? caught.message : t("reading.exportError"),
+      );
+    } finally {
+      setExporting(false);
+    }
   };
 
   const mutate = async (operation: () => Promise<unknown>) => {
@@ -238,6 +280,9 @@ export function ReadingCard({
 
   const entryBody = (entry: ReadingEntry) => (
     <>
+      {entry.photo_image_id && (
+        <JournalPhoto vnId={vnId} imageId={entry.photo_image_id} title={title} />
+      )}
       {(entry.route_name || entry.chapter_name || entry.save_slot) && (
         <dl className="reading__position">
           {entry.route_name && (
@@ -361,6 +406,13 @@ export function ReadingCard({
               <button type="button" className="reading__guide" onClick={onWalkthrough}>
                 {t("reading.guide")}
               </button>
+              <Button
+                variant="ghost"
+                onClick={() => setExportOpen(true)}
+                disabled={data.entries.length === 0}
+              >
+                {t("reading.export")}
+              </Button>
               {(data.entries.length > 1 || data.hasMore) && (
                 <Button
                   variant="ghost"
@@ -542,6 +594,47 @@ export function ReadingCard({
                 </label>
               ))}
             </div>
+            <div className="reading__photo-field">
+              <p className="field__label">{t("reading.photo")}</p>
+              {draft.photo_image_id ? (
+                <div className="reading__photo-chosen">
+                  <JournalPhoto
+                    vnId={vnId}
+                    imageId={draft.photo_image_id}
+                    title={title}
+                  />
+                  <div className="reading__photo-actions">
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => setPickerOpen(true)}
+                    >
+                      {t("reading.photoChange")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() =>
+                        setDraft((previous) =>
+                          previous ? { ...previous, photo_image_id: "" } : null,
+                        )
+                      }
+                    >
+                      {t("reading.photoRemove")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="secondary"
+                  disabled={busy || !vnId}
+                  onClick={() => setPickerOpen(true)}
+                >
+                  <Icon name="image" />
+                  {t("reading.photoPick")}
+                </Button>
+              )}
+            </div>
             <label className="field" htmlFor={`${fieldId}-note`}>
               <span className="field__label">{t("reading.note")}</span>
               <textarea
@@ -577,12 +670,13 @@ export function ReadingCard({
                 variant="primary"
                 disabled={
                   busy ||
-                  ![
-                    draft.note,
-                    draft.save_slot,
-                    draft.route_name,
-                    draft.chapter_name,
-                  ].some((text) => text.trim())
+                  !draft.photo_image_id.trim() &&
+                    ![
+                      draft.note,
+                      draft.save_slot,
+                      draft.route_name,
+                      draft.chapter_name,
+                    ].some((text) => text.trim())
                 }
               >
                 {busy ? t("reading.saving") : t("reading.save")}
@@ -590,6 +684,52 @@ export function ReadingCard({
             </div>
           </form>
         )}
+      </Sheet>
+
+      <Sheet
+        open={pickerOpen}
+        title={t("reading.photoPick")}
+        onClose={() => setPickerOpen(false)}
+        wide
+      >
+        <JournalPhotoPicker
+          vnId={vnId}
+          title={title}
+          selected={draft?.photo_image_id ?? ""}
+          onSelect={(imageId) => {
+            setDraft((previous) =>
+              previous ? { ...previous, photo_image_id: imageId } : null,
+            );
+            setPickerOpen(false);
+          }}
+        />
+      </Sheet>
+
+      <Sheet
+        open={exportOpen}
+        title={t("reading.export")}
+        onClose={() => {
+          if (!exporting) setExportOpen(false);
+        }}
+      >
+        <p className="body">{t("reading.exportHint")}</p>
+        <div className="reading__export-choices">
+          <Button
+            variant="primary"
+            disabled={exporting}
+            onClick={() => void exportJournal("markdown")}
+          >
+            {t("reading.exportMarkdown")}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={exporting}
+            onClick={() => void exportJournal("html")}
+          >
+            {t("reading.exportHtml")}
+          </Button>
+        </div>
+        <p className="caption">{t("reading.exportFormats")}</p>
       </Sheet>
 
       <Sheet open={deleting !== null} title={t("reading.remove")} onClose={closeDelete}>

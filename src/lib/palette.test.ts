@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  accentForTheme,
   clampForContrast,
   clampForContrastDark,
   contrastRatio,
@@ -10,6 +11,7 @@ import {
   hashHue,
   luminance,
   mix,
+  onAccentFor,
   toHex,
   type Rgb,
 } from "./palette";
@@ -176,5 +178,43 @@ describe("fallbackPalette", () => {
     const a = hashHue("リトルバスターズ");
     const b = hashHue("リトルバスターズ！");
     expect(a).not.toBe(b);
+  });
+});
+
+describe("theme-aware accent", () => {
+  const darkSurface: Rgb = { r: 16, g: 23, b: 25 };
+  const lightSurface: Rgb = { r: 242, g: 247, b: 245 };
+
+  it("keeps an accent that already clears AA on the dark surface", () => {
+    // The default teal reads well on dark; adapting must not shift it.
+    expect(accentForTheme("#65d8c5", "dark")).toBe("#65d8c5");
+  });
+
+  it("darkens a pale accent for the light theme until it clears AA", () => {
+    const adapted = accentForTheme("#65d8c5", "light");
+    expect(adapted).not.toBeNull();
+    const rgb = fromHex(adapted!)!;
+    expect(contrastRatio(rgb, lightSurface)).toBeGreaterThanOrEqual(4.5);
+    // It moved away from the pale original toward something readable on white.
+    expect(adapted).not.toBe("#65d8c5");
+  });
+
+  it("lightens a dark accent for the dark theme until it clears AA", () => {
+    const adapted = accentForTheme("#147363", "dark");
+    expect(adapted).not.toBeNull();
+    const rgb = fromHex(adapted!)!;
+    expect(contrastRatio(rgb, darkSurface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("returns null for an invalid hex so the theme default survives", () => {
+    expect(accentForTheme("not-a-colour", "dark")).toBeNull();
+    expect(accentForTheme("#12345", "light")).toBeNull();
+  });
+
+  it("picks light text for a dark accent and dark text for a pale one", () => {
+    // The bug this guards: a dark accent given dark label text is unreadable.
+    expect(onAccentFor("#147363")).toBe("#ffffff");
+    expect(onAccentFor("#65d8c5")).toBe("#102125");
+    expect(onAccentFor("#ffd166")).toBe("#102125");
   });
 });

@@ -95,6 +95,44 @@ export function clampForContrastDark(colour: Rgb, against: Rgb, target = 4.5): R
   return black;
 }
 
+/** The theme background an accent must stay readable against (`--bg`). */
+const THEME_SURFACE: Record<"dark" | "light", Rgb> = {
+  dark: { r: 16, g: 23, b: 25 },
+  light: { r: 242, g: 247, b: 245 },
+};
+
+/**
+ * Adapt a chosen accent to the active theme so it clears AA as text and as a
+ * focus ring. A pale accent picked for the dark theme is darkened for the light
+ * one (and vice versa) rather than pasted raw onto a surface it cannot read on.
+ * The stored choice stays the reader's exact hex; only the applied value moves.
+ * An invalid hex returns null so the caller keeps the theme's own accent.
+ */
+export function accentForTheme(hex: string, theme: "dark" | "light"): string | null {
+  const rgb = fromHex(hex);
+  if (!rgb) return null;
+  const surface = THEME_SURFACE[theme];
+  const adapted =
+    theme === "dark"
+      ? clampForContrast(rgb, surface, 4.5)
+      : clampForContrastDark(rgb, surface, 4.5);
+  return toHex(adapted);
+}
+
+/**
+ * Text colour that sits on an accent-filled control: whichever of near-black or
+ * white contrasts more with the accent. A luminance threshold that returns a
+ * dark colour on both sides of the branch leaves a dark accent with dark,
+ * unreadable label text, so this compares the two candidates directly.
+ */
+export function onAccentFor(hex: string): string {
+  const rgb = fromHex(hex);
+  if (!rgb) return "#102125";
+  const dark: Rgb = { r: 16, g: 33, b: 37 };
+  const white: Rgb = { r: 255, g: 255, b: 255 };
+  return contrastRatio(rgb, dark) >= contrastRatio(rgb, white) ? "#102125" : "#ffffff";
+}
+
 /** Stable hash so a title always yields the same fallback hue. */
 export function hashHue(text: string): number {
   let hash = 0;

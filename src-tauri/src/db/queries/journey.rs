@@ -18,8 +18,8 @@ use vn_core::ids::EntityId;
 use vn_core::model::{Game, SessionSource};
 
 use crate::commands::journey::{
-    FirstGameMoment, LongestSessionMoment, TimelineCursor, TimelineEvent, TimelinePage, YearReview,
-    YearReviewGame,
+    FirstGameMoment, LongestSessionMoment, MemoryEvent, TimelineCursor, TimelineEvent,
+    TimelinePage, YearReview, YearReviewGame,
 };
 use crate::db::models::GameRow;
 use crate::db::pool::DbError;
@@ -47,7 +47,10 @@ struct EventRow {
 
 /// Every branch already joins live `games` (orphan rule), so the ids collected
 /// from a page are all live; this loads their rows for the embedded `Game`.
-async fn games_by_ids(pool: &SqlitePool, ids: &[String]) -> Result<HashMap<String, Game>, DbError> {
+pub(crate) async fn games_by_ids(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> Result<HashMap<String, Game>, DbError> {
     let ids_json = serde_json::to_string(ids).map_err(|err| corrupt(err.to_string()))?;
     let rows: Vec<GameRow> = sqlx::query_as(
         "SELECT id, title, title_original, vndb_id, status, rating, notes, length_minutes, \
@@ -196,6 +199,103 @@ pub async fn timeline_page(
         });
     }
     Ok(TimelinePage { events, has_more })
+}
+
+/// How many memories "On this day" returns at most.
+///
+/// A card on the Stats page, not a feed: ten rows is already more than anyone
+/// reads there, and the Timeline is where the whole history lives.
+pub const ON_THIS_DAY_LIMIT: i64 = 10;
+
+/// One past moment that shares today's month and day.
+#[derive(sqlx::FromRow)]
+struct MemoryRow {
+    ts: i64,
+    event_id: String,
+    kind: String,
+    game_id: String,
+    note: Option<String>,
+    route_name: Option<String>,
+    chapter_name: Option<String>,
+    ending_name: Option<String>,
+    years_ago: i64,
+}
+
+/// Moments from earlier years that happened on today's date.
+///
+/// Two sources, both of which carry something worth re-reading: a journal
+/// checkpoint and an achieved ending. Sessions are deliberately absent — a card
+/// that resurfaces "you read for 40 minutes" says nothing, while "you wrote this"
+/// is the point of the feature.
+///
+/// The match is on the reader's local month and day (`'localtime'`, the heatmap's
+/// calendar), and today's own rows are excluded: this is a memory, not a second
+/// view of the present. `years_ago` is computed in `SQLite` from the same
+/// calendar, so a checkpoint written at 00:30 local is not credited to yesterday.
+///
+/// # Errors
+/// `db_error` when a query fails, `corrupt` for an unknown kind or a bad id.
+pub async fn on_this_day(pool: &SqlitePool) -> Result<Vec<MemoryEvent>, DbError> {
+    let rows: Vec<MemoryRow> = sqlx::query_as(
+        "SELECT ts, event_id, kind, game_id, note, route_name, chapter_name, ending_name, \
+                years_ago \
+         FROM ( \
+             SELECT e.created_at AS ts, e.id AS event_id, 'journal' AS kind, \
+                    e.game_id AS game_id, substr(e.note, 1, 241) AS note, \
+                    e.route_name AS route_name, e.chapter_name AS chapter_name, \
+                    NULL AS ending_name, \
+                    CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) \
+                      - CAST(strftime('%Y', e.created_at / 1000, 'unixepoch', 'localtime') AS INTEGER) \
+                      AS years_ago \
+             FROM reading_entries e JOIN games g ON g.id = e.game_id AND g.deleted = 0 \
+             WHERE e.deleted = 0 \
+               AND strftime('%m-%d', e.created_at / 1000, 'unixepoch', 'localtime') \
+                   = strftime('%m-%d', 'now', 'localtime') \
+               AND date(e.created_at / 1000, 'unixepoch', 'localtime') < date('now', 'localtime') \
+             UNION ALL \
+             SELECT en.achieved_at, en.id, 'ending', en.game_id, NULL, \
+                    COALESCE((SELECT r.name FROM routes r \
+                              WHERE r.id = en.route_id AND r.deleted = 0), en.route), \
+                    NULL, en.name, \
+                    CAST(strftime('%Y', 'now', 'localtime') AS INTEGER) \
+                      - CAST(strftime('%Y', en.achieved_at / 1000, 'unixepoch', 'localtime') AS INTEGER) \
+             FROM endings en JOIN games g ON g.id = en.game_id AND g.deleted = 0 \
+             WHERE en.deleted = 0 AND en.achieved = 1 AND en.achieved_at IS NOT NULL \
+               AND strftime('%m-%d', en.achieved_at / 1000, 'unixepoch', 'localtime') \
+                   = strftime('%m-%d', 'now', 'localtime') \
+               AND date(en.achieved_at / 1000, 'unixepoch', 'localtime') < date('now', 'localtime') \
+         ) \
+         ORDER BY ts DESC, event_id DESC \
+         LIMIT ?",
+    )
+    .bind(ON_THIS_DAY_LIMIT)
+    .fetch_all(pool)
+    .await?;
+
+    let game_ids: Vec<String> = rows.iter().map(|row| row.game_id.clone()).collect();
+    let games = games_by_ids(pool, &game_ids).await?;
+    let mut memories = Vec::with_capacity(rows.len());
+    for row in rows {
+        let Some(game) = games.get(&row.game_id) else {
+            continue;
+        };
+        let kind = match row.kind.as_str() {
+            "journal" | "ending" => row.kind,
+            other => return Err(corrupt(format!("unknown memory kind: {other}"))),
+        };
+        memories.push(MemoryEvent {
+            kind,
+            ts: row.ts,
+            id: row.event_id,
+            game: game.clone(),
+            note: row.note,
+            route_name: row.route_name,
+            chapter_name: row.chapter_name,
+            ending_name: row.ending_name,
+            years_ago: row.years_ago,
+        });
+    }
+    Ok(memories)
 }
 
 // The Year in Review is two aggregates: everything sessions can answer on

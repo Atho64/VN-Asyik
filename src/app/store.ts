@@ -49,6 +49,12 @@ interface AppState {
    * showed the whole collection again.
    */
   libraryBrowse: LibraryBrowse;
+  /**
+   * The timeline's journal search text. In the store for the same reason as
+   * `libraryBrowse`: the screen unmounts on navigation, and a reader who opens a
+   * result and comes back must find their search, not an empty box.
+   */
+  timelineQuery: string;
   toasts: Toast[];
   paletteOpen: boolean;
   /**
@@ -78,6 +84,7 @@ interface AppState {
   setLibraryError: (message: string | null) => void;
   /** Merge a change into the library browsing state. */
   updateLibraryBrowse: (patch: Partial<LibraryBrowse>) => void;
+  setTimelineQuery: (query: string) => void;
   upsertCard: (card: GameCard) => void;
   removeCard: (id: string) => void;
   pushToast: (kind: ToastKind, message: string) => void;
@@ -116,6 +123,7 @@ export const useAppStore = create<AppState>((set) => ({
   libraryLoaded: false,
   libraryError: null,
   libraryBrowse: initialLibraryBrowse,
+  timelineQuery: "",
   toasts: [],
   paletteOpen: false,
   refreshingVndb: [],
@@ -133,6 +141,7 @@ export const useAppStore = create<AppState>((set) => ({
   setLibraryError: (libraryError) => set({ libraryError, libraryLoaded: true }),
   updateLibraryBrowse: (patch) =>
     set((state) => ({ libraryBrowse: { ...state.libraryBrowse, ...patch } })),
+  setTimelineQuery: (timelineQuery) => set({ timelineQuery }),
   upsertCard: (card) =>
     set((state) => {
       const index = state.cards.findIndex(

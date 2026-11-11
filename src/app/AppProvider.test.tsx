@@ -71,6 +71,7 @@ beforeEach(() => {
     cards: [],
     libraryLoaded: false,
     libraryError: null,
+    appearance: null,
     prefs: {
       theme: "dark",
       language: "en",
@@ -175,4 +176,39 @@ describe("content policy revokes artwork", () => {
       expect(result.container.querySelector(".backdrop__fallback")).toBeInTheDocument();
     },
   );
+});
+
+describe("custom accent", () => {
+  const appearance = {
+    accent: "#147363",
+    background: null,
+    backgroundName: null,
+    backgroundDim: 0.45,
+  };
+
+  it("applies a theme-adapted accent with readable label text", async () => {
+    renderApp();
+    await screen.findByText("Library ready");
+    // Set after boot: the boot pass loads the stored appearance (null here) and
+    // would otherwise overwrite a value planted before mount.
+    act(() => useAppStore.getState().setAppearance(appearance));
+    const root = document.documentElement;
+    // A dark accent on the dark theme is lightened until it reads, and the label
+    // colour is set on both tokens that paint text over an accent fill.
+    expect(root.style.getPropertyValue("--accent")).not.toBe("");
+    expect(root.style.getPropertyValue("--accent")).not.toBe("#147363");
+    expect(root.style.getPropertyValue("--on-accent")).not.toBe("");
+    expect(root.style.getPropertyValue("--accent-contrast")).not.toBe("");
+  });
+
+  it("removes every override when the accent is cleared", async () => {
+    renderApp();
+    await screen.findByText("Library ready");
+    act(() => useAppStore.getState().setAppearance(appearance));
+    act(() => useAppStore.getState().setAppearance({ ...appearance, accent: null }));
+    const root = document.documentElement;
+    for (const name of ["--accent", "--accent-soft", "--accent-strong", "--on-accent", "--accent-contrast"]) {
+      expect(root.style.getPropertyValue(name)).toBe("");
+    }
+  });
 });

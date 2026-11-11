@@ -102,23 +102,40 @@ describe("unified settings data tab", () => {
     expect(useAppStore.getState().toasts.at(-1)?.kind).toBe("error");
   });
 
-  it("keeps General to one shortcut and removes duplicate backup actions", async () => {
+  it("keeps backup actions in the tab only, with no duplicate shortcut in General", async () => {
     renderSettings();
     const tabs = screen.getByRole("tablist");
     expect(
       within(tabs).getAllByRole("button", { name: "Backup & transfer" }),
     ).toHaveLength(1);
+    // The tab is the only way in: no shortcut row duplicating it in General.
+    expect(screen.getAllByRole("button", { name: "Backup & transfer" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Export backup" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Import backup" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Export file" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Backup & transfer" })).toHaveLength(2);
     await userEvent.click(
-      screen.getAllByRole("button", { name: "Backup & transfer" })[1]!,
+      within(tabs).getByRole("button", { name: "Backup & transfer" }),
     );
     expect(screen.getAllByRole("button", { name: "Export file" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Import file" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Export backup" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Import backup" })).toBeNull();
+  });
+
+  it("does not duplicate the Discord page inside General settings", () => {
+    useAppStore.setState({
+      platform: {
+        ...useAppStore.getState().platform!,
+        os: "windows",
+        kind: "desktop",
+        discord_presence: "supported",
+      },
+    });
+    renderSettings();
+    // Discord has its own sidebar destination; General must not repeat it.
+    expect(
+      screen.queryByRole("heading", { name: "Discord Rich Presence" }),
+    ).toBeNull();
   });
 
   it.each(["android", "windows"] as const)(

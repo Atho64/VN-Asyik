@@ -9,6 +9,9 @@ use crate::model::SyncMeta;
 pub const MAX_NOTE_CHARS: usize = 4_000;
 pub const MAX_SLOT_CHARS: usize = 80;
 pub const MAX_POSITION_CHARS: usize = 200;
+/// Longest accepted VNDB image id. Real ids are six or seven characters
+/// (`sf83040`); the cap only bounds what arrives from sync or a hand-edited row.
+pub const MAX_PHOTO_ID_CHARS: usize = 40;
 
 /// A journal entry keeps the names the reader saw when it was written. Renaming
 /// or merging a route later must not rewrite their old reading checkpoints.
@@ -23,6 +26,15 @@ pub struct ReadingEntry {
     pub save_slot: String,
     pub route_name: String,
     pub chapter_name: String,
+    /// VNDB image id of the screenshot pinned to this checkpoint, or empty.
+    ///
+    /// Only the id travels: the bytes live in the disposable screenshot cache,
+    /// which is rebuilt from VNDB on demand. A peer that has not cached the image
+    /// yet shows the checkpoint without its photo instead of failing the row.
+    ///
+    /// Defaulted so a payload written before the column existed still decodes.
+    #[serde(default)]
+    pub photo_image_id: String,
 }
 
 impl ReadingEntry {
@@ -33,12 +45,22 @@ impl ReadingEntry {
             &self.save_slot,
             &self.route_name,
             &self.chapter_name,
+            &self.photo_image_id,
         )
     }
 }
 
-pub fn validate_text(note: &str, slot: &str, route: &str, chapter: &str) -> Result<(), String> {
-    if [note, slot, route, chapter]
+/// A checkpoint must carry *something*: text, or a pinned photo. A photo with no
+/// note is a real moment (`AGENTS.md` §5: the journal is not only prose), so the
+/// empty rule counts the photo as content rather than requiring a caption.
+pub fn validate_text(
+    note: &str,
+    slot: &str,
+    route: &str,
+    chapter: &str,
+    photo: &str,
+) -> Result<(), String> {
+    if [note, slot, route, chapter, photo]
         .iter()
         .all(|text| text.trim().is_empty())
     {
@@ -53,6 +75,24 @@ pub fn validate_text(note: &str, slot: &str, route: &str, chapter: &str) -> Resu
         if text.chars().count() > max {
             return Err(format!("{name}_too_long"));
         }
+    }
+    validate_photo_id(photo)
+}
+
+/// Reject a photo id that could not be a VNDB image id.
+///
+/// The id is written into a document the user may share, so whitespace and
+/// control characters are refused rather than escaped: a newline in an image id
+/// would break the Markdown line it is embedded in.
+fn validate_photo_id(photo: &str) -> Result<(), String> {
+    if photo.is_empty() {
+        return Ok(());
+    }
+    if photo.chars().count() > MAX_PHOTO_ID_CHARS {
+        return Err("photo_too_long".to_owned());
+    }
+    if photo.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("photo_invalid".to_owned());
     }
     Ok(())
 }
@@ -70,11 +110,23 @@ mod tests {
 
     #[test]
     fn accepts_a_manual_slot_without_requiring_a_note_or_detected_chapter() {
-        assert!(validate_text("", "12", "", "").is_ok());
-        assert!(validate_text(" \n", "", "　", "").is_err());
-        assert!(validate_text(&"あ".repeat(MAX_NOTE_CHARS), "", "", "").is_ok());
-        assert!(validate_text(&"あ".repeat(MAX_NOTE_CHARS + 1), "", "", "").is_err());
-        assert!(validate_text("ok", &"x".repeat(MAX_SLOT_CHARS + 1), "", "").is_err());
+        assert!(validate_text("", "12", "", "", "").is_ok());
+        assert!(validate_text(" \n", "", "　", "", "").is_err());
+        assert!(validate_text(&"あ".repeat(MAX_NOTE_CHARS), "", "", "", "").is_ok());
+        assert!(validate_text(&"あ".repeat(MAX_NOTE_CHARS + 1), "", "", "", "").is_err());
+        assert!(validate_text("ok", &"x".repeat(MAX_SLOT_CHARS + 1), "", "", "").is_err());
+    }
+
+    #[test]
+    fn a_pinned_photo_is_content_on_its_own() {
+        // A photo diary entry is a moment even with no caption; without this the
+        // save form would reject "I pinned a screenshot" as an empty checkpoint.
+        assert!(validate_text("", "", "", "", "sf83040").is_ok());
+        assert!(validate_text("", "", "", "", "").is_err());
+        assert!(validate_text("", "", "", "", "sf 83040").is_err());
+        assert!(validate_text("", "", "", "", "sf\n83040").is_err());
+        assert!(validate_text("", "", "", "", &"9".repeat(MAX_PHOTO_ID_CHARS)).is_ok());
+        assert!(validate_text("", "", "", "", &"9".repeat(MAX_PHOTO_ID_CHARS + 1)).is_err());
     }
 
     #[test]
@@ -90,6 +142,7 @@ mod tests {
             save_slot: "12".to_owned(),
             route_name: String::new(),
             chapter_name: String::new(),
+            photo_image_id: String::new(),
         };
         let mut peer = entry.clone();
         peer.meta.device_id_device = DeviceTag::new(&DeviceId::parse("b").unwrap());

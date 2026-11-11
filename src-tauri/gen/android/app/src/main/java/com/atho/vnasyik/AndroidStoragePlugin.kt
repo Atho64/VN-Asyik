@@ -36,6 +36,13 @@ class SecretArgs {
 class DocumentArgs {
     lateinit var filename: String
     lateinit var contents: String
+
+    /**
+     * MIME type the picker should declare. Defaults to JSON because every caller
+     * before the journal export was a backup or transfer payload; a Markdown or
+     * HTML export that declared JSON opened in nothing.
+     */
+    var mime: String = "application/json"
 }
 
 @InvokeArg
@@ -216,7 +223,7 @@ class AndroidStoragePlugin(private val activity: Activity) : Plugin(activity) {
             val args = invoke.parseArgs(DocumentArgs::class.java)
             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/json"
+                type = args.mime
                 putExtra(Intent.EXTRA_TITLE, args.filename)
             }
             startActivityForResult(invoke, intent, "saveDocumentResult")

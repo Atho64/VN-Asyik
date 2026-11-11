@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 
+import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
@@ -9,6 +10,7 @@ import { useArtwork } from "@/components/useArtwork";
 import { api } from "@/lib/ipc/client";
 import type { TimelineEvent } from "@/lib/ipc/types";
 import { formatDate, formatDurationLong } from "@/lib/time";
+import { JournalSearch } from "./JournalSearch";
 
 /** One chronological day of the journey, events newest first inside it. */
 interface TimelineDay {
@@ -140,13 +142,21 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
  */
 export function TimelineScreen() {
   const { t, locale } = useI18n();
+  const query = useAppStore((state) => state.timelineQuery);
+  const setQuery = useAppStore((state) => state.setTimelineQuery);
+  const searching = query.trim().length > 0;
   const [events, setEvents] = useState<TimelineEvent[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   // The first fetch starts in the mount effect below, so the page opens busy.
   const [busy, setBusy] = useState(true);
   const [failed, setFailed] = useState(false);
 
+  // The feed loads whenever no search is on screen. The cancelled flag (not a
+  // ref) makes this safe under StrictMode's mount-cleanup-mount: a ref guard
+  // would mark the feed "requested" on the first pass, cancel that fetch in
+  // cleanup, then skip the second pass — leaving the page stuck on skeletons.
   useEffect(() => {
+    if (searching) return;
     let cancelled = false;
     api
       .timelinePage()
@@ -164,7 +174,7 @@ export function TimelineScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [searching]);
 
   const loadOlder = () => {
     const last = events?.at(-1);
@@ -207,69 +217,82 @@ export function TimelineScreen() {
     [events, locale],
   );
 
-  if (failed && events === null) {
-    return (
-      <div className="stats-page">
-        <header className="page-head">
-          <h1 className="page-title">{t("timeline.title")}</h1>
-        </header>
+  const feed = (() => {
+    if (failed && events === null) {
+      return (
         <EmptyState
           title={t("timeline.errorTitle")}
           body={t("common.error")}
           action={<Button onClick={retry}>{t("common.retry")}</Button>}
         />
-      </div>
-    );
-  }
-
-  if (events === null) {
+      );
+    }
+    if (events === null) {
+      return (
+        <div aria-busy="true" aria-label={t("timeline.loading")}>
+          <div
+            className="skeleton"
+            style={{ height: 72, width: "40%", marginBottom: 24 }}
+          />
+          <div className="skeleton" style={{ height: 160 }} />
+        </div>
+      );
+    }
+    if (days.length === 0) {
+      return <EmptyState title={t("timeline.emptyTitle")} body={t("timeline.emptyBody")} />;
+    }
     return (
-      <div aria-busy="true" aria-label={t("timeline.loading")}>
-        <div
-          className="skeleton"
-          style={{ height: 72, width: "40%", marginBottom: 24 }}
-        />
-        <div className="skeleton" style={{ height: 160 }} />
+      <div className="timeline">
+        {days.map((day) => (
+          <section key={day.key} className="timeline__day">
+            <h2 className="timeline__day-head">{day.label}</h2>
+            <ul className="timeline__list">
+              {day.events.map((event) => (
+                <TimelineRow key={`${event.kind}:${event.id}`} event={event} />
+              ))}
+            </ul>
+          </section>
+        ))}
+        {failed ? (
+          <div className="reading__error">
+            <p className="notice notice--danger" role="alert">
+              {t("timeline.errorTitle")}
+            </p>
+            <Button onClick={retry}>{t("common.retry")}</Button>
+          </div>
+        ) : null}
+        {hasMore ? (
+          <div className="timeline__pages">
+            <Button disabled={busy} onClick={loadOlder}>
+              {t("timeline.loadOlder")}
+            </Button>
+          </div>
+        ) : null}
       </div>
     );
-  }
+  })();
 
   return (
     <div className="stats-page">
       <header className="page-head">
         <h1 className="page-title">{t("timeline.title")}</h1>
       </header>
-      {days.length === 0 ? (
-        <EmptyState title={t("timeline.emptyTitle")} body={t("timeline.emptyBody")} />
-      ) : (
-        <div className="timeline">
-          {days.map((day) => (
-            <section key={day.key} className="timeline__day">
-              <h2 className="timeline__day-head">{day.label}</h2>
-              <ul className="timeline__list">
-                {day.events.map((event) => (
-                  <TimelineRow key={`${event.kind}:${event.id}`} event={event} />
-                ))}
-              </ul>
-            </section>
-          ))}
-          {failed ? (
-            <div className="reading__error">
-              <p className="notice notice--danger" role="alert">
-                {t("timeline.errorTitle")}
-              </p>
-              <Button onClick={retry}>{t("common.retry")}</Button>
-            </div>
-          ) : null}
-          {hasMore ? (
-            <div className="timeline__pages">
-              <Button disabled={busy} onClick={loadOlder}>
-                {t("timeline.loadOlder")}
-              </Button>
-            </div>
-          ) : null}
+      <div className="timeline__search">
+        <div className="search">
+          <span className="search__icon">
+            <Icon name="search" />
+          </span>
+          <input
+            className="input"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("timeline.searchPlaceholder")}
+            aria-label={t("timeline.searchLabel")}
+          />
         </div>
-      )}
+      </div>
+      {searching ? <JournalSearch query={query.trim()} /> : feed}
     </div>
   );
 }

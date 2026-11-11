@@ -179,10 +179,31 @@ pub fn resolve_document_uri(uri: &str) -> Result<ResolvedDocument, String> {
     })
 }
 
+/// Save a JSON document through the platform picker.
+///
+/// Every caller of this is a backup, transfer or sync payload, so the filter and
+/// MIME type are fixed. A readable export (the journal) uses
+/// [`save_document_as`] instead of widening this one.
 pub async fn save_document(
     app: tauri::AppHandle,
     filename: String,
     contents: String,
+) -> CommandResult<bool> {
+    save_document_as(app, filename, contents, "application/json", "json").await
+}
+
+/// Save a document of any text format through the platform picker.
+///
+/// The MIME type matters on Android: the picker decides the file's type from it,
+/// and a Markdown journal saved as `application/json` opens in nothing. On desktop
+/// it becomes the dialog's extension filter, so the file the user writes keeps the
+/// extension the app promised.
+pub async fn save_document_as(
+    app: tauri::AppHandle,
+    filename: String,
+    contents: String,
+    mime: &'static str,
+    extension: &'static str,
 ) -> CommandResult<bool> {
     if contents.len() as u64 > MAX_DOCUMENT_BYTES {
         return Err(CommandError::new(
@@ -190,7 +211,7 @@ pub async fn save_document(
             "Document exceeds 64 MiB",
         ));
     }
-    tauri::async_runtime::spawn_blocking(move || save(&app, &filename, &contents))
+    tauri::async_runtime::spawn_blocking(move || save(&app, &filename, &contents, mime, extension))
         .await
         .map_err(|err| CommandError::new("document", err.to_string()))?
 }
@@ -202,26 +223,38 @@ pub async fn open_document(app: tauri::AppHandle) -> CommandResult<Option<String
 }
 
 #[cfg(target_os = "android")]
-fn save(_app: &tauri::AppHandle, filename: &str, contents: &str) -> CommandResult<bool> {
+fn save(
+    _app: &tauri::AppHandle,
+    filename: &str,
+    contents: &str,
+    mime: &str,
+    _extension: &str,
+) -> CommandResult<bool> {
     #[derive(serde::Deserialize)]
     struct Reply {
         saved: bool,
     }
     mobile::call::<Reply>(
         "saveDocument",
-        serde_json::json!({"filename": filename, "contents": contents}),
+        serde_json::json!({"filename": filename, "contents": contents, "mime": mime}),
     )
     .map(|reply| reply.saved)
     .map_err(|err| CommandError::new("document", err))
 }
 
 #[cfg(not(target_os = "android"))]
-fn save(app: &tauri::AppHandle, filename: &str, contents: &str) -> CommandResult<bool> {
+fn save(
+    app: &tauri::AppHandle,
+    filename: &str,
+    contents: &str,
+    _mime: &str,
+    extension: &str,
+) -> CommandResult<bool> {
     use tauri_plugin_dialog::DialogExt;
     let Some(file) = app
         .dialog()
         .file()
-        .add_filter("VN Asyik", &["json"])
+        .add_filter("VN Asyik", &[extension])
         .set_file_name(filename)
         .blocking_save_file()
     else {

@@ -12,14 +12,14 @@
 /* library */
 
 /* Accent choices: swatches wrap like chips, and the native colour input is sized
- * to something a finger can hit. */
+ * to something a finger can hit. The control sits under its label (the row is
+ * stacked), so it spans the full width and starts at the left edge. */
 .appearance__accents {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-2);
-  max-width: 26rem;
 }
 
 .appearance__swatch {
@@ -44,6 +44,14 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
   background: none;
+}
+
+/* The exact chosen hex, so a custom colour can be noted and shared. */
+.appearance__hex {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
 }
 
 /* One line above the library toolbar, only while a newer build exists. Deliberately
@@ -941,6 +949,14 @@
 /* Panels inside a settings group line up with the group's own rows. */
 .settings__group > .card {
   margin-bottom: var(--space-4);
+}
+
+/* The three settings tabs wrap on a narrow phone rather than overflowing. */
+.settings__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .settings__group {
@@ -2041,6 +2057,15 @@
  * token row carries a hint and three controls on mobile. */
 .settings__row--top {
   align-items: flex-start;
+}
+
+/* A row whose control is too wide to share a line with its label (the accent
+ * swatches). Stacking keeps the label from being squeezed into a narrow column
+ * that wraps its hint one word per line. */
+.settings__row--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
 }
 
 .presence-status {

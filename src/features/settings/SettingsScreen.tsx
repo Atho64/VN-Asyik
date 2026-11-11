@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
 
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
-import { Card, CardHeader } from "@/components/Card";
 import { Chip } from "@/components/Chip";
 import { Icon } from "@/components/Icon";
 import { AppearancePanel } from "@/features/settings/AppearancePanel";
@@ -73,8 +71,6 @@ export default function SettingsScreen({
   };
 
   const isWindows = platform?.os === "windows";
-  const canUsePresence =
-    isWindows || platform?.os === "android" || platform?.discord_presence === "supported";
 
   return (
     <div className="settings">
@@ -83,22 +79,13 @@ export default function SettingsScreen({
         <p className="page-sub">{t("app.name")}</p>
       </header>
 
-      <div
-        role="tablist"
-        aria-label={t("nav.settings")}
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "var(--space-2)",
-          marginBottom: "var(--space-2)",
-        }}
-      >
+      <div role="tablist" aria-label={t("nav.settings")} className="settings__tabs">
         <Chip selected={tab === "general"} onClick={() => setTab("general")}>
           <Icon name="settings" size={14} />
           {t("settings.tabGeneral")}
         </Chip>
         <Chip selected={tab === "vndb"} onClick={() => setTab("vndb")}>
-          <Icon name="clock" size={14} />
+          <Icon name="sync" size={14} />
           {t("settings.tabVndb")}
         </Chip>
         <Chip selected={tab === "transfer"} onClick={() => setTab("transfer")}>
@@ -207,23 +194,7 @@ export default function SettingsScreen({
               </div>
             </div>
 
-            <div className="settings__row">
-              <span className="settings__label">{t("settings.language")}</span>
-              <div className="settings__control">
-                <Chip
-                  selected={prefs.language === "en"}
-                  onClick={() => void apply(() => api.setLanguage("en"))}
-                >
-                  English
-                </Chip>
-                <Chip
-                  selected={prefs.language === "id"}
-                  onClick={() => void apply(() => api.setLanguage("id"))}
-                >
-                  Indonesia
-                </Chip>
-              </div>
-            </div>
+            <AppearancePanel />
           </section>
 
           <section className="settings__group">
@@ -322,54 +293,31 @@ export default function SettingsScreen({
           ) : null}
 
           <section className="settings__group">
-            <h2 className="settings__group-title">{t("appearance.group")}</h2>
-            <AppearancePanel />
-          </section>
-
-          <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.updates")}</h2>
             <UpdatePanel />
           </section>
 
           <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.languageTools")}</h2>
+            <div className="settings__row">
+              <span className="settings__label">{t("settings.language")}</span>
+              <div className="settings__control">
+                <Chip
+                  selected={prefs.language === "en"}
+                  onClick={() => void apply(() => api.setLanguage("en"))}
+                >
+                  English
+                </Chip>
+                <Chip
+                  selected={prefs.language === "id"}
+                  onClick={() => void apply(() => api.setLanguage("id"))}
+                >
+                  Indonesia
+                </Chip>
+              </div>
+            </div>
             {isWindows ? <LocalePanel /> : null}
             {isWindows ? <TitleParsingPanel /> : null}
-            {/* The panel outgrew this screen: preview, image host, templates and a
-                rotation list. It has its own page now, and this is the way in. */}
-            {canUsePresence ? (
-              <Card>
-                <CardHeader
-                  title={t("settings.presence")}
-                  aside={
-                    <Link className="btn btn--secondary" to="/presence">
-                      {t("common.open")}
-                    </Link>
-                  }
-                />
-                <p className="card__intro">{t("settings.presenceHint")}</p>
-              </Card>
-            ) : null}
-          </section>
-
-          {syncSettings ? (
-            <VndbSyncPreferences
-              syncSettings={syncSettings}
-              setSyncSettings={setSyncSettings}
-            />
-          ) : null}
-
-          <section className="settings__group">
-            <h2 className="settings__group-title">{t("settings.data")}</h2>
-            <p className="settings__hint">{t("settings.backupHint")}</p>
-            <div className="settings__backup-actions">
-              <Button variant="ghost" onClick={() => setTab("transfer")}>
-                {t("settings.tabTransfer")}
-              </Button>
-              <Button variant="ghost" onClick={() => setTab("vndb")}>
-                {t("settings.tabVndb")}
-              </Button>
-            </div>
           </section>
 
           <section className="settings__group">

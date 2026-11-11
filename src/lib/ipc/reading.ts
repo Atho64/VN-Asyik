@@ -1,6 +1,7 @@
 /** Reading checkpoints and their validated Rust boundary. */
 import { z } from "zod";
 import { call } from "./client";
+import { gameSchema } from "./types";
 
 export const readingEntrySchema = z.object({
   meta: z.object({
@@ -17,6 +18,13 @@ export const readingEntrySchema = z.object({
   save_slot: z.string(),
   route_name: z.string(),
   chapter_name: z.string(),
+  /**
+   * VNDB image id of the screenshot pinned to this checkpoint, or empty.
+   *
+   * Defaulted, not required: a payload written before the column existed has no
+   * field, and a missing photo is exactly what that means.
+   */
+  photo_image_id: z.string().default(""),
 });
 export type ReadingEntry = z.infer<typeof readingEntrySchema>;
 
@@ -54,7 +62,22 @@ export interface SaveReadingInput {
   save_slot: string;
   route_name: string;
   chapter_name: string;
+  /** VNDB image id of a pinned screenshot, or empty for a text-only checkpoint. */
+  photo_image_id: string;
 }
+
+/** One search hit: the checkpoint and its live parent game, for the row's cover. */
+export const journalSearchResultSchema = z.object({
+  entry: readingEntrySchema,
+  game: gameSchema,
+});
+export type JournalSearchResult = z.infer<typeof journalSearchResultSchema>;
+
+export const journalSearchPageSchema = z.object({
+  results: journalSearchResultSchema.array(),
+  hasMore: z.boolean(),
+});
+export type JournalSearchPage = z.infer<typeof journalSearchPageSchema>;
 
 export const readingApi = {
   session: (gameId: string, sessionId: string, offset = 0) =>
@@ -72,4 +95,13 @@ export const readingApi = {
       id: entry.meta.id,
       expectedUpdatedAt: entry.meta.updated_at,
     }),
+  /**
+   * Search checkpoints across the library, or within one game, newest first.
+   *
+   * An empty query returns an empty page: clearing the box returns to the feed
+   * without a failure flash. Pages walk the same `(ts, id)` cursor the timeline
+   * uses, so results arriving mid-read never shift the older ones.
+   */
+  search: (query: string, gameId?: string, before?: { ts: number; id: string }) =>
+    call("journal_search", journalSearchPageSchema, { query, gameId, before }),
 };

@@ -22,6 +22,8 @@ import {
   applyResultSchema,
   timelinePageSchema,
   yearReviewSchema,
+  memoryEventSchema,
+  journalExportOutcomeSchema,
   chapterSchema,
   chapterCapabilityViewSchema,
   routeViewSchema,
@@ -134,6 +136,8 @@ import {
   type StatusBreakdown,
   type TimelinePage,
   type YearReview,
+  type MemoryEvent,
+  type JournalExportOutcome,
   presenceActivitySchema,
   presenceSettingsSchema,
   presenceStatusSchema,
@@ -242,6 +246,20 @@ export interface Api {
   timelinePage(before?: { ts: number; id: string }): Promise<TimelinePage>;
   /** Yearly aggregates for the review card on the Stats page. */
   yearReview(year: number): Promise<YearReview>;
+  /**
+   * Moments from earlier years that share today's month and day.
+   *
+   * Empty is a normal answer, not an error: most days have no anniversary, and
+   * the card that shows this is hidden rather than rendered as "nothing".
+   */
+  onThisDay(): Promise<MemoryEvent[]>;
+  /**
+   * Write one game's journal as a readable Markdown or HTML document.
+   *
+   * Distinct from the library export, which carries sync rows so another device
+   * can restore them. This is the same journal as prose a person can keep.
+   */
+  journalExport(gameId: string, format: "markdown" | "html"): Promise<JournalExportOutcome>;
   listEndings(gameId: string): Promise<Ending[]>;
   gameRoutes(gameId: string): Promise<RouteView[]>;
   createRoute(gameId: string, name: string): Promise<string>;
@@ -289,6 +307,13 @@ export interface Api {
   vndbScreenshots(vnId: string): Promise<ScreenshotGallery>;
   /** One screenshot at full cached size, for the lightbox. */
   vndbScreenshotFetch(vnId: string, imageId: string): Promise<ScreenshotView>;
+  /**
+   * One screenshot at tile size, for a surface that is not the lightbox.
+   *
+   * A journal card paints at ~320 px; asking for the full copy would ship a
+   * 1920 px image into a slot a sixth of that.
+   */
+  vndbScreenshotTile(vnId: string, imageId: string): Promise<ScreenshotView>;
   setGameAccent(id: string, accent: string): Promise<Game>;
   vndbStatus(): Promise<VndbStatus>;
   vndbConnect(token: string): Promise<VndbAccount>;
@@ -551,6 +576,11 @@ export const api: Api = {
       },
     }),
   statusBreakdown: () => call("status_breakdown", statusBreakdownSchema),
+  /** Moments from earlier years that share today's month and day. */
+  onThisDay: () => call("on_this_day", memoryEventSchema.array()),
+  /** Write one game's journal as a readable Markdown or HTML document. */
+  journalExport: (gameId, format) =>
+    call("journal_export_file", journalExportOutcomeSchema, { gameId, format }),
   playtimeTotals: () => call("playtime_totals", z.tuple([z.number(), z.number()])),
   playtimeByDay: () =>
     call("playtime_by_day", z.array(z.tuple([z.number(), z.number()]))),
@@ -583,6 +613,9 @@ export const api: Api = {
   vndbScreenshots: (vnId) => call("vndb_screenshots", screenshotGallerySchema, { vnId }),
   vndbScreenshotFetch: (vnId, imageId) =>
     call("vndb_screenshot_fetch", screenshotViewSchema, { vnId, imageId }),
+  /** One screenshot at tile size, for a surface that is not the lightbox. */
+  vndbScreenshotTile: (vnId, imageId) =>
+    call("vndb_screenshot_tile", screenshotViewSchema, { vnId, imageId }),
   setGameAccent: (id, accent) => call("set_game_accent", gameSchema, { id, accent }),
   vndbStatus: () => call("vndb_status", vndbStatusSchema),
   vndbConnect: (token) => call("vndb_connect", vndbAccountSchema, { token }),

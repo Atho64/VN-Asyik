@@ -69,6 +69,39 @@ pub async fn timeline_page(
     Ok(crate::db::queries::journey::timeline_page(state.db().pool(), before).await?)
 }
 
+/// One past moment that shares today's month and day.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryEvent {
+    /// `"journal" | "ending"`.
+    pub kind: String,
+    /// Event timestamp, UTC ms.
+    pub ts: i64,
+    /// Row id of the event.
+    pub id: String,
+    /// The live game the moment belongs to.
+    pub game: Game,
+    /// Journal field: the note, capped at 240 chars + ellipsis.
+    pub note: Option<String>,
+    /// Journal/ending field: route label, historical snapshot text.
+    pub route_name: Option<String>,
+    /// Journal field: chapter label snapshot.
+    pub chapter_name: Option<String>,
+    /// Ending field: the ending's name.
+    pub ending_name: Option<String>,
+    /// Whole calendar years between the moment and today, at least 1.
+    pub years_ago: i64,
+}
+
+/// Moments from earlier years that happened on today's date.
+///
+/// Empty is a normal answer, not an error: most days have no anniversary, and the
+/// card that shows this is hidden rather than rendered as "nothing happened".
+#[tauri::command]
+pub async fn on_this_day(state: State<'_, AppState>) -> CommandResult<Vec<MemoryEvent>> {
+    Ok(crate::db::queries::journey::on_this_day(state.db().pool()).await?)
+}
+
 /// One game inside a Year in Review's top list.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
