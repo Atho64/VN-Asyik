@@ -441,7 +441,9 @@ impl Capture {
                         row_bytes,
                     )
                 };
-                for pixel in row.chunks_exact(4) {
+                // `as_chunks` proves the four-byte pixel width to the compiler,
+                // so the indexing below cannot be out of range.
+                for pixel in row.as_chunks::<4>().0 {
                     rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], 255]);
                 }
             }

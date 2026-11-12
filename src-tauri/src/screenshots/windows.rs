@@ -76,7 +76,9 @@ mod tests {
         // must not pass as a successful one.
         let lit = frame
             .rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|px| px[0] > 8 || px[1] > 8 || px[2] > 8);
         assert!(lit, "the captured frame is blank");
     }
