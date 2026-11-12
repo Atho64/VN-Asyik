@@ -5,6 +5,7 @@ import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Backdrop, focusArt } from "@/components/Backdrop";
 import { updateAppearance } from "@/lib/theme";
+import { listenScreenshotShortcut } from "@/lib/ipc/screenshots";
 import { Icon, type IconName } from "@/components/Icon";
 import { Toasts } from "@/components/Toasts";
 import { ContextMenuProvider } from "@/app/ContextMenuProvider";
@@ -88,6 +89,32 @@ export function AppShell() {
       unlisten?.();
     };
   }, [navigate]);
+
+  // The global shortcut captures from Rust; this only reports what happened.
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    let disposed = false;
+    void listenScreenshotShortcut((result) => {
+
+      const { pushToast } = useAppStore.getState();
+      if (result.ok) {
+        pushToast("success", t("screenshot.captured"));
+        return;
+      }
+      const key = `screenshot.error.${result.code ?? "screenshot_failed"}`;
+      const translated = t(key);
+      pushToast("error", translated === key ? t("common.error") : translated);
+    })
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [t]);
 
   useEffect(() => {
     mainRef.current?.scrollTo?.({ top: 0 });

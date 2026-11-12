@@ -788,9 +788,13 @@ async fn companion_session_and_transcript_are_absent_from_library_exports_and_sy
     )
     .await
     .unwrap();
-    let library = crate::commands::data::collect_library_file(state.db().pool(), state.device())
-        .await
-        .unwrap();
+    let library = crate::commands::data::collect_library_file(
+        state.db().pool(),
+        state.device(),
+        state.data_dir(),
+    )
+    .await
+    .unwrap();
     let sync = crate::sync::collect_local(state.db().pool(), state.device())
         .await
         .unwrap();

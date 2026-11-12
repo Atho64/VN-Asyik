@@ -11,7 +11,19 @@ use vn_tracker_lib::commands::data::{
     LibraryFile, apply_import, apply_import_with_mode, collect_library_file, prepare_import,
 };
 use vn_tracker_lib::db::{Db, models::PrefsSnapshot, queries};
+use vn_tracker_lib::screenshots;
 use vn_tracker_lib::sync::{self, SyncPayload};
+
+/// One scratch directory for the whole file: these tests only need somewhere for
+/// screenshot bodies to land, and none of them writes one.
+fn data_dir() -> &'static std::path::Path {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = std::env::temp_dir().join(format!("vnt-import-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    })
+}
 
 fn fixture() -> BackupFile {
     let device = DeviceId::parse("source-device").unwrap();
@@ -105,6 +117,7 @@ fn library(file: &BackupFile, device: &str) -> LibraryFile {
         version: 1,
         payload: transfer(file, device),
         prefs: file.prefs.clone(),
+        screenshots: Vec::new(),
     }
 }
 
@@ -121,7 +134,7 @@ async fn unified_and_legacy_backup_default_merge_preserves_newer_data_and_prefer
         let store = ImportDraftStore::default();
         let first = preview(&store, &db, &device, &value).await;
         assert!(first.can_restore);
-        apply_import(&store, db.pool(), &device, &first.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &first.id)
             .await
             .unwrap();
         assert_eq!(queries::load_prefs(db.pool()).await.unwrap().theme, "dark");
@@ -130,7 +143,7 @@ async fn unified_and_legacy_backup_default_merge_preserves_newer_data_and_prefer
         newer.meta = newer.meta.touch(Timestamp::from_millis(9_000));
         queries::upsert_game(db.pool(), &newer).await.unwrap();
         let second = preview(&store, &db, &device, &value).await;
-        apply_import(&store, db.pool(), &device, &second.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &second.id)
             .await
             .unwrap();
         assert_eq!(
@@ -151,7 +164,7 @@ async fn unified_and_legacy_backup_default_merge_preserves_newer_data_and_prefer
         newer.meta = newer.meta.tombstone(Timestamp::from_millis(10_000));
         queries::upsert_game(db.pool(), &newer).await.unwrap();
         let third = preview(&store, &db, &device, &value).await;
-        apply_import(&store, db.pool(), &device, &third.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &third.id)
             .await
             .unwrap();
         assert!(
@@ -170,7 +183,7 @@ async fn unified_export_roundtrips_tombstones_preferences_and_explicit_restore()
     let file = fixture();
     let store = ImportDraftStore::default();
     let first = preview(&store, &db, &device, &file).await;
-    apply_import(&store, db.pool(), &device, &first.id)
+    apply_import(&store, db.pool(), &device, data_dir(), &first.id)
         .await
         .unwrap();
     let mut deleted = file.games[0].clone();
@@ -179,7 +192,9 @@ async fn unified_export_roundtrips_tombstones_preferences_and_explicit_restore()
     queries::set_pref(db.pool(), "theme", "light")
         .await
         .unwrap();
-    let exported = collect_library_file(db.pool(), &device).await.unwrap();
+    let exported = collect_library_file(db.pool(), &device, data_dir())
+        .await
+        .unwrap();
     let value = serde_json::to_value(&exported).unwrap();
     assert_eq!(value["format"], LIBRARY_FORMAT);
     assert_eq!(value["version"], 1);
@@ -201,6 +216,7 @@ async fn unified_export_roundtrips_tombstones_preferences_and_explicit_restore()
         &store,
         other.pool(),
         &other_device,
+        data_dir(),
         &draft.id,
         DataImportMode::Restore,
     )
@@ -238,6 +254,7 @@ async fn legacy_transfer_cannot_restore_and_never_writes_on_rejection() {
             &store,
             db.pool(),
             &device,
+            data_dir(),
             &draft.id,
             DataImportMode::Restore
         )
@@ -268,7 +285,7 @@ async fn legacy_exports_preview_without_writes_and_cancel_invalidates_tokens() {
     assert_eq!(queries::load_prefs(db.pool()).await.unwrap().theme, "dark");
     store.cancel(&first.id).unwrap();
     assert_eq!(
-        apply_import(&store, db.pool(), &device, &first.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &first.id)
             .await
             .unwrap_err()
             .code,
@@ -281,7 +298,7 @@ async fn legacy_exports_preview_without_writes_and_cancel_invalidates_tokens() {
     let third = preview(&store, &db, &device, &file).await;
     store.cancel(&second.id).unwrap(); // Old dialog cleanup cannot cancel the newer file.
     assert_eq!(
-        apply_import(&store, db.pool(), &device, &second.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &second.id)
             .await
             .unwrap_err()
             .code,
@@ -289,14 +306,14 @@ async fn legacy_exports_preview_without_writes_and_cancel_invalidates_tokens() {
     );
     assert_eq!(game_count(&db).await, 0);
     assert!(matches!(
-        apply_import(&store, db.pool(), &device, &third.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &third.id)
             .await
             .unwrap(),
         DataImportResult::Transfer { .. }
     ));
     assert_eq!(game_count(&db).await, 1);
     assert_eq!(
-        apply_import(&store, db.pool(), &device, &third.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &third.id)
             .await
             .unwrap_err()
             .code,
@@ -323,14 +340,14 @@ async fn cancelled_new_picker_or_late_old_completion_cannot_restore_old_drafts()
     assert_eq!(error.code, "stale_import");
     store.cancel(&newer).unwrap();
     assert_eq!(
-        apply_import(&store, db.pool(), &device, &old.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &old.id)
             .await
             .unwrap_err()
             .code,
         "stale_import"
     );
     assert_eq!(
-        apply_import(&store, db.pool(), &device, &newer)
+        apply_import(&store, db.pool(), &device, data_dir(), &newer)
             .await
             .unwrap_err()
             .code,
@@ -349,6 +366,7 @@ async fn explicit_backup_restore_keeps_overwrite_semantics_and_sessions_append_o
         &store,
         db.pool(),
         &device,
+        data_dir(),
         &first.id,
         DataImportMode::Restore,
     )
@@ -377,6 +395,7 @@ async fn explicit_backup_restore_keeps_overwrite_semantics_and_sessions_append_o
         &store,
         db.pool(),
         &device,
+        data_dir(),
         &second.id,
         DataImportMode::Restore,
     )
@@ -416,7 +435,7 @@ async fn transfer_keeps_newer_edits_tombstones_prefs_and_conflict_logging() {
     let mut payload = transfer(&file, "source-device");
     let store = ImportDraftStore::default();
     let first = preview(&store, &db, &device, &payload).await;
-    let result = apply_import(&store, db.pool(), &device, &first.id)
+    let result = apply_import(&store, db.pool(), &device, data_dir(), &first.id)
         .await
         .unwrap();
     assert_eq!(serde_json::to_value(&result).unwrap()["kind"], "transfer");
@@ -431,7 +450,7 @@ async fn transfer_keeps_newer_edits_tombstones_prefs_and_conflict_logging() {
     queries::upsert_game(db.pool(), &newer).await.unwrap();
     payload.sessions[0].counted_ms = 10;
     let second = preview(&store, &db, &device, &payload).await;
-    apply_import(&store, db.pool(), &device, &second.id)
+    apply_import(&store, db.pool(), &device, data_dir(), &second.id)
         .await
         .unwrap();
     assert_eq!(
@@ -459,7 +478,7 @@ async fn transfer_keeps_newer_edits_tombstones_prefs_and_conflict_logging() {
         .meta
         .tombstone(Timestamp::from_millis(10_000));
     let deleted = preview(&store, &db, &device, &payload).await;
-    apply_import(&store, db.pool(), &device, &deleted.id)
+    apply_import(&store, db.pool(), &device, data_dir(), &deleted.id)
         .await
         .unwrap();
     assert!(
@@ -469,7 +488,7 @@ async fn transfer_keeps_newer_edits_tombstones_prefs_and_conflict_logging() {
             .is_none()
     );
     let stale = preview(&store, &db, &device, &transfer(&file, "source-device")).await;
-    apply_import(&store, db.pool(), &device, &stale.id)
+    apply_import(&store, db.pool(), &device, data_dir(), &stale.id)
         .await
         .unwrap();
     assert!(
@@ -494,7 +513,7 @@ async fn same_device_manual_import_merges_and_is_duplicate_safe() {
     let draft = preview(&store, &db, &device, &file).await;
     assert!(draft.same_device);
     let DataImportResult::Transfer { outcome } =
-        apply_import(&store, db.pool(), &device, &draft.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &draft.id)
             .await
             .unwrap()
     else {
@@ -504,7 +523,7 @@ async fn same_device_manual_import_merges_and_is_duplicate_safe() {
     assert_eq!(outcome.pulled, 4);
     assert_eq!(game_count(&db).await, 1);
     let again = preview(&store, &db, &device, &file).await;
-    apply_import(&store, db.pool(), &device, &again.id)
+    apply_import(&store, db.pool(), &device, data_dir(), &again.id)
         .await
         .unwrap();
     assert_eq!(game_count(&db).await, 1);
@@ -516,7 +535,7 @@ async fn same_device_manual_import_merges_and_is_duplicate_safe() {
         1
     );
     assert_eq!(
-        apply_import(&store, db.pool(), &device, &draft.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &draft.id)
             .await
             .unwrap_err()
             .code,
@@ -598,7 +617,7 @@ async fn malformed_ambiguous_and_unsupported_files_never_publish_or_write() {
                 .is_err()
         );
         assert_eq!(
-            apply_import(&store, db.pool(), &device, &id)
+            apply_import(&store, db.pool(), &device, data_dir(), &id)
                 .await
                 .unwrap_err()
                 .code,
@@ -617,14 +636,14 @@ async fn harmless_legacy_metadata_and_existing_local_references_remain_supported
     let mut value = serde_json::to_value(&file).unwrap();
     value["description"] = json!("Extra metadata tolerated by the legacy importer");
     let first = preview(&store, &db, &device, &value).await;
-    apply_import(&store, db.pool(), &device, &first.id)
+    apply_import(&store, db.pool(), &device, data_dir(), &first.id)
         .await
         .unwrap();
     value["games"] = json!([]);
     value["chapters"] = json!([]);
     let second = preview(&store, &db, &device, &value).await;
     assert_eq!((second.games, second.chapters, second.sessions), (0, 0, 1));
-    apply_import(&store, db.pool(), &device, &second.id)
+    apply_import(&store, db.pool(), &device, data_dir(), &second.id)
         .await
         .unwrap();
     let before: Value =
@@ -645,7 +664,7 @@ async fn a_consumed_import_that_fails_storage_cannot_be_replayed() {
     sqlx::query("CREATE TRIGGER reject_import BEFORE INSERT ON games BEGIN SELECT RAISE(ABORT, 'test write failure'); END")
         .execute(db.pool()).await.unwrap();
     assert!(
-        apply_import(&store, db.pool(), &device, &draft.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &draft.id)
             .await
             .is_err()
     );
@@ -656,10 +675,90 @@ async fn a_consumed_import_that_fails_storage_cannot_be_replayed() {
         .await
         .unwrap();
     assert_eq!(
-        apply_import(&store, db.pool(), &device, &draft.id)
+        apply_import(&store, db.pool(), &device, data_dir(), &draft.id)
             .await
             .unwrap_err()
             .code,
         "stale_import"
+    );
+}
+
+/// A capture survives a library export and comes back on import.
+///
+/// The bytes are the point: a row without its picture is a broken backup, and the
+/// export is the only path that carries them at all (folder sync never does).
+#[tokio::test]
+async fn a_screenshot_travels_with_the_library_file() {
+    use vn_tracker_lib::screenshots::{ScreenshotRow, ScreenshotStore};
+
+    let (db, device) = target().await;
+    let game = Game::new(
+        &device,
+        Timestamp::from_millis(1),
+        "With art",
+        GameStatus::Playing,
+    )
+    .unwrap();
+    queries::upsert_game(db.pool(), &game).await.unwrap();
+
+    let store = ScreenshotStore::new(data_dir());
+    let shot_id = "0192f0aa-0000-7000-8000-00000000c0de";
+    let relative = store
+        .write(&game.meta.id.to_string(), shot_id, b"jpeg-bytes")
+        .await
+        .expect("write capture");
+    screenshots::insert(
+        db.pool(),
+        &ScreenshotRow {
+            id: shot_id.to_owned(),
+            game_id: game.meta.id.to_string(),
+            relative_path: relative,
+            width: 1280,
+            height: 720,
+            captured_at: 5_000,
+            source: "windows_window".to_owned(),
+            caption: String::new(),
+        },
+    )
+    .await
+    .expect("insert capture");
+
+    let exported = collect_library_file(db.pool(), &device, data_dir())
+        .await
+        .unwrap();
+    assert_eq!(exported.screenshots.len(), 1);
+    assert_eq!(exported.screenshots[0].id, shot_id);
+
+    let text = serde_json::to_string(&exported).unwrap();
+    let (target_db, target_device) = target().await;
+    // The game has to exist on the other side, or the capture is an orphan.
+    queries::upsert_game(target_db.pool(), &game).await.unwrap();
+
+    let store_drafts = ImportDraftStore::default();
+    let id = store_drafts.begin_open().unwrap();
+    prepare_import(&store_drafts, &id, target_db.pool(), &target_device, &text)
+        .await
+        .unwrap();
+    apply_import(
+        &store_drafts,
+        target_db.pool(),
+        &target_device,
+        data_dir(),
+        &id,
+    )
+    .await
+    .unwrap();
+
+    let restored = screenshots::list(target_db.pool(), &game.meta.id.to_string())
+        .await
+        .unwrap();
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored[0].id, shot_id);
+    assert_eq!(
+        ScreenshotStore::new(data_dir())
+            .read(&restored[0].relative_path)
+            .await
+            .unwrap(),
+        b"jpeg-bytes"
     );
 }

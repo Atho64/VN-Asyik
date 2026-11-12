@@ -51,6 +51,34 @@ pub struct LibraryFile {
     pub version: u32,
     pub payload: SyncPayload,
     pub prefs: PrefsSnapshot,
+    /// The reader's own captures, bodies inline.
+    ///
+    /// Screenshots are local-only in sync — the bytes are far too large for the
+    /// row payload and a path means nothing on another device — but a backup
+    /// that silently loses the pictures is not a backup. `default` keeps a file
+    /// written before this field existed readable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub screenshots: Vec<ExportedScreenshot>,
+}
+
+/// One capture inside a library export.
+///
+/// No path: the file location is derived from `game_id` and `id` on import, so a
+/// hand-edited or hostile file cannot place a picture outside the capture
+/// directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedScreenshot {
+    pub id: String,
+    pub game_id: String,
+    pub width: i64,
+    pub height: i64,
+    pub captured_at: i64,
+    pub source: String,
+    #[serde(default)]
+    pub caption: String,
+    /// JPEG bytes, base64.
+    pub image: String,
 }
 
 pub const LIBRARY_FORMAT: &str = "vn-asyik-library";
@@ -469,9 +497,10 @@ pub async fn apply_import(
     store: &ImportDraftStore,
     pool: &SqlitePool,
     device: &DeviceId,
+    data_dir: &std::path::Path,
     id: &str,
 ) -> CommandResult<DataImportResult> {
-    apply_import_with_mode(store, pool, device, id, DataImportMode::Merge).await
+    apply_import_with_mode(store, pool, device, data_dir, id, DataImportMode::Merge).await
 }
 
 /// Restore is explicit; all formats merge through the same rules by default.
@@ -479,13 +508,14 @@ pub async fn apply_import_with_mode(
     store: &ImportDraftStore,
     pool: &SqlitePool,
     device: &DeviceId,
+    data_dir: &std::path::Path,
     id: &str,
     mode: DataImportMode,
 ) -> CommandResult<DataImportResult> {
     let payload = store.take(id)?;
-    let (snapshot, prefs) = match payload {
-        ImportPayload::Library(file) => (file.payload, Some(file.prefs)),
-        ImportPayload::Transfer(file) => (file, None),
+    let (snapshot, prefs, captures) = match payload {
+        ImportPayload::Library(file) => (file.payload, Some(file.prefs), file.screenshots),
+        ImportPayload::Transfer(file) => (file, None, Vec::new()),
         ImportPayload::Backup(file) => (
             SyncPayload {
                 schema_version: file.header.schema_version,
@@ -500,6 +530,7 @@ pub async fn apply_import_with_mode(
                 reading_entries: file.reading_entries,
             },
             Some(file.prefs),
+            Vec::new(),
         ),
     };
     if matches!(mode, DataImportMode::Restore) {
@@ -524,15 +555,17 @@ pub async fn apply_import_with_mode(
             reading_entries: snapshot.reading_entries,
             prefs,
         };
-        return backup::import_payload(pool, &file)
-            .await
-            .map(|summary| DataImportResult::Backup { summary });
+        let summary = backup::import_payload(pool, &file).await?;
+        // After the rows, so a capture is only written for a game that exists.
+        restore_screenshots(pool, data_dir, &captures).await;
+        return Ok(DataImportResult::Backup { summary });
     }
     let started = Timestamp::now()?;
     let outcome = sync::merge_library_snapshot(pool, &snapshot)
         .await
         .map_err(|err| CommandError::new("sync_failed", err.to_string()))?;
     super::sync::record_run(pool, &outcome, started, Timestamp::now()?).await?;
+    restore_screenshots(pool, data_dir, &captures).await;
     Ok(DataImportResult::Transfer { outcome })
 }
 
@@ -542,7 +575,7 @@ pub async fn data_open_file(
     state: State<'_, AppState>,
 ) -> CommandResult<Option<DataImportPreview>> {
     let id = state.import_drafts().begin_open()?;
-    let contents = match crate::platform::storage::open_document(app).await {
+    let contents = match crate::platform::storage::open_library_document(app).await {
         Ok(Some(contents)) => contents,
         Ok(None) => {
             state.import_drafts().cancel(&id)?;
@@ -577,6 +610,7 @@ pub async fn data_apply_import(
         state.import_drafts(),
         state.db().pool(),
         state.device(),
+        state.data_dir(),
         &id,
         mode.unwrap_or_default(),
     )
@@ -587,6 +621,7 @@ pub async fn data_apply_import(
 pub async fn collect_library_file(
     pool: &SqlitePool,
     device: &DeviceId,
+    data_dir: &std::path::Path,
 ) -> CommandResult<LibraryFile> {
     Ok(LibraryFile {
         format: LIBRARY_FORMAT.to_owned(),
@@ -595,7 +630,101 @@ pub async fn collect_library_file(
             .await
             .map_err(|err| CommandError::new("sync_failed", err.to_string()))?,
         prefs: queries::load_prefs(pool).await?,
+        screenshots: collect_screenshots(pool, data_dir).await,
     })
+}
+
+/// Read every live capture into the export.
+///
+/// A row whose file is missing is skipped rather than failing the export: the
+/// rest of the library is still worth saving, and the row is already broken.
+async fn collect_screenshots(
+    pool: &SqlitePool,
+    data_dir: &std::path::Path,
+) -> Vec<ExportedScreenshot> {
+    use base64::Engine as _;
+
+    let Ok(rows) = crate::screenshots::list_all(pool, i64::MAX).await else {
+        return Vec::new();
+    };
+    let store = crate::screenshots::ScreenshotStore::new(data_dir);
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        // Derived, not stored: `write` uses the same rule, so the path cannot
+        // drift from the file the capture was saved under.
+        let relative = crate::screenshots::ScreenshotStore::relative(&row.game_id, &row.id);
+        let Ok(bytes) = store.read(&relative).await else {
+            continue;
+        };
+        out.push(ExportedScreenshot {
+            id: row.id,
+            game_id: row.game_id,
+            width: row.width,
+            height: row.height,
+            captured_at: row.captured_at,
+            source: row.source,
+            caption: row.caption,
+            image: base64::engine::general_purpose::STANDARD.encode(bytes),
+        });
+    }
+    out
+}
+
+/// Write an export's captures back and record them.
+///
+/// Only for games that exist here: a capture whose game is missing would be an
+/// orphan row, and `list` joins the parent anyway. An id already present is left
+/// alone, so importing the same file twice is a no-op rather than a duplicate.
+async fn restore_screenshots(
+    pool: &SqlitePool,
+    data_dir: &std::path::Path,
+    shots: &[ExportedScreenshot],
+) -> usize {
+    use base64::Engine as _;
+
+    let store = crate::screenshots::ScreenshotStore::new(data_dir);
+    let mut written = 0;
+    for shot in shots {
+        let Ok(game_id) = vn_core::EntityId::parse(&shot.game_id) else {
+            continue;
+        };
+        if queries::get_game(pool, game_id)
+            .await
+            .ok()
+            .flatten()
+            .is_none()
+        {
+            continue;
+        }
+        if crate::screenshots::get(pool, &shot.id)
+            .await
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            continue;
+        }
+        let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&shot.image) else {
+            continue;
+        };
+        let Ok(relative) = store.write(&shot.game_id, &shot.id, &bytes).await else {
+            continue;
+        };
+        let row = crate::screenshots::ScreenshotRow {
+            id: shot.id.clone(),
+            game_id: shot.game_id.clone(),
+            relative_path: relative,
+            width: shot.width,
+            height: shot.height,
+            captured_at: shot.captured_at,
+            source: shot.source.clone(),
+            caption: shot.caption.clone(),
+        };
+        if crate::screenshots::insert(pool, &row).await.is_ok() {
+            written += 1;
+        }
+    }
+    written
 }
 
 #[tauri::command]
@@ -603,16 +732,16 @@ pub async fn data_export_file(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<bool> {
-    let file = collect_library_file(state.db().pool(), state.device()).await?;
+    let file = collect_library_file(state.db().pool(), state.device(), state.data_dir()).await?;
     let filename = format!("vn-asyik-library-{}.json", file.payload.written_at_ms);
     let contents = serde_json::to_string_pretty(&file)
         .map_err(|err| CommandError::new("document", err.to_string()))?;
-    crate::platform::storage::save_document(app, filename, contents).await
+    crate::platform::storage::save_library_document(app, filename, contents).await
 }
 
 #[tauri::command]
 pub async fn data_share_file(state: State<'_, AppState>) -> CommandResult<()> {
-    let file = collect_library_file(state.db().pool(), state.device()).await?;
+    let file = collect_library_file(state.db().pool(), state.device(), state.data_dir()).await?;
     let filename = format!("vn-asyik-library-{}.json", file.payload.written_at_ms);
     let contents = serde_json::to_string_pretty(&file)
         .map_err(|err| CommandError::new("document", err.to_string()))?;

@@ -20,6 +20,10 @@ tauri-plugin-opener = "2"
 # Native file picker for mapping a game executable. Added rather than a web
 # <input type="file">, which cannot report a real filesystem path.
 tauri-plugin-dialog = "2"
+# One global shortcut for the screenshot button, so a capture works without
+# leaving the game. Registered from Rust, so no IPC permission is granted to the
+# webview.
+tauri-plugin-global-shortcut = "2"
 vn-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true

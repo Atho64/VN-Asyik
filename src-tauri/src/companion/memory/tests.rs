@@ -721,9 +721,10 @@ async fn memory_and_jobs_never_enter_library_exports_or_sync() {
         .suggest_recap(&state, &session.id)
         .await
         .unwrap();
-    let library = crate::commands::data::collect_library_file(pool, state.device())
-        .await
-        .unwrap();
+    let library =
+        crate::commands::data::collect_library_file(pool, state.device(), state.data_dir())
+            .await
+            .unwrap();
     let sync = crate::sync::collect_local(pool, state.device())
         .await
         .unwrap();

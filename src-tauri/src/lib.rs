@@ -9,7 +9,7 @@ pub mod companion;
 pub mod db;
 pub mod platform;
 pub mod presence;
-mod screenshots;
+pub mod screenshots;
 pub mod script;
 pub mod secrets;
 pub mod state;
@@ -273,10 +273,48 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// The screenshot hotkey, registered from Rust.
+///
+/// Registered here rather than from the webview so it works while the game has
+/// focus and the window is behind it, and so the webview is never granted a
+/// global-shortcut permission it does not need.
+///
+/// The handler runs on the plugin's thread and must not block it: the capture is
+/// a blocking COM job, so it is spawned onto the async runtime. The outcome goes
+/// back to the UI as an event, because a shortcut that fails silently is
+/// indistinguishable from one that is not bound.
+fn screenshot_shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+
+    let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyS);
+    tauri_plugin_global_shortcut::Builder::new()
+        .with_shortcut(shortcut)
+        .expect("the screenshot shortcut is a valid combination")
+        .with_handler(|app, _shortcut, event| {
+            if event.state() != ShortcutState::Pressed {
+                return;
+            }
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let outcome = commands::screenshots::screenshot_capture(
+                    app.state::<crate::state::AppState>(),
+                )
+                .await;
+                let payload = match outcome {
+                    Ok(card) => serde_json::json!({ "ok": true, "id": card.id }),
+                    Err(error) => serde_json::json!({ "ok": false, "code": error.code }),
+                };
+                let _ = app.emit("vn:screenshot-captured", payload);
+            });
+        })
+        .build()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(screenshot_shortcut_plugin())
         // Android only: registers the Kotlin usage-stats plugin so playtime can
         // come from the platform usage log. A no-op builder elsewhere.
         .plugin(android_usage_plugin())

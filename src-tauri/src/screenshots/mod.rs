@@ -177,6 +177,19 @@ pub struct Captured {
     pub source: &'static str,
 }
 
+impl std::fmt::Debug for Captured {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Dimensions only: the buffer is a whole frame, and printing it would
+        // put several megabytes into a log line.
+        f.debug_struct("Captured")
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("bytes", &self.rgba.len())
+            .field("source", &self.source)
+            .finish()
+    }
+}
+
 /// Encode a captured frame as a bounded JPEG.
 ///
 /// # Errors

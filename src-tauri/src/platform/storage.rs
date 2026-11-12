@@ -4,6 +4,15 @@ use crate::commands::{CommandError, CommandResult};
 
 const MAX_DOCUMENT_BYTES: u64 = 64 * 1024 * 1024;
 
+/// Ceiling for a library export, which now carries the reader's screenshots
+/// inline as base64.
+///
+/// The 64 MiB document cap exists so a picker cannot hand the app a file that
+/// exhausts memory. A library with a few hundred captures legitimately exceeds
+/// it, so this path gets its own, larger ceiling rather than silently dropping
+/// pictures from a backup.
+const MAX_LIBRARY_BYTES: u64 = 512 * 1024 * 1024;
+
 #[cfg(target_os = "android")]
 mod mobile {
     use std::sync::OnceLock;
@@ -205,10 +214,41 @@ pub async fn save_document_as(
     mime: &'static str,
     extension: &'static str,
 ) -> CommandResult<bool> {
-    if contents.len() as u64 > MAX_DOCUMENT_BYTES {
+    save_document_with_limit(app, filename, contents, mime, extension, MAX_DOCUMENT_BYTES).await
+}
+
+/// Save a library export, which carries screenshots and is allowed to be large.
+///
+/// # Errors
+/// `file_too_large` past [`MAX_LIBRARY_BYTES`], or a document failure.
+pub async fn save_library_document(
+    app: tauri::AppHandle,
+    filename: String,
+    contents: String,
+) -> CommandResult<bool> {
+    save_document_with_limit(
+        app,
+        filename,
+        contents,
+        "application/json",
+        "json",
+        MAX_LIBRARY_BYTES,
+    )
+    .await
+}
+
+async fn save_document_with_limit(
+    app: tauri::AppHandle,
+    filename: String,
+    contents: String,
+    mime: &'static str,
+    extension: &'static str,
+    limit: u64,
+) -> CommandResult<bool> {
+    if contents.len() as u64 > limit {
         return Err(CommandError::new(
             "file_too_large",
-            "Document exceeds 64 MiB",
+            format!("Document exceeds {} MiB", limit / (1024 * 1024)),
         ));
     }
     tauri::async_runtime::spawn_blocking(move || save(&app, &filename, &contents, mime, extension))
@@ -217,7 +257,22 @@ pub async fn save_document_as(
 }
 
 pub async fn open_document(app: tauri::AppHandle) -> CommandResult<Option<String>> {
-    tauri::async_runtime::spawn_blocking(move || open(&app))
+    open_document_with_limit(app, MAX_DOCUMENT_BYTES).await
+}
+
+/// Open a library export, which may carry screenshots and so may be large.
+///
+/// # Errors
+/// `file_too_large` past [`MAX_LIBRARY_BYTES`], or a document failure.
+pub async fn open_library_document(app: tauri::AppHandle) -> CommandResult<Option<String>> {
+    open_document_with_limit(app, MAX_LIBRARY_BYTES).await
+}
+
+async fn open_document_with_limit(
+    app: tauri::AppHandle,
+    limit: u64,
+) -> CommandResult<Option<String>> {
+    tauri::async_runtime::spawn_blocking(move || open(&app, limit))
         .await
         .map_err(|err| CommandError::new("document", err.to_string()))?
 }
@@ -279,7 +334,7 @@ fn open(_app: &tauri::AppHandle) -> CommandResult<Option<String>> {
 }
 
 #[cfg(not(target_os = "android"))]
-fn open(app: &tauri::AppHandle) -> CommandResult<Option<String>> {
+fn open(app: &tauri::AppHandle, limit: u64) -> CommandResult<Option<String>> {
     use std::io::Read;
     use tauri_plugin_dialog::DialogExt;
     let Some(file) = app
@@ -296,13 +351,13 @@ fn open(app: &tauri::AppHandle) -> CommandResult<Option<String>> {
     let file =
         std::fs::File::open(path).map_err(|err| CommandError::new("document", err.to_string()))?;
     let mut bytes = Vec::new();
-    file.take(MAX_DOCUMENT_BYTES + 1)
+    file.take(limit + 1)
         .read_to_end(&mut bytes)
         .map_err(|err| CommandError::new("document", err.to_string()))?;
-    if bytes.len() as u64 > MAX_DOCUMENT_BYTES {
+    if bytes.len() as u64 > limit {
         return Err(CommandError::new(
             "file_too_large",
-            "Document exceeds 64 MiB",
+            format!("Document exceeds {} MiB", limit / (1024 * 1024)),
         ));
     }
     String::from_utf8(bytes)

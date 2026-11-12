@@ -11,6 +11,16 @@ fn at(ms: i64) -> Timestamp {
     Timestamp::from_millis(ms)
 }
 
+/// Scratch directory for screenshot bodies; these tests write none.
+fn data_dir() -> &'static std::path::Path {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = std::env::temp_dir().join(format!("vnt-journal-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    })
+}
+
 async fn fixture() -> (Db, DeviceId, Game, PlaySession) {
     let db = Db::open_memory().await.unwrap();
     let device = DeviceId::parse("journal-device").unwrap();
@@ -658,7 +668,7 @@ async fn library_export_preview_merge_and_restore_keep_the_journal() {
     )
     .await
     .unwrap();
-    let file = data::collect_library_file(db.pool(), &device)
+    let file = data::collect_library_file(db.pool(), &device, data_dir())
         .await
         .unwrap();
     let text = serde_json::to_string(&file).unwrap();
@@ -670,7 +680,7 @@ async fn library_export_preview_merge_and_restore_keep_the_journal() {
             .await
             .unwrap();
         assert_eq!(preview.reading_entries, 1);
-        data::apply_import_with_mode(&store, target.pool(), &device, &id, mode)
+        data::apply_import_with_mode(&store, target.pool(), &device, data_dir(), &id, mode)
             .await
             .unwrap();
         assert_eq!(
