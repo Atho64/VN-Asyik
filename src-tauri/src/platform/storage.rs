@@ -323,7 +323,7 @@ fn save(
 }
 
 #[cfg(target_os = "android")]
-fn open(_app: &tauri::AppHandle) -> CommandResult<Option<String>> {
+fn open(_app: &tauri::AppHandle, _limit: u64) -> CommandResult<Option<String>> {
     #[derive(serde::Deserialize)]
     struct Reply {
         contents: Option<String>,
