@@ -406,7 +406,7 @@ export function PresencePanel() {
     return () => {
       active = false;
     };
-  }, [settings, previewCycle, previewStateCycle, previewGameId]);
+  }, [settings, previewCycle, previewStateCycle, previewGameId, imageKeyPreview]);
 
   // A saved-to-play switch is not a field; the reset keeps the preview honest about
   // where a fresh rotation starts.
@@ -439,6 +439,9 @@ export function PresencePanel() {
   const switchScope = useCallback(
     (gameId: string) => {
       setScopeGameId(gameId);
+      if (gameId) {
+        setPreviewGameId(gameId);
+      }
       resetPreview();
       void api
         .presenceEffectiveSettings(gameId || undefined)

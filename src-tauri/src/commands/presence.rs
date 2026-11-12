@@ -196,6 +196,7 @@ pub async fn presence_image_key_save(key: String) -> CommandResult<()> {
         .map_err(|e| CommandError::new("invalid_api_key", e))?;
     crate::secrets::store_imgbb_key(&parsed)
         .map_err(|e| CommandError::new("secret_error", e.to_string()))?;
+    crate::presence::upload::shared_cache().clear_failures();
     Ok(())
 }
 
@@ -229,16 +230,70 @@ pub async fn presence_preview(
     cycle_index: Option<u32>,
     state_cycle_index: Option<u32>,
 ) -> CommandResult<PresenceActivity> {
-    let mut ctx = preview_context(
+    preview_card_activity(
         state.db().pool(),
         state.data_dir(),
         game_id.as_deref(),
         &settings,
+        cycle_index,
+        state_cycle_index,
     )
-    .await?;
+    .await
+}
+
+/// Build the activity payload for the in-app settings preview card.
+///
+/// The card's `large_image` is a URL for Discord to fetch, and the preview used
+/// to hand that URL straight to the `WebView`: the hosted one, or the remote
+/// `t.vndb.org` cover. Both made the preview depend on a network the app does not
+/// need — on Android system DNS may filter `files.catbox.moe`, and a filtered or
+/// offline connection leaves `t.vndb.org` unreachable — so the preview showed an
+/// empty art slot for an image already on disk. This replaces either URL with a
+/// `data:` URL of the local bytes:
+///
+/// - hosted (`ctx.rpc_image`): the exact bytes that were uploaded, so the
+///   preview stays gated on a real host success.
+/// - safe VNDB cover (`ctx.cover_url`): the cached cover, downscaled for the
+///   60 px art slot.
+///
+/// A cover that is neither hosted nor cached keeps its remote URL, because
+/// Discord can still fetch it even when this device cannot.
+async fn preview_card_activity(
+    pool: &sqlx::SqlitePool,
+    data_dir: &std::path::Path,
+    game_id: Option<&str>,
+    settings: &PresenceSettings,
+    cycle_index: Option<u32>,
+    state_cycle_index: Option<u32>,
+) -> CommandResult<PresenceActivity> {
+    let mut ctx = preview_context(pool, data_dir, game_id, settings).await?;
     ctx.cycle_index = cycle_index.unwrap_or(0);
     ctx.state_cycle_index = state_cycle_index.unwrap_or(0);
-    Ok(build_activity(&settings, &ctx))
+    let mut activity = build_activity(settings, &ctx);
+    let Some(gid) = game_id else {
+        return Ok(activity);
+    };
+    let Ok(entity_id) = vn_core::EntityId::parse(gid) else {
+        return Ok(activity);
+    };
+    let Ok(Some(game)) = queries::get_game(pool, entity_id).await else {
+        return Ok(activity);
+    };
+
+    if ctx.rpc_image.is_some()
+        && activity.large_image == ctx.rpc_image
+        && let Some(data_url) = presence::preview_rpc_image_data_url(data_dir, &game).await
+    {
+        activity.large_image = Some(data_url);
+    } else if activity.large_image.is_some()
+        && activity.large_image == ctx.cover_url
+        && let Some(data_url) = presence::preview_cached_cover_data_url(data_dir, &game).await
+    {
+        // A safe cover is never uploaded, so the card carries the remote VNDB
+        // URL. Paint the cached copy instead: same image, no network.
+        activity.large_image = Some(data_url);
+    }
+    Ok(activity)
 }
 
 /// Build the context a preview renders, including the card image.
@@ -502,5 +557,124 @@ mod tests {
         assert!(ctx.cover_url.is_none());
         let act = build_activity(&PresenceSettings::default(), &ctx);
         assert!(act.large_image.is_none());
+    }
+
+    #[tokio::test]
+    async fn preview_card_activity_inlines_hosted_custom_cover_and_falls_back_to_vndb_when_host_is_disabled()
+     {
+        let (db, root, game_id) = custom_cover_fixture("webview-inline").await;
+        sqlx::query(
+            "UPDATE games SET vndb_id = 'v100', cover_url = 'https://t.vndb.org/cv/01/100.jpg', cover_sexual = 0, cover_violence = 0 WHERE id = ?",
+        )
+        .bind(&game_id)
+        .execute(db.pool())
+        .await
+        .expect("update game vndb cover");
+
+        // 1. When image host is None, custom cover is not used and safe VNDB cover is shown.
+        let no_host = PresenceSettings {
+            enabled: true,
+            show_cover: true,
+            rpc_image_host: vn_core::presence::RpcImageHost::None,
+            ..Default::default()
+        };
+        let fallback_act =
+            preview_card_activity(db.pool(), &root, Some(&game_id), &no_host, Some(0), Some(0))
+                .await
+                .expect("preview without host");
+        assert_eq!(
+            fallback_act.large_image.as_deref(),
+            Some("https://t.vndb.org/cv/01/100.jpg")
+        );
+
+        // 2. When Catbox is enabled and the upload succeeds, the preview card inlines
+        //    the local cover bytes as a data URL so Android WebView does not depend
+        //    on OS DNS resolving files.catbox.moe.
+        let catbox = PresenceSettings {
+            enabled: true,
+            show_cover: true,
+            rpc_image_host: vn_core::presence::RpcImageHost::Catbox,
+            ..Default::default()
+        };
+        let source = crate::vndb::images::ImageStore::new(&root).custom_cover_path(&game_id);
+        let key = crate::presence::image_cache_key(&catbox, &source, false);
+        crate::presence::upload::shared_cache().seed(&key, "https://files.catbox.moe/custom.jpg");
+
+        let hosted_act =
+            preview_card_activity(db.pool(), &root, Some(&game_id), &catbox, Some(0), Some(0))
+                .await
+                .expect("preview with catbox");
+        assert_eq!(
+            hosted_act.large_image.as_deref(),
+            Some("data:image/jpeg;base64,anBlZy1ieXRlcw==")
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A safe VNDB cover is never uploaded, so the card carries the remote URL.
+    /// The preview painted that URL straight into the `WebView`, which left the
+    /// art slot empty on a filtered or offline connection even though the app had
+    /// the cover on disk and the library showed it.
+    #[tokio::test]
+    async fn the_preview_paints_a_cached_vndb_cover_instead_of_its_remote_url() {
+        let db = crate::db::Db::open_memory().await.expect("db");
+        let root = std::env::temp_dir().join(format!("vnt-preview-cached-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let store = crate::vndb::images::ImageStore::new(&root);
+        store.ensure().expect("image dir");
+
+        let id = "01a151db-7777-7000-8000-000000000002".to_string();
+        sqlx::query(
+            "INSERT INTO games (id, title, status, vndb_id, cover_url, cover_sexual, cover_violence, updated_at, device_id)              VALUES (?, 'Saku Saku', 'playing', 'v100', 'https://t.vndb.org/cv/01/100.jpg', 0, 0, 1, 'dev')",
+        )
+        .bind(&id)
+        .execute(db.pool())
+        .await
+        .expect("insert game");
+
+        let settings = PresenceSettings {
+            enabled: true,
+            show_cover: true,
+            rpc_image_host: vn_core::presence::RpcImageHost::None,
+            ..Default::default()
+        };
+
+        // Nothing cached yet: Discord can still fetch the remote cover, so the
+        // preview keeps that URL rather than showing nothing.
+        let uncached =
+            preview_card_activity(db.pool(), &root, Some(&id), &settings, Some(0), Some(0))
+                .await
+                .expect("preview without cache");
+        assert_eq!(
+            uncached.large_image.as_deref(),
+            Some("https://t.vndb.org/cv/01/100.jpg")
+        );
+
+        // With the cover downloaded, the preview paints it from disk.
+        let mut jpeg = Vec::new();
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            40,
+            60,
+            image::Rgb([40, 120, 200]),
+        ))
+        .write_to(
+            &mut std::io::Cursor::new(&mut jpeg),
+            image::ImageFormat::Jpeg,
+        )
+        .expect("encode cover");
+        std::fs::write(store.cover_path("v100"), &jpeg).expect("cache cover");
+
+        let cached =
+            preview_card_activity(db.pool(), &root, Some(&id), &settings, Some(0), Some(0))
+                .await
+                .expect("preview with cache");
+        let data_url = cached.large_image.expect("cached cover is inlined");
+        assert!(
+            data_url.starts_with("data:image/jpeg;base64,"),
+            "expected an inlined cover, got {data_url}"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

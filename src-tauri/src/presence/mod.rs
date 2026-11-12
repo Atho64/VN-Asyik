@@ -278,18 +278,7 @@ pub async fn ensure_rpc_image(
         return Some(url);
     }
 
-    let raw = tokio::fs::read(&source).await.ok()?;
-    if raw.is_empty() {
-        return None;
-    }
-    let image_bytes = if blurred {
-        crate::vndb::images::blurred_cover_bytes(&raw).ok()?
-    } else {
-        raw.clone()
-    };
-    if image_bytes.is_empty() {
-        return None;
-    }
+    let image_bytes = load_rpc_image_bytes(&source, blurred).await?;
 
     // Session-stable key: a changed cover, blur flip or host is a new upload.
     let key = image_cache_key(settings, &source, blurred);
@@ -316,6 +305,105 @@ pub async fn ensure_rpc_image(
         eprintln!("presence image upload failed; continuing without the card image");
     }
     url
+}
+
+async fn load_rpc_image_bytes(source: &std::path::Path, blurred: bool) -> Option<Vec<u8>> {
+    let raw = tokio::fs::read(source).await.ok()?;
+    if raw.is_empty() {
+        return None;
+    }
+    let image_bytes = if blurred {
+        crate::vndb::images::blurred_cover_bytes(&raw).ok()?
+    } else {
+        raw
+    };
+    (!image_bytes.is_empty()).then_some(image_bytes)
+}
+
+/// Data URL of the local presence image bytes (sharp or blurred) for the
+/// in-app settings preview once [`ensure_rpc_image`] has confirmed the image is
+/// hosted.
+///
+/// The Android `WebView` resolves `files.catbox.moe` through system DNS rather
+/// than the Rust HTTP client, so a hosted Catbox URL can fail to paint in the
+/// settings preview on networks with ISP DNS filtering even after the upload
+/// itself succeeded and Discord's media proxy can reach it. Encoding the bytes
+/// locally keeps the preview gated on a real host success while letting the
+/// `WebView` paint without a second network round-trip.
+///
+/// The bytes are downscaled to [`PREVIEW_IMAGE_EDGE`] first. A custom cover is
+/// stored up to 1600 px, so sending it whole put several hundred KB of base64
+/// into a single IPC reply, re-sent on every settings keystroke, to fill a 60 px
+/// square. A cover picked from a phone photo hit that; a small one did not,
+/// which made a size problem look like a file-format one. Undecodable bytes are
+/// passed through rather than dropped, so the preview still shows whatever the
+/// host accepted.
+pub async fn preview_rpc_image_data_url(data_dir: &std::path::Path, game: &Game) -> Option<String> {
+    let (source, blurred) = rpc_image_source(data_dir, game)?;
+    let bytes = load_rpc_image_bytes(&source, blurred).await?;
+    let bounded = preview_sized(&bytes).unwrap_or(bytes);
+    Some(image_data_url(&bounded))
+}
+
+/// Data URL of the locally cached VNDB cover, for the settings preview.
+///
+/// A safe cover is never uploaded: [`build_activity`] puts the remote
+/// `t.vndb.org` URL on the card, and the preview painted that URL directly. So
+/// the preview silently depended on the `WebView` reaching the network for an
+/// image the app already has on disk — on a filtered or offline connection the
+/// library showed the cover (it reads the cache first) while the settings
+/// preview showed an empty art slot. That reads as a broken preview, and it is
+/// why a cover could look fine in the library and missing here.
+///
+/// Returns `None` when the cover was never downloaded, so the caller keeps the
+/// remote URL: Discord can still fetch it even when this device cannot.
+pub async fn preview_cached_cover_data_url(
+    data_dir: &std::path::Path,
+    game: &Game,
+) -> Option<String> {
+    let vn_id = game.vndb_id.as_deref()?;
+    let path = crate::vndb::images::ImageStore::new(data_dir).cover_path(vn_id);
+    let bytes = tokio::fs::read(path).await.ok()?;
+    Some(image_data_url(&preview_sized(&bytes)?))
+}
+
+/// Longest edge of the image the settings preview carries.
+///
+/// The card's art slot is 60 CSS px and a cover is 600-1600 px, while the
+/// preview round-trips through IPC on every settings keystroke. Downscaling
+/// first keeps that payload a few KB instead of a few hundred.
+const PREVIEW_IMAGE_EDGE: u32 = 160;
+
+fn preview_sized(bytes: &[u8]) -> Option<Vec<u8>> {
+    let decoded = image::load_from_memory(bytes).ok()?;
+    let resized = decoded.resize(
+        PREVIEW_IMAGE_EDGE,
+        PREVIEW_IMAGE_EDGE,
+        image::imageops::FilterType::Triangle,
+    );
+    let mut out = Vec::new();
+    resized
+        .to_rgb8()
+        .write_to(
+            &mut std::io::Cursor::new(&mut out),
+            image::ImageFormat::Jpeg,
+        )
+        .ok()?;
+    (!out.is_empty()).then_some(out)
+}
+
+/// `data:` URL for image bytes, labelled with the format they actually are.
+///
+/// The label used to be a hardcoded `image/jpeg`, which is true only because
+/// every path that reached it re-encoded to JPEG. A cached cover is stored as
+/// whatever VNDB served, so the label is sniffed from the header instead of
+/// assumed; an unrecognised header keeps the JPEG default.
+fn image_data_url(bytes: &[u8]) -> String {
+    use base64::Engine;
+
+    let mime = image::guess_format(bytes).map_or("image/jpeg", |format| format.to_mime_type());
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    format!("data:{mime};base64,{encoded}")
 }
 
 /// Cache key for one presence image.
@@ -1545,5 +1633,59 @@ mod tests {
         service.update_context(tracking_context("Steins;Gate"));
         settle().await;
         assert_eq!(service.cycle_index(), 0);
+    }
+
+    /// A custom cover is stored up to 1600 px, and the preview used to base64 the
+    /// whole file into one IPC reply for a 60 px art slot — on every settings
+    /// keystroke. A cover picked from a large photo therefore failed to paint
+    /// while a small one worked, which reads as a file-format problem.
+    #[tokio::test]
+    async fn the_preview_carries_a_bounded_image_not_the_whole_cover() {
+        use base64::Engine;
+
+        let dir = std::env::temp_dir().join(format!("vnt-preview-bound-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = crate::vndb::images::ImageStore::new(&dir);
+        std::fs::create_dir_all(store.custom_dir()).expect("custom dir");
+
+        let mut cover = Vec::new();
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            1600,
+            2400,
+            image::Rgb([40, 120, 200]),
+        ))
+        .write_to(
+            &mut std::io::Cursor::new(&mut cover),
+            image::ImageFormat::Jpeg,
+        )
+        .expect("encode cover");
+        let game = image_game(Some(0), Some("covers/custom/cover.jpg"));
+        std::fs::write(store.custom_cover_path("cover"), &cover).expect("cover file");
+
+        let data_url = preview_rpc_image_data_url(&dir, &game)
+            .await
+            .expect("preview data url");
+        let encoded = data_url
+            .strip_prefix("data:image/jpeg;base64,")
+            .expect("a jpeg data url");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .expect("base64");
+
+        let decoded = image::load_from_memory(&bytes).expect("valid jpeg");
+        assert!(
+            decoded.width() <= PREVIEW_IMAGE_EDGE && decoded.height() <= PREVIEW_IMAGE_EDGE,
+            "preview is {}x{}, not bounded",
+            decoded.width(),
+            decoded.height()
+        );
+        assert!(
+            bytes.len() * 4 < cover.len(),
+            "preview is {} bytes for a {} byte cover",
+            bytes.len(),
+            cover.len()
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

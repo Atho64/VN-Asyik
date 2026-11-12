@@ -292,9 +292,10 @@ pub fn blurred_cover_bytes(source: &[u8]) -> Result<Vec<u8>, ImageError> {
         .resize_exact(width, height, FilterType::Triangle);
 
     let mut out = Vec::new();
-    let cursor = std::io::Cursor::new(&mut out);
+    let mut cursor = std::io::Cursor::new(&mut out);
     blurred
-        .write_to(cursor, image::ImageFormat::Jpeg)
+        .to_rgb8()
+        .write_to(&mut cursor, image::ImageFormat::Jpeg)
         .map_err(|err| ImageError::Io(err.to_string()))?;
     Ok(out)
 }
@@ -632,5 +633,19 @@ mod tests {
         // rows only. That must read as "no art", not as an error.
         assert!(ImageStore::resolve_custom(&root, &ImageStore::custom_relative("a")).is_none());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn blurring_an_rgba_cover_converts_to_rgb_before_jpeg_encoding() {
+        let rgba = image::RgbaImage::from_pixel(40, 60, image::Rgba([40, 120, 200, 128]));
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgba8(rgba)
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("encode rgba png");
+
+        let blurred = blurred_cover_bytes(&png).expect("rgba cover must blur into jpeg");
+        let decoded = image::load_from_memory(&blurred).expect("valid jpeg");
+        assert_eq!(decoded.width(), 40);
+        assert_eq!(decoded.height(), 60);
     }
 }

@@ -59,6 +59,7 @@ vi.mock("@/lib/ipc/client", () => ({
     presenceImageKeySave: vi.fn(),
     presenceImageKeyClear: vi.fn(),
     presenceImageKeyPreview: vi.fn(),
+    presenceEffectiveSettings: vi.fn(),
     listGames: vi.fn(),
   },
   // Mirrors the real class: the panel branches on `code` to decide whether the
@@ -489,5 +490,87 @@ describe("PresencePanel", () => {
     await user.click(removeBtn);
 
     expect(api.presenceClearToken).toHaveBeenCalled();
+  });
+
+  it("syncs the live preview game when switching presence scope to a game", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    vi.mocked(api.presenceEffectiveSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+      rpc_image_host: "catbox",
+    });
+    vi.mocked(api.listGames).mockResolvedValue([
+      {
+        game: {
+          meta: { id: "g1", updated_at: 0, device_id: "d1", deleted: false },
+          title: "Steins;Gate",
+          title_original: null,
+          vndb_id: "v2002",
+          status: "playing",
+          rating: null,
+          notes: null,
+          length_minutes: null,
+          manual_playtime_ms: 0,
+          accent_color: null,
+          cover_url: null,
+          cover_sexual: null,
+          cover_violence: null,
+          custom_cover_path: null,
+          custom_cover_source_vndb: false,
+          started_at: null,
+          finished_at: null,
+        },
+        tracked_ms: 0,
+        afk_ms: 0,
+        total_ms: 0,
+      },
+      {
+        game: {
+          meta: { id: "g2", updated_at: 0, device_id: "d1", deleted: false },
+          title: "Saku Saku",
+          title_original: null,
+          vndb_id: null,
+          status: "playing",
+          rating: null,
+          notes: null,
+          length_minutes: null,
+          manual_playtime_ms: 0,
+          accent_color: null,
+          cover_url: null,
+          cover_sexual: null,
+          cover_violence: null,
+          custom_cover_path: "covers/custom/g2.jpg",
+          custom_cover_source_vndb: false,
+          started_at: null,
+          finished_at: null,
+        },
+        tracked_ms: 0,
+        afk_ms: 0,
+        total_ms: 0,
+      },
+    ] as never);
+
+    renderPanel();
+
+    const selects = await screen.findAllByRole("combobox");
+    const scopeSelect = selects.find((el) =>
+      Array.from(el.querySelectorAll("option")).some((opt) => opt.value === ""),
+    );
+    expect(scopeSelect).toBeDefined();
+
+    await user.selectOptions(scopeSelect!, "g2");
+
+    await waitFor(() => {
+      expect(api.presencePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ rpc_image_host: "catbox" }),
+        "g2",
+        0,
+        0,
+      );
+    });
   });
 });

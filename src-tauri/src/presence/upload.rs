@@ -145,6 +145,8 @@ struct ImgbbData {
     url: Option<String>,
 }
 
+type PendingUpload = std::sync::Arc<tokio::sync::OnceCell<Result<String, bool>>>;
+
 /// Session cache so the poll loop does not re-upload the same image forever.
 ///
 /// Keyed by the caller's digest of the exact bytes being sent: a changed cover,
@@ -154,7 +156,7 @@ struct ImgbbData {
 #[derive(Debug, Default)]
 pub struct UploadCache {
     done: Mutex<HashMap<String, String>>,
-    pending: Mutex<HashMap<String, std::sync::Arc<tokio::sync::OnceCell<Option<String>>>>>,
+    pending: Mutex<HashMap<String, PendingUpload>>,
     failed_at: Mutex<HashMap<String, Instant>>,
 }
 
@@ -170,6 +172,12 @@ impl UploadCache {
             .lock()
             .expect("cache")
             .insert(key.to_owned(), url.to_owned());
+    }
+
+    /// Clear recorded upload failure cooldowns (for example after saving a new
+    /// API key) so the next preview or poll can retry immediately.
+    pub fn clear_failures(&self) {
+        self.failed_at.lock().expect("cache").clear();
     }
 
     /// The URL already known for this key, if any.
@@ -207,18 +215,29 @@ impl UploadCache {
             })
         };
         // A cell that already holds a value resolves immediately; only the
-        // caller that inserted the fresh cell polls `upload`.
+        // caller that inserted the fresh cell polls `upload`. A missing API key
+        // maps to `Err(false)` so selecting ImgBB before saving the key does not
+        // lock out the upload for five minutes.
         let result = cell
-            .get_or_init(|| async { upload.await.ok() })
+            .get_or_init(|| async {
+                upload
+                    .await
+                    .map_err(|err| !matches!(err, UploadError::NoApiKey))
+            })
             .await
             .clone();
         self.pending.lock().expect("cache").remove(key);
-        let Some(url) = result else {
-            self.failed_at
-                .lock()
-                .expect("cache")
-                .insert(key.to_owned(), Instant::now());
-            return None;
+        let url = match result {
+            Ok(url) => url,
+            Err(should_cooldown) => {
+                if should_cooldown {
+                    self.failed_at
+                        .lock()
+                        .expect("cache")
+                        .insert(key.to_owned(), Instant::now());
+                }
+                return None;
+            }
         };
         self.done
             .lock()
@@ -313,5 +332,26 @@ mod tests {
         let body = r#"{"success":true,"data":{"url":"https://i.ibb.co/x.jpg"}}"#;
         let reply: ImgbbReply = serde_json::from_str(body).expect("reply");
         assert_eq!(reply.data.url.as_deref(), Some("https://i.ibb.co/x.jpg"));
+    }
+
+    #[tokio::test]
+    async fn missing_api_key_does_not_enter_failure_cooldown() {
+        let cache = UploadCache::default();
+        let calls = AtomicUsize::new(0);
+        let k = key("imgbb-no-key");
+
+        let first = cache
+            .get_or_upload(&k, async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(UploadError::NoApiKey)
+            })
+            .await;
+        assert_eq!(first, None);
+
+        let second = cache
+            .get_or_upload(&k, counting_upload(&calls, false))
+            .await;
+        assert_eq!(second.as_deref(), Some("https://catbox.moe/x.jpg"));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }
