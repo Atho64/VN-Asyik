@@ -104,7 +104,10 @@ impl From<ProbeError> for TrackingError {
         match err {
             ProbeError::Unsupported => Self::Unsupported,
             ProbeError::Denied(message) => Self::Denied(message),
-            ProbeError::Failed(message) => Self::Probe(message),
+            // A missing display is not a bug and not a permission problem: the
+            // platform has a tracker, the session just cannot feed it. It reads
+            // as a probe failure with a reason, which is what the UI shows.
+            ProbeError::NoDisplay(message) | ProbeError::Failed(message) => Self::Probe(message),
         }
     }
 }

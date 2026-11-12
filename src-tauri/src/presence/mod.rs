@@ -1,5 +1,7 @@
 pub mod gateway;
 pub mod ipc;
+#[cfg(unix)]
+pub mod ipc_unix;
 pub mod upload;
 
 use serde::Serialize;
@@ -665,8 +667,10 @@ impl PresenceService {
         let sink: Box<dyn PresenceSink> = Box::new(ipc::IpcSink::new());
         #[cfg(target_os = "android")]
         let sink: Box<dyn PresenceSink> = Box::new(gateway::AndroidGatewaySink::new());
-        #[cfg(not(any(windows, target_os = "android")))]
-        let sink: Box<dyn PresenceSink> = Box::new(ipc::IpcSink::new());
+        // Linux and macOS reach Discord over a Unix socket; the Windows client is
+        // a named pipe and does not exist here.
+        #[cfg(all(unix, not(target_os = "android")))]
+        let sink: Box<dyn PresenceSink> = Box::new(ipc_unix::UnixIpcSink::new());
 
         Self::with_sink(initial_settings, sink)
     }

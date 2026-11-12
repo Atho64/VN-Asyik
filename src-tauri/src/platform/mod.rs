@@ -78,12 +78,13 @@ pub const fn info() -> PlatformInfo {
         PlatformInfo {
             os: "linux",
             kind: "desktop",
-            first_class: false,
-            // No probe is implemented for Linux; `probe()` returns Unsupported.
-            // Claiming Experimental here would promise something that is not there.
-            process_tracking: Support::Unavailable,
-            chapter_detection: Support::Unavailable,
-            discord_presence: Support::Unavailable,
+            first_class: true,
+            // X11 and XWayland only. A native Wayland window cannot be seen by
+            // any client, so this stays Experimental rather than Supported: the
+            // probe connects when a display exists and says why when it does not.
+            process_tracking: Support::Experimental,
+            chapter_detection: Support::Experimental,
+            discord_presence: Support::Supported,
             cloud_sync: Support::Unavailable,
         }
     } else if cfg!(target_os = "android") {

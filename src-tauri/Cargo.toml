@@ -61,6 +61,14 @@ discord-rich-presence = "1.1.0"
 # not expose. Pinned to the same major as tauri-runtime-wry so there is one copy.
 webview2-com = "0.39"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# X11 process tracking: the active window, its `_NET_WM_PID`, its title and the
+# XScreenSaver idle timer. `x11rb` is a pure-Rust implementation of the protocol,
+# so this needs no libX11 headers at build time and no unsafe FFI; `x11-dl` (already
+# in the tree via tao) is raw bindings and would mean unsafe code for the same job.
+# Linux-gated because the module that uses it is: nothing else compiles it.
+x11rb = { version = "0.14", features = ["screensaver"] }
+
 [target.'cfg(target_os = "android")'.dependencies]
 # reqwest 0.13 defaults to rustls-platform-verifier, which panics on Android
 # unless JNI and its Maven helper class are initialized. Supplying Mozilla roots

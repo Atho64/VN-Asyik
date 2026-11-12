@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_os = "linux")]
+pub mod linux;
 #[cfg(windows)]
 pub mod windows;
 
@@ -46,6 +48,12 @@ pub enum ProbeError {
     /// This platform has no tracker implementation in this build.
     #[error("playtime tracking is not supported on this platform yet")]
     Unsupported,
+    /// The platform has a tracker, but the display server it needs is absent.
+    ///
+    /// Linux on a pure Wayland session with no `XWayland` is the case this exists
+    /// for: the code is there, the thing it reads is not.
+    #[error("playtime tracking needs an X11 display: {0}")]
+    NoDisplay(String),
     /// The OS refused an operation, usually a permissions or elevation issue.
     #[error("the operating system refused the request: {0}")]
     Denied(String),
@@ -129,7 +137,11 @@ pub fn probe() -> Result<Box<dyn SystemProbe>, ProbeError> {
     {
         Ok(Box::new(windows::WindowsProbe::new()?))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        Ok(Box::new(linux::LinuxProbe::new()?))
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         Err(ProbeError::Unsupported)
     }
