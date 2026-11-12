@@ -272,7 +272,6 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     ]
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// The screenshot hotkey, registered from Rust.
 ///
 /// Desktop only: `tauri-plugin-global-shortcut` has no Android implementation,
@@ -314,6 +313,7 @@ fn screenshot_shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
