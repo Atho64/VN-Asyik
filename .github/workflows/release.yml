@@ -39,20 +39,26 @@ jobs:
           RELEASE_NOTES: |
             ## What's new
 
-            - **Beta features** is now a device-local setting under Settings → General,
-              off by default. Enable it to show Companion, Discover/API-key VN search,
-              VN Chat, and their setup tools.
-            - Companion adds reading sessions, a desktop overlay, twelve personality
-              presets, custom personalities, and editable local memories with reviewed
-              recap suggestions.
-            - On Windows, Companion can share one selected game window with a capable
-              model and optionally watch for occasional text reactions. Window sharing,
-              automatic reactions, and recap suggestions require their own opt-ins.
-            - Turning Beta features off pauses Companion, stops window capture, and
-              keeps saved configuration and history for later.
-            - **Android session fix:** polling now checkpoints an ongoing reading
-              stretch instead of creating a new 14–15 second history entry each time.
-              A real reading boundary finalizes the session; existing history is preserved.
+            - **Linux support.** Playtime tracking, chapter detection from window
+              titles, Discord Rich Presence and screenshots now work on Linux over
+              X11. Visual novels running through XWayland are tracked on a Wayland
+              desktop too; a native Wayland window cannot be inspected by any app,
+              and the app says so instead of counting nothing. Linux ships as an
+              `.AppImage`.
+            - **Screenshots.** One button captures the game you are reading — the
+              game window on Windows, the whole screen on Android — and Windows also
+              binds it to `Ctrl+Shift+S`. Captures are grouped by game under a second
+              Timeline tab, open full size, and can be deleted. A library export now
+              carries them, so a backup does not lose the pictures.
+            - **Themes.** Beyond the accent colour: surfaces, text, corners, density
+              and glass strength, with four presets and a custom editor that keeps
+              body text at AA contrast. Themes export and import as a small JSON
+              file. The per-game artwork tint is now a switch.
+            - **Presence preview fixes.** The settings preview paints from local
+              bytes instead of asking the WebView to fetch a remote image, and is
+              bounded to the size it renders at. Covers with an alpha channel blur
+              correctly again, and saving an ImgBB key no longer leaves uploads
+              locked out for five minutes.
 
             ## Downloads
 
@@ -60,15 +66,18 @@ jobs:
               Windows SmartScreen may display a warning.
             - **Android:** use `app-universal-release.apk`. The official build uses the
               existing release signing key and package `com.atho.vnasyik`.
+            - **Linux:** use the `.AppImage`. Make it executable and run it.
 
             ## Notes
 
+            - Linux support is new and has had one desktop test pass, not a survey of
+              distributions. If tracking reports unavailable, the message names the
+              reason.
+            - Android screenshots require the system screen-casting permission, and
+              capture the whole screen rather than one window.
             - Companion remains experimental and further development is paused.
-              Real-model, real-VN, and on-device checks remain part of prerelease testing.
-            - Vision requires Windows and a model that accepts images. Shared images
-              stay in memory locally and are sent only to the selected model provider.
-              Automatic reactions are bounded and can incur provider charges.
-            - Automated tests were not rerun for this release at the owner's request.
+            - Automated tests were rerun for this release: the Rust suite on Windows
+              and Linux, the frontend suite, and the Android cross-compile check.
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release already exists"
@@ -165,6 +174,86 @@ jobs:
           )
           if [ ${#files[@]} -eq 0 ]; then
             echo "::error::no installers found to upload"
+            ls -R target/release/bundle || true
+            exit 1
+          fi
+          for f in "${files[@]}"; do echo "uploading $f"; done
+          gh release upload "$TAG" "${files[@]}" \
+            --clobber --repo "$GITHUB_REPOSITORY"
+
+  # AppImage builds against glibc 2.35 so the bundle also runs on Ubuntu 22.04,
+  # which is why this is 22.04 rather than the 24.04 the CI job uses.
+  linux:
+    name: linux appimage
+    needs: create-release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: always
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev build-essential curl wget file patchelf \
+            libfuse2 xvfb dbus-x11
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          key: release-linux-ubuntu-22.04
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: build the appimage
+        run: pnpm tauri build --ci --bundles appimage -- --locked
+
+      - name: start it on a virtual display
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(target/release/bundle/appimage/*.AppImage)
+          if [ ${#files[@]} -ne 1 ]; then
+            echo "::error::expected exactly one AppImage"
+            exit 1
+          fi
+          appimage="${files[0]}"
+          chmod +x "$appimage"
+          # A bundle that cannot start is not a release asset. The app is given
+          # 20 seconds on a virtual display and must still be running.
+          xvfb-run -a "$appimage" --appimage-extract-and-run &
+          pid=$!
+          sleep 20
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "::error::the appimage exited during the startup check"
+            exit 1
+          fi
+          kill "$pid" 2>/dev/null || true
+
+      - name: publish to the release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          shopt -s nullglob
+          files=(target/release/bundle/appimage/*.AppImage)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no AppImage found to upload"
             ls -R target/release/bundle || true
             exit 1
           fi

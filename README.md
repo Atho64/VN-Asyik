@@ -1,6 +1,6 @@
 # VN Asyik
 
-A visual novel library and playtime tracker for Windows and Android. It reads
+A visual novel library and playtime tracker for Windows, Linux and Android. It reads
 from VNDB, keeps everything in a local SQLite database, and works with no
 network. Rust and Tauri on the backend, React on the front.
 
@@ -50,7 +50,19 @@ game of the year, and the five games you spent the most time in.
 **Timeline.** Your reading journey across every game in one feed: sessions,
 journal notes, endings reached and finished games, newest first, grouped by
 day. Covers follow the same content setting as the library, and every row
-opens the game page.
+opens the game page. A second tab holds your screenshots.
+
+**Screenshots.** One button captures the game you are reading: the game window on
+Windows, the whole screen on Android. On Windows it is also bound to
+`Ctrl+Shift+S`, so you can shoot without leaving the game. Captures are grouped by
+game, open full size, and can be deleted. They stay on the device, but a library
+export carries them so a backup does not lose the pictures.
+
+**Themes.** Beyond the accent colour, a theme sets the surfaces, text, corners,
+density and glass strength. Four presets ship (Nord, Sepia, Slate, High contrast),
+or build your own with a live contrast readout that keeps body text at AA. Themes
+export and import as a small JSON file. The focused game can still tint the
+interface, or you can turn that off.
 
 **Discord Rich Presence.** Optional, off by default. Shows what you are reading,
 rotating through whatever fields you configure. Explicit cover art is blurred
@@ -278,6 +290,12 @@ tells you rather than pretending.
 
 - **No chapter detection on Android.** The OS does not let one app inspect
   another's window. Chapter and route are manual there.
+- **No automatic tracking on a pure Wayland session.** Wayland does not let one
+  app see another's windows, so focus and window titles are out of reach. Visual
+  novels that run through XWayland are tracked normally; a native Wayland window
+  is not. The app says which case you are in instead of quietly counting nothing.
+- **Screenshots on Android need a screen-casting permission.** Android captures
+  the whole screen, not one window, and asks you to allow it first.
 - **The app never writes to a running game.** It does not patch files, re-inject
   translated text, or touch DRM.
 - **No telemetry.** No analytics, no crash reporting, no phone-home. The only
@@ -288,7 +306,8 @@ tells you rather than pretending.
 
 Download the latest prerelease from [GitHub Releases](https://github.com/Atho64/VN-Asyik/releases).
 Windows has `.exe` and `.msi` installers; both are unsigned and may show a
-SmartScreen warning. Android uses the signed `app-universal-release.apk`.
+SmartScreen warning. Android uses the signed `app-universal-release.apk`. Linux
+has an `.AppImage`: make it executable and run it.
 
 To build from source:
 

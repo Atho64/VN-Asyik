@@ -1,6 +1,6 @@
 # VN Asyik
 
-Pustaka visual novel dan pelacak waktu baca untuk Windows dan Android. Data
+Pustaka visual novel dan pelacak waktu baca untuk Windows, Linux, dan Android. Data
 diambil dari VNDB, disimpan lokal di SQLite, dan tetap jalan tanpa jaringan.
 Rust dan Tauri di sisi belakang, React di sisi depan.
 
@@ -52,7 +52,19 @@ lima gim dengan waktu terbanyak.
 **Lini Masa.** Perjalanan membaca dari semua gim dalam satu aliran: sesi,
 catatan jurnal, akhir yang dicapai, dan gim yang selesai, terbaru dulu,
 dikelompokkan per hari. Kover mengikuti pengaturan konten yang sama dengan
-koleksi, dan setiap baris membuka halaman gim.
+koleksi, dan setiap baris membuka halaman gim. Tab kedua berisi screenshot Anda.
+
+**Screenshot.** Satu tombol merekam gim yang sedang dibaca: jendela gim di
+Windows, seluruh layar di Android. Di Windows juga terikat ke `Ctrl+Shift+S`,
+jadi kamu bisa merekam tanpa keluar dari gim. Hasilnya dikelompokkan per gim,
+bisa dibuka penuh dan dihapus. Semuanya tetap di perangkat ini, tetapi ekspor
+pustaka membawanya agar cadangan tidak kehilangan gambarnya.
+
+**Tema.** Selain warna aksen, tema menentukan permukaan, teks, sudut, kerapatan,
+dan kekuatan kaca. Ada empat preset (Nord, Sepia, Slate, High contrast), atau
+buat sendiri dengan pembacaan kontras langsung yang menjaga teks isi tetap AA.
+Tema bisa diekspor dan diimpor sebagai file JSON kecil. Gim yang sedang dibuka
+masih bisa mewarnai antarmuka, atau kamu matikan.
 
 **Discord Rich Presence.** Opsional, mati secara bawaan. Menampilkan apa yang
 sedang kamu baca, bergiliran sesuai kolom yang kamu atur. Kover eksplisit
@@ -292,6 +304,13 @@ terkirim tanpa enkripsi.
 Sebagian karena batas platform, sebagian karena memang diputuskan begitu; tapi
 apa pun alasannya, aplikasi mengatakannya, bukan berpura-pura.
 
+- **Tidak ada pelacakan otomatis di sesi Wayland murni.** Wayland tidak
+  mengizinkan satu aplikasi melihat jendela aplikasi lain, jadi fokus dan judul
+  jendela tidak terjangkau. Visual novel yang berjalan lewat XWayland tetap
+  terlacak normal; jendela Wayland asli tidak. Aplikasi menyebutkan kamu di
+  kasus yang mana, bukan diam-diam tidak menghitung apa pun.
+- **Screenshot di Android butuh izin pencerminan layar.** Android merekam
+  seluruh layar, bukan satu jendela, dan meminta izin dulu.
 - **Tidak ada deteksi bab di Android.** Sistem operasi tidak mengizinkan satu
   aplikasi memeriksa jendela aplikasi lain. Bab dan rute diatur manual.
 - **Aplikasi tidak pernah menulis ke gim yang sedang berjalan.** Tidak menambal
@@ -306,7 +325,8 @@ apa pun alasannya, aplikasi mengatakannya, bukan berpura-pura.
 Unduh prarilis terbaru dari [GitHub Releases](https://github.com/Atho64/VN-Asyik/releases).
 Windows menyediakan installer `.exe` dan `.msi`; keduanya belum ditandatangani
 dan mungkin menampilkan peringatan SmartScreen. Android menggunakan
-`app-universal-release.apk` yang ditandatangani.
+`app-universal-release.apk` yang ditandatangani. Linux memakai `.AppImage`:
+jadikan bisa dieksekusi lalu jalankan.
 
 Untuk membangun dari kode sumber:
 
