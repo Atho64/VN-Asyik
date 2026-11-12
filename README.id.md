@@ -382,7 +382,7 @@ ke dokumen terpisah.
 Tiap butir di bawah menyebut apa yang benar-benar diberikannya ke proyek ini.
 _Diport_ berarti kode atau konstanta disalin dan membawa komentar asal-usul di
 sumbernya. _Inspirasi_ berarti proyeknya dibaca untuk memahami masalahnya; tidak
-ada yang disalin, dan sebuah ide tidak menimbulkan kewajiban apa pun.
+ada yang disalin.
 
 **[VaternID/EwE](https://github.com/VaternID/EwE)** (GPL-3.0, diport).
 Kartu presence Discord dimodelkan dari EwE. `crates/vn-core/src/presence.rs`
@@ -411,8 +411,6 @@ yang terdokumentasi.
 **LunaBox** (AGPL-3.0, hanya inspirasi).
 Dibaca sebagai karya yang mendahului untuk membayangkan fitur AI di atas pustaka
 VN, dan untuk tahu mode kegagalan apa yang penting (spoiler, kesimpulan karangan).
-Ide dan perilaku fungsional tidak bisa dihakciptakan, jadi ini tidak menimbulkan
-kewajiban apa pun.
 
 ## Lisensi
 

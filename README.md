@@ -363,8 +363,7 @@ document.
 
 Each entry below says what it actually gave this project. _Ported_ means code or
 constants were copied and carry provenance comments in the source. _Inspiration_
-means the project was read to understand a problem; nothing was copied, and no
-obligation attaches to an idea.
+means the project was read to understand a problem; nothing was copied.
 
 **[VaternID/EwE](https://github.com/VaternID/EwE)** (GPL-3.0, ported).
 The Discord presence card is modelled on EwE. `crates/vn-core/src/presence.rs`
@@ -391,8 +390,7 @@ integration is a client for a documented API.
 
 **LunaBox** (AGPL-3.0, inspiration only).
 Read as prior art for what an AI feature over a VN library could present, and for
-which failure modes matter (spoilers, invented conclusions). Ideas and functional
-behaviour are not copyrightable, so this created no obligation either way.
+which failure modes matter (spoilers, invented conclusions).
 
 ## License
 
