@@ -234,7 +234,18 @@ async fn capture_frame(pid: u32) -> CommandResult<screenshots::Captured> {
         .map_err(|err| CommandError::new("screenshot_failed", err.to_string()))?
         .map_err(|err| capture_error(&err))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        // A fresh X connection per capture; it is a rare user action, so there is
+        // nothing worth keeping open between shots.
+        return tauri::async_runtime::spawn_blocking(move || {
+            crate::screenshots::linux::capture_game_window(pid)
+        })
+        .await
+        .map_err(|err| CommandError::new("screenshot_failed", err.to_string()))?
+        .map_err(|err| capture_error(&err));
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = pid;
         Err(CommandError::new(
