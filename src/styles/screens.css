@@ -37,6 +37,39 @@
   gap: var(--space-2);
 }
 
+/* Inside the theme grid each picker is its own cell, and a flex row put the
+ * swatch right after a variable-width label — so `Latar` and `Permukaan solid`
+ * started their swatches 60 px apart and the column read as ragged. A grid with
+ * the label flexible and the swatch and hex fixed lines them all up, at every
+ * width. Scoped to the theme grid: the accent row still lays its picker out
+ * inline among the chips. */
+.appearance__tokens .appearance__picker {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+/* The six theme colours: a grid of labelled swatches.
+ *
+ * Compounded with `.settings__control` on purpose. That class sets
+ * `display: flex` and is declared later in this file, so a bare
+ * `.appearance__tokens { display: grid }` lost the cascade at equal specificity
+ * and the six pickers flowed inline, wrapping mid-row. The extra class makes the
+ * grid win regardless of where either rule moves.
+ *
+ * `min(18rem, 100%)` rather than a flat 18rem: a column wider than the container
+ * overflows instead of collapsing, which is how a settings row ends up scrolling
+ * sideways on a narrow window. */
+.settings__control.appearance__tokens {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: var(--space-3) var(--space-4);
+  justify-items: start;
+  width: 100%;
+}
+
 .appearance__color {
   width: var(--touch-target);
   min-height: var(--touch-target);
@@ -1874,6 +1907,75 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* The reader's own captures.
+ *
+ * Deliberately NOT `.gallery`. That grid belongs to VNDB's reference images: it
+ * forces a 4:3 tile with `object-fit: cover`, so a 16:9 game frame — which is
+ * what a capture is — loses its left and right edges. These are the reader's
+ * pictures, so they get their own shape: 16:9, uncropped, and larger, because
+ * there is no thirty-image gallery to fit on one screen.
+ *
+ * `contain` rather than `cover` for the same reason: a window that is not 16:9
+ * is letterboxed instead of cropped. A screenshot that silently drops part of
+ * the picture is worse than one with a margin. */
+.shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shots__game {
+  color: inherit;
+  text-decoration: none;
+}
+
+.shots__game:hover {
+  color: var(--accent);
+}
+
+.shots__heading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shots__tile {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--surface-solid);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+
+.shots__tile:hover,
+.shots__tile:focus-visible {
+  border-color: var(--accent);
+}
+
+.shots__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* A capture whose data URL has not arrived yet. Same footprint as the image so
+ * the grid does not reflow when it lands. */
+.shots__placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-2);
 }
 
 /* A concealed tile.

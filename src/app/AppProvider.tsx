@@ -8,11 +8,16 @@ import { useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
 import { listenBetaFeatures } from "@/lib/ipc/prefs";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { GameCard } from "@/lib/ipc/types";
-import { accentForTheme, onAccentFor } from "@/lib/palette";
+import { updateAppearance } from "@/lib/theme";
 import { createTranslator, resolveLocale, type Translator } from "@/i18n";
 import { createContext } from "react";
 import { focusArt } from "@/components/Backdrop";
-import { prefersReducedTransparency, resolveTheme, useAppStore } from "./store";
+import {
+  prefersMoreContrast,
+  prefersReducedTransparency,
+  resolveTheme,
+  useAppStore,
+} from "./store";
 
 interface AppContextValue {
   t: Translator;
@@ -146,10 +151,13 @@ export function AppProvider({
   }, [platform?.os, setCards]);
 
   // DOM attributes are the contract between prefs and CSS (tokens.css).
+  //
+  // A theme carries its own mode, so it decides `data-theme` outright: a dark
+  // theme on a light-mode system is the reader's explicit choice, not a bug.
   useEffect(() => {
     const root = document.documentElement;
     const apply = (): void => {
-      root.dataset.theme = resolveTheme(prefs.theme);
+      root.dataset.theme = appearance?.theme?.base ?? resolveTheme(prefs.theme);
       root.dataset.reduceEffects = prefs.reduce_effects ? "true" : "false";
       root.dataset.platform = platform?.os ?? "unknown";
       root.lang = locale;
@@ -160,7 +168,7 @@ export function AppProvider({
     const query = window.matchMedia("(prefers-color-scheme: light)");
     query.addEventListener("change", apply);
     return () => query.removeEventListener("change", apply);
-  }, [prefs.theme, prefs.reduce_effects, locale, platform?.os]);
+  }, [prefs.theme, prefs.reduce_effects, locale, platform?.os, appearance?.theme?.base]);
 
   // The tray menu is built in Rust before the frontend knows the locale, so it
   // starts in English. Relabel it as soon as the UI knows the language, and
@@ -190,47 +198,50 @@ export function AppProvider({
     };
   }, [setAppearance, companionWindow]);
 
-  /* The accent is a CSS variable override rather than a class per colour: the
-   * token set already reads `--accent` everywhere, so one property recolours
-   * buttons, chips, focus rings and charts together. The reader's exact hex is
-   * adapted to the active theme so it stays readable as text and as a ring;
-   * clearing it removes the overrides and the theme's own accent comes back. */
+  /* Theme and accent are CSS variable overrides rather than a class per colour:
+   * the token set already reads them everywhere, so one property recolours
+   * buttons, chips, focus rings and charts together. `updateAppearance` is the
+   * only writer — it resolves theme, then the reader's accent, then the focused
+   * game's tint, so no surface can clobber another's property. */
   useEffect(() => {
-    const root = document.documentElement;
     const apply = (): void => {
-      const accent = appearance?.accent
-        ? accentForTheme(appearance.accent, resolveTheme(prefs.theme))
-        : null;
-      if (accent) {
-        const on = onAccentFor(accent);
-        root.style.setProperty("--accent", accent);
-        root.style.setProperty(
-          "--accent-soft",
-          `color-mix(in srgb, ${accent} 15%, transparent)`,
-        );
-        root.style.setProperty("--accent-strong", accent);
-        root.style.setProperty("--on-accent", on);
-        root.style.setProperty("--accent-contrast", on);
-      } else {
-        for (const name of [
-          "--accent",
-          "--accent-soft",
-          "--accent-strong",
-          "--on-accent",
-          "--accent-contrast",
-        ]) {
-          root.style.removeProperty(name);
-        }
-      }
+      const theme = appearance?.theme ?? null;
+      updateAppearance({
+        theme,
+        mode: theme?.base ?? resolveTheme(prefs.theme),
+        accent: appearance?.accent ?? null,
+        gameTint: appearance?.gameTint ?? true,
+        media: {
+          reducedTransparency: prefersReducedTransparency(),
+          moreContrast: prefersMoreContrast(),
+          reduceEffects: prefs.reduce_effects,
+        },
+      });
     };
     apply();
-    // A system theme switch flips the surface the accent must read against, so
-    // re-adapt it live rather than waiting for the next prefs change.
-    if (prefs.theme !== "system" || !window.matchMedia) return;
-    const query = window.matchMedia("(prefers-color-scheme: light)");
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
-  }, [appearance?.accent, prefs.theme]);
+    // A system theme switch flips the surface the accent must read against, and
+    // the two accessibility queries change what a theme is allowed to paint, so
+    // re-resolve live rather than waiting for the next prefs change.
+    if (!window.matchMedia) return;
+    const listeners: Array<() => void> = [];
+    const watch = (query: string): void => {
+      const list = window.matchMedia(query);
+      list.addEventListener("change", apply);
+      listeners.push(() => list.removeEventListener("change", apply));
+    };
+    if (prefs.theme === "system") watch("(prefers-color-scheme: light)");
+    watch("(prefers-reduced-transparency: reduce)");
+    watch("(prefers-contrast: more)");
+    return () => {
+      for (const stop of listeners) stop();
+    };
+  }, [
+    appearance?.accent,
+    appearance?.theme,
+    appearance?.gameTint,
+    prefs.theme,
+    prefs.reduce_effects,
+  ]);
 
   /* Ask GitHub once per launch; the answer is cached for six hours server-side,
    * so this is one request a day in practice. A failure is silent on purpose: a

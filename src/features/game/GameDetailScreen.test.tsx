@@ -50,6 +50,7 @@ vi.mock("@/features/game/ScriptCard", () => ({ ScriptCard: () => null }));
 vi.mock("@/features/game/WalkthroughCard", () => ({ WalkthroughCard: () => null }));
 vi.mock("@/features/game/ReadingCard", () => ({ ReadingCard: () => null }));
 vi.mock("@/features/game/PlayButton", () => ({ PlayButton: () => null }));
+vi.mock("@/features/game/ScreenshotLibrary", () => ({ ScreenshotLibrary: () => null }));
 
 const { GameDetailScreen } = await import("./GameDetailScreen");
 const t = createTranslator("en");

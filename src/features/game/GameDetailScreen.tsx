@@ -10,6 +10,7 @@ import { PlayButton } from "@/features/game/PlayButton";
 import { titledNames } from "@/features/game/alternateTitles";
 import { RatingPicker } from "@/features/game/RatingPicker";
 import { ScreenshotGallery } from "@/features/game/ScreenshotGallery";
+import { ScreenshotLibrary } from "@/features/game/ScreenshotLibrary";
 import { CastCard } from "@/features/game/CastCard";
 import { VndbFacts } from "@/features/game/VndbFacts";
 import { vndbVnUrl } from "@/features/game/vndbMetadata";
@@ -754,6 +755,10 @@ export function GameDetailScreen() {
               ) : null}
             </Card>
           ) : null}
+
+          {/* The reader's own captures come first: they are the only copy, while
+              the VNDB gallery below is a cache that can be rebuilt any time. */}
+          {id ? <ScreenshotLibrary gameId={id} /> : null}
 
           {/* Screenshots sit after the prose. They are the reason someone scrolls
               this far, and putting them above the description would push the text

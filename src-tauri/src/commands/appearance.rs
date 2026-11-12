@@ -16,6 +16,54 @@ use crate::state::AppState;
 const KEY: &str = "ui.appearance";
 /// Largest background accepted, in bytes. A wallpaper is not a library.
 const MAX_BYTES: u64 = 8 * 1024 * 1024;
+/// Marker for a theme file, so a library export is not mistaken for one.
+const THEME_FORMAT: &str = "vn-asyik-theme";
+
+/// The tokens a theme owns.
+///
+/// Mirrors `ThemeTokens` in `src/lib/theme.ts`. Rust owns the *shape* and the
+/// ranges; the contrast maths stays in TypeScript, where the palette helpers
+/// already live and where the theme is actually resolved.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeTokens {
+    pub bg: String,
+    pub bg_elevated: String,
+    pub surface_solid: String,
+    pub text: String,
+    pub text_muted: String,
+    pub text_faint: String,
+    /// `sharp` | `soft` | `round`.
+    pub radius: String,
+    /// `compact` | `comfortable`.
+    pub density: String,
+    /// 0..=1.
+    pub glass: f64,
+}
+
+/// A named set of token overrides.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeView {
+    pub id: String,
+    pub name: String,
+    /// `dark` | `light`. A theme carries its own mode.
+    pub base: String,
+    pub tokens: ThemeTokens,
+}
+
+/// A theme file on disk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ThemeFile {
+    format: String,
+    version: u32,
+    theme: ThemeView,
+}
+
+fn default_true() -> bool {
+    true
+}
 
 /// Encoder for the data URL the webview loads. Imported through the trait below
 /// because `encode` is a trait method, not an inherent one.
@@ -37,6 +85,10 @@ pub struct AppearanceView {
     pub background: Option<String>,
     /// How much the scrim darkens it, 0.0 to 0.9.
     pub background_dim: f64,
+    /// The chosen theme, or absent for the built-in dark/light/system ramp.
+    pub theme: Option<ThemeView>,
+    /// Whether a focused game may tint the interface at all.
+    pub game_tint: bool,
 }
 
 impl Default for AppearanceView {
@@ -46,17 +98,37 @@ impl Default for AppearanceView {
             background_name: None,
             background: None,
             background_dim: 0.45,
+            theme: None,
+            game_tint: true,
         }
     }
 }
 
 /// The stored part: the path, not the bytes.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+///
+/// Every field defaults, so a row written before themes existed still reads and
+/// an older build ignores the new ones instead of failing to parse.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct Stored {
     accent: Option<String>,
     background_path: Option<String>,
     background_dim: f64,
+    theme: Option<ThemeView>,
+    #[serde(default = "default_true")]
+    game_tint: bool,
+}
+
+impl Default for Stored {
+    fn default() -> Self {
+        Self {
+            accent: None,
+            background_path: None,
+            background_dim: 0.45,
+            theme: None,
+            game_tint: true,
+        }
+    }
 }
 
 impl Stored {
@@ -158,7 +230,26 @@ pub async fn appearance_get(state: State<'_, AppState>) -> CommandResult<Appeara
         background_name: image.as_ref().map(|(_, name)| name.clone()),
         background: image.map(|(url, _)| url),
         background_dim: stored.dim(),
+        theme: stored.theme.clone(),
+        game_tint: stored.game_tint,
     })
+}
+
+/// Everything one save can change.
+///
+/// One struct rather than eight parameters: the command grew a theme, a clear
+/// flag and a tint switch, and a positional call with eight arguments is a
+/// mis-send waiting to happen.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppearanceInput {
+    pub accent: Option<String>,
+    pub background_path: Option<String>,
+    pub clear_background: bool,
+    pub background_dim: f64,
+    pub theme: Option<ThemeView>,
+    pub clear_theme: bool,
+    pub game_tint: bool,
 }
 
 /// Save the accent colour, the background image and the scrim strength.
@@ -173,28 +264,145 @@ pub async fn appearance_get(state: State<'_, AppState>) -> CommandResult<Appeara
 #[tauri::command]
 pub async fn appearance_set(
     state: State<'_, AppState>,
-    accent: Option<String>,
-    background_path: Option<String>,
-    clear_background: bool,
-    background_dim: f64,
+    input: AppearanceInput,
 ) -> CommandResult<AppearanceView> {
     let pool = state.db().pool();
     let mut stored = load(pool).await;
-    stored.accent = match accent.as_deref().map(str::trim) {
+    stored.accent = match input.accent.as_deref().map(str::trim) {
         Some("") | None => None,
         Some(value) => Some(validate_hex(value)?),
     };
-    if clear_background {
+    if input.clear_background {
         stored.background_path = None;
-    } else if let Some(path) = background_path.as_deref().filter(|path| !path.is_empty()) {
+    } else if let Some(path) = input
+        .background_path
+        .as_deref()
+        .filter(|path| !path.is_empty())
+    {
         // Read it now: a path that cannot be read is not worth saving, and the
         // user should hear that while the picker is still open in their mind.
         read_image(path)?;
         stored.background_path = Some(path.to_owned());
     }
-    stored.background_dim = background_dim.clamp(0.0, 0.9);
+    if input.clear_theme {
+        stored.theme = None;
+    } else if let Some(chosen) = input.theme.as_ref() {
+        stored.theme = Some(validate_theme(chosen)?);
+    }
+    stored.game_tint = input.game_tint;
+    stored.background_dim = input.background_dim.clamp(0.0, 0.9);
     store(pool, &stored).await?;
     appearance_get(state).await
+}
+
+/// Save the given theme as a shareable file.
+///
+/// # Errors
+/// `invalid_theme` for a theme that fails validation, or a document failure.
+#[tauri::command]
+pub async fn theme_export_file(app: tauri::AppHandle, theme: ThemeView) -> CommandResult<bool> {
+    let theme = validate_theme(&theme)?;
+    let contents = serde_json::to_string_pretty(&ThemeFile {
+        format: THEME_FORMAT.to_owned(),
+        version: 1,
+        theme,
+    })
+    .map_err(|err| CommandError::new("document", err.to_string()))?;
+    crate::platform::storage::save_document(app, "vn-asyik-theme.json".to_owned(), contents).await
+}
+
+/// Read a theme file, validating it exactly as a hand-edited one would be.
+///
+/// Returns `None` when the picker was dismissed.
+///
+/// # Errors
+/// `invalid_theme` when the file is not a theme, or a document failure.
+#[tauri::command]
+pub async fn theme_import_file(app: tauri::AppHandle) -> CommandResult<Option<ThemeView>> {
+    let Some(contents) = crate::platform::storage::open_document(app).await? else {
+        return Ok(None);
+    };
+    let file: ThemeFile = serde_json::from_str(&contents)
+        .map_err(|_| CommandError::new("invalid_theme", "that file is not a VN Asyik theme"))?;
+    if file.format != THEME_FORMAT {
+        return Err(CommandError::new(
+            "invalid_theme",
+            "that file is not a VN Asyik theme",
+        ));
+    }
+    validate_theme(&file.theme).map(Some)
+}
+
+/// Accept only a theme whose every field is usable.
+///
+/// The frontend clamps text for contrast; this rejects what cannot be clamped:
+/// a malformed colour, an unknown enum, a strength outside its range. A theme
+/// file arrives from another machine, so it is data, not code.
+fn validate_theme(theme: &ThemeView) -> Result<ThemeView, CommandError> {
+    let id = theme.id.trim();
+    if id.is_empty() || id.chars().count() > 120 {
+        return Err(CommandError::new(
+            "invalid_theme",
+            "a theme needs an id of at most 120 characters",
+        ));
+    }
+    let name = theme.name.trim();
+    if name.is_empty() || name.chars().count() > 60 {
+        return Err(CommandError::new(
+            "invalid_theme",
+            "a theme needs a name of at most 60 characters",
+        ));
+    }
+    if theme.base != "dark" && theme.base != "light" {
+        return Err(CommandError::new(
+            "invalid_theme",
+            "a theme's base must be dark or light",
+        ));
+    }
+    let tokens = &theme.tokens;
+    let colours = [
+        ("background", &tokens.bg),
+        ("elevated surface", &tokens.bg_elevated),
+        ("solid surface", &tokens.surface_solid),
+        ("text", &tokens.text),
+        ("muted text", &tokens.text_muted),
+        ("faint text", &tokens.text_faint),
+    ];
+    for (label, value) in colours {
+        validate_hex(value).map_err(|_| {
+            CommandError::new("invalid_theme", format!("{label} must be a #rrggbb colour"))
+        })?;
+    }
+    if !matches!(tokens.radius.as_str(), "sharp" | "soft" | "round") {
+        return Err(CommandError::new("invalid_theme", "unknown corner style"));
+    }
+    if !matches!(tokens.density.as_str(), "compact" | "comfortable") {
+        return Err(CommandError::new("invalid_theme", "unknown density"));
+    }
+    if tokens.glass.is_nan() || !(0.0..=1.0).contains(&tokens.glass) {
+        return Err(CommandError::new(
+            "invalid_theme",
+            "glass strength must be between 0 and 1",
+        ));
+    }
+    // Normalise what is storable: lower-case hex, trimmed text.
+    let hex = |value: &str| validate_hex(value).expect("checked above");
+    Ok(ThemeView {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        base: theme.base.clone(),
+        tokens: ThemeTokens {
+            bg: hex(&tokens.bg),
+            bg_elevated: hex(&tokens.bg_elevated),
+            surface_solid: hex(&tokens.surface_solid),
+            text: hex(&tokens.text),
+            text_muted: hex(&tokens.text_muted),
+            text_faint: hex(&tokens.text_faint),
+            radius: tokens.radius.clone(),
+            density: tokens.density.clone(),
+            glass: tokens.glass,
+        },
+    })
 }
 
 /// Accept only `#rrggbb`.
@@ -245,5 +453,104 @@ mod tests {
     fn the_scrim_defaults_when_a_stored_record_has_no_dimension() {
         let stored: Stored = serde_json::from_str("{\"accent\":\"#3bd1a4\"}").expect("json");
         assert!((stored.dim() - 0.45).abs() < f64::EPSILON);
+    }
+
+    /// A row written by 0.2.3 has no theme and no tint switch. Reading it must
+    /// keep the old behaviour, which means tinting on and no theme, not a parse
+    /// failure that would drop the reader's accent along with it.
+    #[test]
+    fn a_record_written_before_themes_existed_still_reads() {
+        let stored: Stored = serde_json::from_str(
+            "{\"accent\":\"#3bd1a4\",\"backgroundPath\":null,\"backgroundDim\":0.6}",
+        )
+        .expect("json");
+        assert_eq!(stored.accent.as_deref(), Some("#3bd1a4"));
+        assert!(stored.theme.is_none());
+        assert!(
+            stored.game_tint,
+            "tinting defaults on, as it behaved before"
+        );
+    }
+
+    fn theme(tokens: ThemeTokens) -> ThemeView {
+        ThemeView {
+            id: "custom:test".to_owned(),
+            name: "Test".to_owned(),
+            base: "dark".to_owned(),
+            tokens,
+        }
+    }
+
+    fn tokens() -> ThemeTokens {
+        ThemeTokens {
+            bg: "#101719".to_owned(),
+            bg_elevated: "#182225".to_owned(),
+            surface_solid: "#202D30".to_owned(),
+            text: "#EDF7F4".to_owned(),
+            text_muted: "#b6c9c4".to_owned(),
+            text_faint: "#91aaa4".to_owned(),
+            radius: "soft".to_owned(),
+            density: "comfortable".to_owned(),
+            glass: 1.0,
+        }
+    }
+
+    #[test]
+    fn a_valid_theme_is_normalised_to_lower_case_hex() {
+        let checked = validate_theme(&theme(tokens())).expect("valid");
+        assert_eq!(checked.tokens.surface_solid, "#202d30");
+        assert_eq!(checked.tokens.text, "#edf7f4");
+    }
+
+    #[test]
+    fn a_theme_with_a_colour_that_is_not_a_colour_is_refused() {
+        let mut bad = tokens();
+        bad.text = "red".to_owned();
+        assert_eq!(
+            validate_theme(&theme(bad)).unwrap_err().code,
+            "invalid_theme"
+        );
+    }
+
+    #[test]
+    fn a_theme_with_an_unknown_enum_or_out_of_range_strength_is_refused() {
+        let mut radius = tokens();
+        radius.radius = "squircle".to_owned();
+        assert!(validate_theme(&theme(radius)).is_err());
+
+        let mut density = tokens();
+        density.density = "airy".to_owned();
+        assert!(validate_theme(&theme(density)).is_err());
+
+        let mut glass = tokens();
+        glass.glass = 1.5;
+        assert!(validate_theme(&theme(glass)).is_err());
+
+        let mut base = theme(tokens());
+        base.base = "sepia".to_owned();
+        assert!(validate_theme(&base).is_err());
+    }
+
+    #[test]
+    fn a_theme_without_a_name_or_id_is_refused() {
+        let mut unnamed = theme(tokens());
+        unnamed.name = "   ".to_owned();
+        assert!(validate_theme(&unnamed).is_err());
+
+        let mut anonymous = theme(tokens());
+        anonymous.id = String::new();
+        assert!(validate_theme(&anonymous).is_err());
+    }
+
+    #[test]
+    fn a_theme_file_round_trips_through_json() {
+        let file = ThemeFile {
+            format: THEME_FORMAT.to_owned(),
+            version: 1,
+            theme: theme(tokens()),
+        };
+        let json = serde_json::to_string(&file).expect("serialise");
+        let parsed: ThemeFile = serde_json::from_str(&json).expect("parse");
+        assert_eq!(parsed.theme.tokens.bg_elevated, "#182225");
     }
 }

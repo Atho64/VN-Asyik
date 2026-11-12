@@ -11,6 +11,7 @@ import { api } from "@/lib/ipc/client";
 import type { TimelineEvent } from "@/lib/ipc/types";
 import { formatDate, formatDurationLong } from "@/lib/time";
 import { JournalSearch } from "./JournalSearch";
+import { ScreenshotsPanel } from "@/features/screenshots/ScreenshotsPanel";
 
 /** One chronological day of the journey, events newest first inside it. */
 interface TimelineDay {
@@ -144,6 +145,8 @@ export function TimelineScreen() {
   const { t, locale } = useI18n();
   const query = useAppStore((state) => state.timelineQuery);
   const setQuery = useAppStore((state) => state.setTimelineQuery);
+  const tab = useAppStore((state) => state.timelineTab);
+  const setTab = useAppStore((state) => state.setTimelineTab);
   const searching = query.trim().length > 0;
   const [events, setEvents] = useState<TimelineEvent[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -277,6 +280,29 @@ export function TimelineScreen() {
       <header className="page-head">
         <h1 className="page-title">{t("timeline.title")}</h1>
       </header>
+      <div className="tabs" role="tablist" aria-label={t("timeline.tabs")}>
+        {(
+          [
+            ["journey", "timeline.tabJourney"],
+            ["screenshots", "timeline.tabScreenshots"],
+          ] as const
+        ).map(([value, labelKey]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={tab === value}
+            className="tabs__tab"
+            onClick={() => setTab(value)}
+          >
+            {t(labelKey)}
+          </button>
+        ))}
+      </div>
+      {tab === "screenshots" ? (
+        <ScreenshotsPanel />
+      ) : (
+        <>
       <div className="timeline__search">
         <div className="search">
           <span className="search__icon">
@@ -293,6 +319,8 @@ export function TimelineScreen() {
         </div>
       </div>
       {searching ? <JournalSearch query={query.trim()} /> : feed}
+        </>
+      )}
     </div>
   );
 }

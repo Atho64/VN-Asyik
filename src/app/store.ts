@@ -55,6 +55,12 @@ interface AppState {
    * result and comes back must find their search, not an empty box.
    */
   timelineQuery: string;
+  /**
+   * Which Timeline tab is open. In the store for the same reason as the search
+   * text: opening a screenshot and coming back must land on the tab you left.
+   */
+  timelineTab: "journey" | "screenshots";
+  setTimelineTab: (tab: "journey" | "screenshots") => void;
   toasts: Toast[];
   paletteOpen: boolean;
   /**
@@ -124,6 +130,7 @@ export const useAppStore = create<AppState>((set) => ({
   libraryError: null,
   libraryBrowse: initialLibraryBrowse,
   timelineQuery: "",
+  timelineTab: "journey",
   toasts: [],
   paletteOpen: false,
   refreshingVndb: [],
@@ -142,6 +149,7 @@ export const useAppStore = create<AppState>((set) => ({
   updateLibraryBrowse: (patch) =>
     set((state) => ({ libraryBrowse: { ...state.libraryBrowse, ...patch } })),
   setTimelineQuery: (timelineQuery) => set({ timelineQuery }),
+  setTimelineTab: (timelineTab) => set({ timelineTab }),
   upsertCard: (card) =>
     set((state) => {
       const index = state.cards.findIndex(
@@ -193,4 +201,16 @@ export function resolveTheme(mode: string): "dark" | "light" {
 export function prefersReducedTransparency(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
   return window.matchMedia("(prefers-reduced-transparency: reduce)").matches;
+}
+
+/**
+ * Whether the OS asks for more contrast.
+ *
+ * Read in TypeScript as well as in `tokens.css` because a custom theme writes
+ * inline properties, and an inline property beats the stylesheet's media query.
+ * Without this the setting would silently stop working for anyone using a theme.
+ */
+export function prefersMoreContrast(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-contrast: more)").matches;
 }

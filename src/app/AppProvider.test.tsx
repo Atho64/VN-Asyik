@@ -184,6 +184,8 @@ describe("custom accent", () => {
     background: null,
     backgroundName: null,
     backgroundDim: 0.45,
+    theme: null,
+    gameTint: true,
   };
 
   it("applies a theme-adapted accent with readable label text", async () => {

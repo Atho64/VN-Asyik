@@ -10,10 +10,24 @@ interface ChipProps {
   className?: string;
   /** Accessible name when the visible label alone would be ambiguous. */
   ariaLabel?: string;
+  /**
+   * A chip whose choice is currently overridden by something else. Disabled
+   * rather than hidden: the control still explains what it would do, and a
+   * disabled button is announced as unavailable instead of silently ignoring
+   * the click.
+   */
+  disabled?: boolean;
 }
 
 /** A selectable filter chip. Renders a real button so it is keyboard usable. */
-export function Chip({ children, selected, onClick, className, ariaLabel }: ChipProps) {
+export function Chip({
+  children,
+  selected,
+  onClick,
+  className,
+  ariaLabel,
+  disabled,
+}: ChipProps) {
   const classes = ["chip"];
   if (className) classes.push(className);
 
@@ -27,6 +41,7 @@ export function Chip({ children, selected, onClick, className, ariaLabel }: Chip
       className={classes.join(" ")}
       aria-pressed={selected ?? false}
       aria-label={ariaLabel}
+      disabled={disabled}
       onClick={onClick}
     >
       {children}

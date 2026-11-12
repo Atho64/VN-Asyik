@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useAppStore } from "@/app/store";
+import { updateAppearance } from "@/lib/theme";
 import { api } from "@/lib/ipc/client";
 import { isExplicit } from "@/lib/library";
 import { fallbackPalette } from "@/lib/palette";
@@ -198,13 +199,14 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
   };
 }
 
-/** Point the palette variables at an artwork's accent. */
+/**
+ * Point the palette variables at an artwork's accent.
+ *
+ * Publishing rather than writing: the resolver decides whether the game's
+ * palette wins, and it already knows the reader's accent and the theme. A
+ * reader who chose an app accent asked for a fixed colour, so hovering a cover
+ * must not quietly replace it; the switch in Appearance is the harder off.
+ */
 export function applyAccent(palette: ReturnType<typeof fallbackPalette>): void {
-  // A reader who chose an app accent asked for a fixed colour; hovering a cover
-  // must not quietly replace it. With no choice made, the cover's accent leads.
-  if (useAppStore.getState().appearance?.accent) return;
-  const root = document.documentElement;
-  root.style.setProperty("--accent", palette.accent);
-  root.style.setProperty("--accent-soft", palette.accentSoft);
-  root.style.setProperty("--on-accent", palette.onAccent);
+  updateAppearance({ tint: palette });
 }

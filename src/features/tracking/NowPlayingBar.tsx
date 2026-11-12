@@ -7,6 +7,7 @@ import { Button } from "@/components/Button";
 import { Icon } from "@/components/Icon";
 import { api, IpcError, startPolling } from "@/lib/ipc/client";
 import { formatDuration } from "@/lib/time";
+import { ScreenshotButton } from "@/features/game/ScreenshotButton";
 import type { AndroidSessionView, TrackingStatus } from "@/lib/ipc/types";
 
 /**
@@ -203,6 +204,9 @@ export function NowPlayingBar() {
 
       {running ? (
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
+          {/* Capture sits next to Pause/Stop because it is only meaningful while
+           * a game is actually running. */}
+          <ScreenshotButton variant="ghost" />
           {status.phase === "paused" ? (
             <Button
               variant="secondary"

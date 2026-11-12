@@ -473,12 +473,64 @@ export const usageAccessViewSchema = z.object({
 export type UsageAccessView = z.infer<typeof usageAccessViewSchema>;
 
 /** Device-to-device sync status. */
-/** Accent colour and background image. */
+/** The tokens a theme owns. Mirrors `ThemeTokens` in `src/lib/theme.ts`. */
+export const themeTokensSchema = z.object({
+  bg: z.string(),
+  bgElevated: z.string(),
+  surfaceSolid: z.string(),
+  text: z.string(),
+  textMuted: z.string(),
+  textFaint: z.string(),
+  radius: z.enum(["sharp", "soft", "round"]),
+  density: z.enum(["compact", "comfortable"]),
+  glass: z.number(),
+});
+export type ThemeTokensView = z.infer<typeof themeTokensSchema>;
+
+/** A named set of token overrides. `base` decides the mode it runs in. */
+export const themeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  base: z.enum(["dark", "light"]),
+  tokens: themeTokensSchema,
+});
+export type ThemeView = z.infer<typeof themeSchema>;
+
+/** One screenshot the reader captured. */
+export const screenshotCardSchema = z.object({
+  id: z.string(),
+  gameId: z.string(),
+  width: z.number(),
+  height: z.number(),
+  capturedAt: z.number(),
+  /** `windows_window` or `android_screen`. */
+  source: z.string(),
+  caption: z.string(),
+});
+export type ScreenshotCard = z.infer<typeof screenshotCardSchema>;
+
+/** A capture with the game it belongs to, for the cross-game library. */
+export const screenshotFeedCardSchema = screenshotCardSchema.extend({
+  gameTitle: z.string(),
+});
+export type ScreenshotFeedCard = z.infer<typeof screenshotFeedCardSchema>;
+
+/** Whether the capture button can act right now, and why not. */
+export const captureStatusSchema = z.object({
+  supported: z.boolean(),
+  gameId: z.string().nullable(),
+  reason: z.string().nullable(),
+});
+export type CaptureStatus = z.infer<typeof captureStatusSchema>;
+
+/** Accent colour, background image and theme. */
 export const appearanceViewSchema = z.object({
   accent: z.string().nullable(),
   backgroundName: z.string().nullable(),
   background: z.string().nullable(),
   backgroundDim: z.number(),
+  theme: themeSchema.nullable(),
+  gameTint: z.boolean(),
 });
 export type AppearanceView = z.infer<typeof appearanceViewSchema>;
 

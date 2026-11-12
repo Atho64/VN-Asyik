@@ -14,6 +14,7 @@ pub mod luna;
 pub mod prefs;
 pub mod presence;
 pub mod reading;
+pub mod screenshots;
 pub mod script;
 pub mod sync;
 pub mod system;

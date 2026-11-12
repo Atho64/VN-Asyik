@@ -144,6 +144,14 @@ import {
   type PresenceActivity,
   type PresenceSettings,
   type PresenceStatus,
+  themeSchema,
+  type ThemeView,
+  screenshotCardSchema,
+  screenshotFeedCardSchema,
+  type ScreenshotFeedCard,
+  captureStatusSchema,
+  type ScreenshotCard,
+  type CaptureStatus,
 } from "./types";
 
 /** A command failure the UI can display directly. */
@@ -357,7 +365,18 @@ export interface Api {
     backgroundPath: string | null;
     clearBackground: boolean;
     backgroundDim: number;
+    theme: ThemeView | null;
+    clearTheme: boolean;
+    gameTint: boolean;
   }): Promise<AppearanceView>;
+  screenshotStatus(): Promise<CaptureStatus>;
+  screenshotCapture(): Promise<ScreenshotCard>;
+  screenshotList(gameId: string): Promise<ScreenshotCard[]>;
+  screenshotListAll(): Promise<ScreenshotFeedCard[]>;
+  screenshotImage(id: string): Promise<string>;
+  screenshotDelete(id: string): Promise<void>;
+  themeExportFile(theme: ThemeView): Promise<boolean>;
+  themeImportFile(): Promise<ThemeView | null>;
   updateCheck(force: boolean): Promise<UpdateView>;
   updateInstall(): Promise<string>;
   aiLlmProfiles(): Promise<LlmProfiles>;
@@ -666,13 +685,16 @@ export const api: Api = {
   trackingAndroidStop: () => call("tracking_android_stop", androidSessionViewSchema),
   aiTasteProfile: () => call("ai_taste_profile", tasteViewSchema),
   appearanceGet: () => call("appearance_get", appearanceViewSchema),
-  appearanceSet: (input) =>
-    call("appearance_set", appearanceViewSchema, {
-      accent: input.accent,
-      backgroundPath: input.backgroundPath,
-      clearBackground: input.clearBackground,
-      backgroundDim: input.backgroundDim,
-    }),
+  appearanceSet: (input) => call("appearance_set", appearanceViewSchema, { input }),
+  screenshotStatus: () => call("screenshot_status", captureStatusSchema),
+  screenshotCapture: () => call("screenshot_capture", screenshotCardSchema),
+  screenshotList: (gameId) =>
+    call("screenshot_list", z.array(screenshotCardSchema), { gameId }),
+  screenshotListAll: () => call("screenshot_list_all", z.array(screenshotFeedCardSchema)),
+  screenshotImage: (id) => call("screenshot_image", z.string(), { id }),
+  screenshotDelete: (id) => call("screenshot_delete", voidSchema, { id }),
+  themeExportFile: (theme) => call("theme_export_file", z.boolean(), { theme }),
+  themeImportFile: () => call("theme_import_file", themeSchema.nullable()),
   updateCheck: (force) => call("update_check", updateViewSchema, { force }),
   updateInstall: () => call("update_install", z.string()),
   aiLlmProfiles: () => call("ai_llm_profiles", llmProfilesSchema),

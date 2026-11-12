@@ -32,6 +32,7 @@ export type IconName =
   | "pause"
   | "play"
   | "image"
+  | "camera"
   | "guide"
   | "gamepad"
   | "screen"
@@ -153,6 +154,12 @@ const paths: Record<IconName, ReactNode> = {
       <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
       <circle cx="8.5" cy="9.5" r="1.5" />
       <path d="M3.5 17l5-4.5 4 3.5 3-2.5 5 4" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.9l1.2-2h6.8l1.2 2h1.9A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" />
+      <circle cx="12" cy="13" r="3.5" />
     </>
   ),
   trash: (

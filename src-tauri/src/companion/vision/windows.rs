@@ -180,6 +180,31 @@ impl Drop for Apartment {
     }
 }
 
+/// How long a one-shot capture waits for the frame pool to produce a frame.
+const ONCE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// Take exactly one frame from the window owned by `pid`.
+///
+/// Separate from [`Capture`]'s session lifecycle on purpose: a screenshot is not
+/// a reading session, so nothing is bound, tracked or budgeted. `Capture` must be
+/// created and dropped on one thread, which is why the caller runs this on a
+/// blocking worker.
+pub fn capture_window_once(pid: u32) -> std::result::Result<(u32, u32, Vec<u8>), &'static str> {
+    let target = list()?
+        .into_iter()
+        .find(|candidate| candidate.pid == pid)
+        .ok_or("vision_window_unavailable")?;
+    let mut capture = Capture::start(target)?;
+    let deadline = std::time::Instant::now() + ONCE_TIMEOUT;
+    loop {
+        match capture.next()? {
+            Some(pixels) => return Ok((pixels.width, pixels.height, pixels.rgba)),
+            None if std::time::Instant::now() >= deadline => return Err("vision_timeout"),
+            None => std::thread::sleep(std::time::Duration::from_millis(16)),
+        }
+    }
+}
+
 pub struct Capture {
     session: GraphicsCaptureSession,
     pool: Direct3D11CaptureFramePool,

@@ -9,6 +9,7 @@ pub mod companion;
 pub mod db;
 pub mod platform;
 pub mod presence;
+mod screenshots;
 pub mod script;
 pub mod secrets;
 pub mod state;
@@ -158,6 +159,14 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::ai::ai_taste_profile,
         commands::appearance::appearance_get,
         commands::appearance::appearance_set,
+        commands::appearance::theme_export_file,
+        commands::appearance::theme_import_file,
+        commands::screenshots::screenshot_status,
+        commands::screenshots::screenshot_capture,
+        commands::screenshots::screenshot_list,
+        commands::screenshots::screenshot_list_all,
+        commands::screenshots::screenshot_image,
+        commands::screenshots::screenshot_delete,
         commands::update::update_check,
         commands::update::update_install,
         commands::ai::ai_llm_profiles,

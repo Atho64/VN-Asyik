@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Backdrop, focusArt } from "@/components/Backdrop";
+import { updateAppearance } from "@/lib/theme";
 import { Icon, type IconName } from "@/components/Icon";
 import { Toasts } from "@/components/Toasts";
 import { ContextMenuProvider } from "@/app/ContextMenuProvider";
@@ -91,10 +92,9 @@ export function AppShell() {
   useEffect(() => {
     mainRef.current?.scrollTo?.({ top: 0 });
     if (pathname !== "/" && !pathname.startsWith("/game/")) {
-      const root = document.documentElement;
-      root.style.removeProperty("--accent");
-      root.style.removeProperty("--accent-soft");
-      root.style.removeProperty("--on-accent");
+      // Clearing the tint, not the accent: `removeProperty` also deleted the
+      // reader's own accent, which then stayed gone until the next restart.
+      updateAppearance({ tint: null });
       focusArt(null);
     }
   }, [pathname]);

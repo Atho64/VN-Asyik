@@ -6,6 +6,22 @@ mod tests;
 #[cfg(windows)]
 mod windows;
 
+/// One frame from the top-level window owned by `pid`, as `(width, height, rgba)`.
+///
+/// Exposed for the reader-pressed screenshot button, which needs the capture
+/// primitive and nothing else from this module: no session, no consent state, no
+/// budget, no scene tracking. Returns plain data so the capture types stay
+/// private to the vision feature.
+///
+/// # Errors
+/// A stable code: `vision_protected` when the window excludes capture,
+/// `vision_window_unavailable` when it is gone or minimised, `vision_timeout`
+/// when no frame arrived, `vision_unavailable` otherwise.
+#[cfg(windows)]
+pub fn capture_window_once(pid: u32) -> Result<(u32, u32, Vec<u8>), &'static str> {
+    windows::capture_window_once(pid)
+}
+
 use crate::ai::{chat::ChatConfig, vision::Image};
 use serde::Serialize;
 use std::sync::{

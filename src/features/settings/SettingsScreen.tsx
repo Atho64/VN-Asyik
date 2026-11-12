@@ -36,6 +36,7 @@ export default function SettingsScreen({
   const { t } = useI18n();
   const prefs = useAppStore((state) => state.prefs);
   const setPrefs = useAppStore((state) => state.setPrefs);
+  const appearance = useAppStore((state) => state.appearance);
   const platform = useAppStore((state) => state.platform);
   const pushToast = useAppStore((state) => state.pushToast);
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? "general");
@@ -155,7 +156,14 @@ export default function SettingsScreen({
             <h2 className="settings__group-title">{t("settings.appearance")}</h2>
 
             <div className="settings__row">
-              <span className="settings__label">{t("settings.theme")}</span>
+              <span className="settings__label">
+                {t("settings.theme")}
+                {appearance?.theme ? (
+                  <span className="settings__hint">
+                    {t("settings.themeOverridden", { name: appearance.theme.name })}
+                  </span>
+                ) : null}
+              </span>
               <div className="settings__control">
                 {(
                   [
@@ -166,7 +174,11 @@ export default function SettingsScreen({
                 ).map(([value, labelKey]) => (
                   <Chip
                     key={value}
-                    selected={prefs.theme === value}
+                    selected={!appearance?.theme && prefs.theme === value}
+                    // A theme carries its own mode, so this control cannot change
+                    // what is on screen while one is active. Disabled with a
+                    // reason beats a chip that silently does nothing.
+                    disabled={Boolean(appearance?.theme)}
                     onClick={() => void apply(() => api.setTheme(value))}
                   >
                     {t(labelKey)}
