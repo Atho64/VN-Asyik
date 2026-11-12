@@ -30,9 +30,8 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(2);
 /// The sockets Discord may be listening on, in the order to try them.
 #[must_use]
 pub fn socket_candidates() -> Vec<PathBuf> {
-    let base = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/tmp"));
+    let base =
+        std::env::var_os("XDG_RUNTIME_DIR").map_or_else(|| PathBuf::from("/tmp"), PathBuf::from);
     (0..10)
         .map(|index| base.join(format!("discord-ipc-{index}")))
         .collect()
@@ -97,13 +96,14 @@ impl UnixIpcSink {
                     self.connected_id = Some(client_id.to_owned());
                     return Ok(());
                 }
-                _ => continue,
+                // Any other answer is "not this socket": keep looking.
+                _ => {}
             }
         }
         Err(PresenceError::DiscordNotRunning)
     }
 
-    fn send(&mut self, command: serde_json::Value) -> Result<(), String> {
+    fn send(&mut self, command: &serde_json::Value) -> Result<(), String> {
         let Some(ref mut stream) = self.stream else {
             return Err("not connected".to_owned());
         };
@@ -138,13 +138,13 @@ impl PresenceSink for UnixIpcSink {
         // so reconnect once and retry before reporting anything.
         if self.connected_id.as_deref() == Some(client_id)
             && self.stream.is_some()
-            && self.send(set_activity_command(Some(activity))).is_ok()
+            && self.send(&set_activity_command(Some(activity))).is_ok()
         {
             return Ok(());
         }
 
         self.connect(client_id)?;
-        if let Err(message) = self.send(set_activity_command(Some(activity))) {
+        if let Err(message) = self.send(&set_activity_command(Some(activity))) {
             self.drop_stream();
             return Err(PresenceError::IpcError(message));
         }
@@ -152,7 +152,7 @@ impl PresenceSink for UnixIpcSink {
     }
 
     fn clear(&mut self) -> Result<(), PresenceError> {
-        if self.stream.is_some() && self.send(set_activity_command(None)).is_err() {
+        if self.stream.is_some() && self.send(&set_activity_command(None)).is_err() {
             self.drop_stream();
         }
         Ok(())

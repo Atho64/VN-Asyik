@@ -1,3 +1,7 @@
+// Only the Windows client and the non-Unix stub implement the trait; on Unix the
+// socket client in `ipc_unix` does, and this module holds only the shared
+// protocol helpers.
+#[cfg(not(unix))]
 use super::{PresenceError, PresenceSink};
 use vn_core::presence::PresenceActivity;
 

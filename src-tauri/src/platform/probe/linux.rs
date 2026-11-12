@@ -11,8 +11,8 @@
 //! **Wayland.** A Wayland client cannot enumerate windows or read another
 //! window's title — that is the security model, not a missing API. But most
 //! visual novels are X11 programs, and under a Wayland desktop they run through
-//! XWayland, where they *are* X11 windows with EWMH properties. So this probe
-//! connects to whatever X display is reachable and works for XWayland games on a
+//! `XWayland`, where they *are* X11 windows with EWMH properties. So this probe
+//! connects to whatever X display is reachable and works for `XWayland` games on a
 //! Wayland session. When no X display is reachable at all it reports that
 //! honestly instead of pretending tracking is available.
 //!
@@ -58,7 +58,7 @@ impl LinuxProbe {
     ///
     /// # Errors
     /// [`ProbeError::NoDisplay`] when there is no reachable X server, which is
-    /// the honest answer on a pure Wayland session with no XWayland.
+    /// the honest answer on a pure Wayland session with no `XWayland`.
     pub fn new() -> Result<Self, ProbeError> {
         let (connection, screen) = RustConnection::connect(None).map_err(|err| {
             ProbeError::NoDisplay(format!(
@@ -269,7 +269,7 @@ mod tests {
     use super::*;
 
     /// The probe must refuse to exist without a display rather than claim
-    /// tracking works. A Wayland session with no XWayland is exactly that case.
+    /// tracking works. A Wayland session with no `XWayland` is exactly that case.
     #[test]
     fn a_missing_display_is_reported_as_such() {
         // Only meaningful when the test host has no DISPLAY (CI, headless).

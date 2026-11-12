@@ -39,6 +39,9 @@ mod windows {
         pub synthetic: bool,
     }
     impl Target {
+        // The stub's body is only meaningful under `cfg(test)`; without a test
+        // it returns immediately and never reads `self`.
+        #[cfg_attr(not(test), allow(clippy::unused_self))]
         pub fn validate(&self) -> Result<(), &'static str> {
             #[cfg(test)]
             if self.synthetic {
@@ -46,6 +49,7 @@ mod windows {
             }
             Err("vision_unsupported")
         }
+        #[cfg_attr(not(test), allow(clippy::unused_self))]
         pub fn foreground(&self) -> bool {
             #[cfg(test)]
             if self.synthetic {

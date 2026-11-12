@@ -25,6 +25,9 @@ pub const MAX_EDGE: u32 = 1920;
 /// stays crisp, which is the whole reason someone screenshots a VN.
 const JPEG_QUALITY: u8 = 88;
 
+/// Only the Windows capture path constructs these today; Linux has no capture
+/// yet, so the variants are declared and unused there rather than absent.
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Debug, thiserror::Error)]
 pub enum ScreenshotError {
     /// This platform has no capture path, or it is not available right now.

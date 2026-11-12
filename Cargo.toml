@@ -82,6 +82,12 @@ module_name_repetitions = "allow"
 # `unused_async_trait_impl`, and CI's 1.99 does.
 unused_async = "allow"
 unused_async_trait_impl = "allow"
+# New in clippy 1.99 and pedantic: it wants `assert_eq!(x, [] as [T; 0])` instead
+# of `assert!(x.is_empty())`, which is less readable and prints a whole collection
+# on failure. The local toolchain is 1.97 and does not know the lint at all, so a
+# per-site `#[allow]` could not even be compiled here — same skew as the two
+# `unused_async*` entries above.
+assert_is_empty = "allow"
 must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
