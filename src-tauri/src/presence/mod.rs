@@ -1,6 +1,6 @@
 pub mod gateway;
 pub mod ipc;
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub mod ipc_unix;
 pub mod upload;
 
@@ -667,9 +667,11 @@ impl PresenceService {
         let sink: Box<dyn PresenceSink> = Box::new(ipc::IpcSink::new());
         #[cfg(target_os = "android")]
         let sink: Box<dyn PresenceSink> = Box::new(gateway::AndroidGatewaySink::new());
-        // Linux and macOS reach Discord over a Unix socket; the Windows client is
-        // a named pipe and does not exist here.
-        #[cfg(all(unix, not(target_os = "android")))]
+        // Linux reaches Discord over a Unix socket under `XDG_RUNTIME_DIR`. macOS
+        // uses the same protocol but keeps the socket in `$TMPDIR`, which this
+        // client does not look in, so macOS keeps the unsupported stub rather
+        // than a sink that would silently never connect.
+        #[cfg(target_os = "linux")]
         let sink: Box<dyn PresenceSink> = Box::new(ipc_unix::UnixIpcSink::new());
 
         Self::with_sink(initial_settings, sink)

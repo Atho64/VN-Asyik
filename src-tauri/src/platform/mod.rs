@@ -156,7 +156,11 @@ mod tests {
 
     #[test]
     fn discord_presence_matches_the_implemented_sink() {
-        let expected = if cfg!(target_os = "windows") {
+        // Windows uses the named pipe, Linux the socket under XDG_RUNTIME_DIR.
+        // macOS keeps the unsupported stub: its socket lives in $TMPDIR, which
+        // the client does not look in, so claiming Supported there would be a
+        // promise the code cannot keep.
+        let expected = if cfg!(any(target_os = "windows", target_os = "linux")) {
             Support::Supported
         } else {
             Support::Unavailable
