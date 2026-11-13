@@ -12,8 +12,9 @@
 //! * "too much data selected" is an error caused by asking for too many fields
 //!   or results at once.
 //!
-//! Nothing here invents endpoints: only `POST /vn`, `POST /character` and
-//! `GET /authinfo` are used, and each is named after the documented path.
+//! Query methods use the documented `POST /vn`, `POST /character` and
+//! `POST /tag` paths. Authentication and list-management methods likewise
+//! name their documented endpoints explicitly.
 
 pub mod cache;
 pub mod dto;
@@ -159,6 +160,37 @@ impl VndbClient {
     /// Propagates network, throttling and decoding failures.
     pub async fn search_vns(&self, query: &VnQuery) -> Result<VnQueryResult, VndbError> {
         self.post_json("vn", query).await
+    }
+
+    /// Look up tags by id: name and how many VNs carry each one.
+    ///
+    /// The breadth is what the "For you" rarity weighting needs — the same
+    /// seed set spans `Cherry Blossom` (85 VNs) and `ADV` (36,329) — and one
+    /// batched `POST /tag` with an `or` of id filters fetches it for all seed
+    /// tags at once. Verified against the live endpoint when this was added.
+    ///
+    /// # Errors
+    /// Propagates network, throttling and decoding failures.
+    pub async fn tag_counts(&self, tag_ids: &[String]) -> Result<Vec<dto::TagCount>, VndbError> {
+        if tag_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filters = if tag_ids.len() == 1 {
+            serde_json::json!(["id", "=", tag_ids[0]])
+        } else {
+            let mut or = vec![serde_json::Value::String("or".to_owned())];
+            or.extend(tag_ids.iter().map(|id| serde_json::json!(["id", "=", id])));
+            serde_json::Value::Array(or)
+        };
+        let query = dto::TagQuery {
+            filters,
+            fields: "id,name,vn_count".to_owned(),
+            // The seed set is bounded well below 100; the min is the API cap,
+            // so the conversion cannot truncate through it.
+            results: u32::try_from(tag_ids.len().min(100)).unwrap_or(100),
+        };
+        let result: dto::TagQueryResult = self.post_json("tag", &query).await?;
+        Ok(result.results)
     }
 
     /// Fetch one visual novel by id, or `None` when it does not exist.

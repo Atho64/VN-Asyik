@@ -23,12 +23,45 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TagWeight {
+    /// Tag id, e.g. `g505`, when the source row carried one. Counting stays by
+    /// name (an alias must not split a theme), but the "For you" query needs
+    /// the id to name the tag in a VNDB filter.
+    #[serde(default)]
+    pub id: Option<String>,
     /// Tag name as VNDB labels it.
     pub name: String,
     /// VNDB's own weight for how much this tag defines the work, 0 to 3.
     pub rating: f32,
     /// VNDB spoiler level: 0 none, 1 mild, 2 major. Above zero is excluded.
     pub spoiler: u8,
+}
+
+/// One named person or company, identified by its stable VNDB id.
+///
+/// `p8`/`s123` rather than a name: names change (aliases, romanisations), ids
+/// do not, and a query to VNDB is written against the id.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NamedEntity {
+    /// Stable id, e.g. `p8` for a developer, `s123` for a person.
+    pub id: String,
+    /// Name as VNDB displays it.
+    pub name: String,
+}
+
+/// A staff credit as it contributes to a profile.
+///
+/// Like [`NamedEntity`] but carrying the role, because a composer and a
+/// scenario writer are different signals even at the same id.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffCredit {
+    /// Staff id, e.g. `s123`.
+    pub id: String,
+    /// Name as VNDB displays it.
+    pub name: String,
+    /// Role on the work, e.g. `scenario`, `art`.
+    pub role: String,
 }
 
 /// One game as the profile needs it.
@@ -51,6 +84,15 @@ pub struct ProfiledGame {
     /// exactly what this library did. Two entries for one game must not double a
     /// tag's weight and invent a preference out of a single work.
     pub work_id: Option<String>,
+    /// Developers of the work, when its VNDB details are cached.
+    #[serde(default)]
+    pub developers: Vec<NamedEntity>,
+    /// Production staff credits, when the details carry them.
+    #[serde(default)]
+    pub staff: Vec<StaffCredit>,
+    /// Voice actors, when the details carry them.
+    #[serde(default)]
+    pub voices: Vec<NamedEntity>,
 }
 
 /// A theme the library leans toward.
@@ -86,11 +128,11 @@ pub struct TasteProfile {
 /// visual novel. Counting them made the profile read "100% Genre: visual novel",
 /// which describes the medium rather than the reader. Real taste signal sits
 /// higher: `Nakige` at 2.98, `Family` at 2.94.
-const BOILERPLATE_BELOW: f32 = 2.88;
+pub const BOILERPLATE_BELOW: f32 = 2.88;
 
 /// Minimum absolute count, so a one-game library produces no themes at all rather
 /// than a confident statement built on nothing.
-const MINIMUM_COUNT: usize = 2;
+pub(crate) const MINIMUM_COUNT: usize = 2;
 
 /// How many tags to report, strongest first.
 const MAX_THEMES: usize = 12;
@@ -207,6 +249,7 @@ mod tests {
 
     fn tag(name: &str, rating: f32) -> TagWeight {
         TagWeight {
+            id: None,
             name: name.to_owned(),
             rating,
             spoiler: 0,
@@ -215,6 +258,7 @@ mod tests {
 
     fn spoiler_tag(name: &str) -> TagWeight {
         TagWeight {
+            id: None,
             name: name.to_owned(),
             rating: 2.5,
             spoiler: 2,
@@ -229,6 +273,9 @@ mod tests {
             rating: None,
             tags,
             work_id: None,
+            developers: Vec::new(),
+            staff: Vec::new(),
+            voices: Vec::new(),
         }
     }
 

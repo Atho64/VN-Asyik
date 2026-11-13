@@ -6,6 +6,7 @@ pub mod backup;
 pub mod chat;
 pub mod companion;
 pub mod data;
+pub mod for_you;
 pub mod hook;
 pub mod journey;
 pub mod launch;

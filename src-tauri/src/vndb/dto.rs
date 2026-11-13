@@ -255,6 +255,37 @@ pub struct Tag {
     pub lie: Option<bool>,
 }
 
+/// A `POST /tag` request body.
+#[derive(Debug, Clone, Serialize)]
+pub struct TagQuery {
+    /// Filter predicates, in the documented array form.
+    pub filters: serde_json::Value,
+    /// Comma-separated field list.
+    pub fields: String,
+    /// How many results to return, max 100.
+    pub results: u32,
+}
+
+/// Result envelope for `POST /tag`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct TagQueryResult {
+    /// The matched tags.
+    #[serde(default)]
+    pub results: Vec<TagCount>,
+}
+
+/// One tag as the breadth lookup returns it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TagCount {
+    /// Tag id, e.g. `g505`.
+    pub id: Option<String>,
+    /// Tag name.
+    pub name: Option<String>,
+    /// How many VNs in the catalogue carry the tag — the rarity signal the
+    /// "For you" weighting is built on.
+    pub vn_count: Option<u64>,
+}
+
 /// A release of a VN.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Release {
@@ -437,6 +468,30 @@ pub struct StaffCredit {
     pub original: Option<String>,
 }
 
+/// A production staff credit on a VN: scenario writer, artist, composer, …
+///
+/// Distinct from the voice-actor relation (`VoiceActor`): a credit names work
+/// on the VN itself. The staff fields sit flat on the entry next to
+/// `eid`/`role`/`note` — verified against the live API (`v17`), which returns
+/// `{"eid":null,"id":"s545","name":"…","role":"scenario",…}`; there is no
+/// nested person object the way `va.staff` nests one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct StaffMember {
+    /// Staff id, e.g. `s123`.
+    pub id: Option<String>,
+    /// Romanised name.
+    pub name: Option<String>,
+    /// Original-script name.
+    pub original: Option<String>,
+    /// Edition this credit applies to; null for the original release.
+    pub eid: Option<i64>,
+    /// Role on this VN, e.g. `scenario`, `art`. See `enums.staff_role` in the
+    /// schema JSON.
+    pub role: Option<String>,
+    /// Free-text note VNDB attaches to the credit.
+    pub note: Option<String>,
+}
+
 /// A visual novel entry.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Vn {
@@ -501,6 +556,9 @@ pub struct Vn {
     /// Developers, only when the field was requested.
     #[serde(default)]
     pub developers: Vec<Producer>,
+    /// Production staff credits, only when the field was requested.
+    #[serde(default)]
+    pub staff: Vec<StaffMember>,
     /// External links, only when the field was requested.
     #[serde(default)]
     pub extlinks: Vec<ExtLink>,
@@ -569,7 +627,7 @@ pub const SEARCH_FIELDS: &str = "title,alttitle,titles.title,titles.lang,titles.
 /// flagging votes. Thumbnails are deliberately *not* requested for screenshots:
 /// the app caches one downscaled copy locally and serves it from disk, so a
 /// second remote variant would be a wasted download and a second failure path.
-pub const DETAIL_FIELDS: &str = "title,alttitle,titles.title,titles.lang,titles.latin,titles.official,titles.main,aliases,olang,devstatus,released,languages,platforms,image.id,image.url,image.sexual,image.violence,image.dims,image.thumbnail,image.thumbnail_dims,image.votecount,length,length_minutes,length_votes,description,rating,average,votecount,developers.id,developers.name,developers.original,developers.type,extlinks.url,extlinks.label,extlinks.name,relations.id,relations.relation,relations.relation_official,relations.title,tags.id,tags.name,tags.category,tags.rating,tags.spoiler,tags.lie,screenshots.id,screenshots.url,screenshots.sexual,screenshots.violence,screenshots.dims,va.character.id,va.character.name,va.character.original,va.character.image.url,va.character.image.sexual,va.character.image.violence,va.staff.id,va.staff.name,va.staff.original";
+pub const DETAIL_FIELDS: &str = "title,alttitle,titles.title,titles.lang,titles.latin,titles.official,titles.main,aliases,olang,devstatus,released,languages,platforms,image.id,image.url,image.sexual,image.violence,image.dims,image.thumbnail,image.thumbnail_dims,image.votecount,length,length_minutes,length_votes,description,rating,average,votecount,developers.id,developers.name,developers.original,developers.type,extlinks.url,extlinks.label,extlinks.name,relations.id,relations.relation,relations.relation_official,relations.title,tags.id,tags.name,tags.category,tags.rating,tags.spoiler,tags.lie,screenshots.id,screenshots.url,screenshots.sexual,screenshots.violence,screenshots.dims,va.character.id,va.character.name,va.character.original,va.character.image.url,va.character.image.sexual,va.character.image.violence,va.staff.id,va.staff.name,va.staff.original,staff.eid,staff.id,staff.name,staff.original,staff.role";
 
 #[cfg(test)]
 mod tests {
@@ -710,8 +768,11 @@ mod tests {
     #[test]
     fn detail_fields_stay_within_the_data_budget() {
         // The API rejects queries that would emit too many keys. Keeping the
-        // field list modest is what prevents that, so guard its size.
-        assert!(DETAIL_FIELDS.split(',').count() < 60);
+        // field list modest is what prevents that, so guard its size. The
+        // staff credits (`staff.eid…role`, added for the "For you" seeds)
+        // pushed the list from 59 to 64; the guard moves with the count and
+        // the detail query still runs at `results: 1`.
+        assert!(DETAIL_FIELDS.split(',').count() < 70);
         assert!(SEARCH_FIELDS.split(',').count() < 20);
     }
 
@@ -824,5 +885,53 @@ mod tests {
             .thumbnail_size(),
             (None, None)
         );
+    }
+
+    #[test]
+    fn staff_credits_decode_from_the_live_shape() {
+        // Recorded from the API (v17, Ever17) when the staff field was added:
+        // the person's fields sit flat beside eid/role/note — there is no
+        // nested object the way `va.staff` nests one. Decode this shape or
+        // every seed row silently comes back empty.
+        let json = r#"{
+          "results": [{
+            "id": "v17",
+            "title": "Ever17",
+            "staff": [
+              {"eid": null, "id": "s545", "name": "Nakazawa Takumi",
+               "note": "Kid's common route, You's route",
+               "original": "中澤 工", "role": "scenario"},
+              {"eid": 2, "id": "s12983", "name": "Kawamura Toshie",
+               "note": null, "original": "川村 敏江", "role": "art"}
+            ],
+            "va": [
+              {"character": {"id": "ch1", "name": "Takeshi"},
+               "staff": {"id": "s2001", "name": "Suzumura Kenichi", "original": "鈴村 健一"}}
+            ]
+          }],
+          "more": false
+        }"#;
+        let parsed: VnQueryResult = serde_json::from_str(json).expect("decode");
+        let vn = &parsed.results[0];
+        assert_eq!(vn.staff.len(), 2);
+        let scenario = &vn.staff[0];
+        assert_eq!(scenario.id.as_deref(), Some("s545"));
+        assert_eq!(scenario.role.as_deref(), Some("scenario"));
+        assert_eq!(scenario.name.as_deref(), Some("Nakazawa Takumi"));
+        assert_eq!(scenario.eid, None);
+        assert_eq!(vn.staff[1].eid, Some(2));
+        // The voice relation keeps its nested person object.
+        assert_eq!(
+            vn.va[0].staff.as_ref().and_then(|s| s.id.as_deref()),
+            Some("s2001")
+        );
+    }
+
+    #[test]
+    fn a_vn_without_a_staff_field_defaults_to_none() {
+        // Rows and field lists from before the field existed must not fail.
+        let parsed: VnQueryResult =
+            serde_json::from_str(r#"{"results": [{"id": "v17"}], "more": false}"#).expect("decode");
+        assert!(parsed.results[0].staff.is_empty());
     }
 }

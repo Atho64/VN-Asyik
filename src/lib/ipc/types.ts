@@ -1144,6 +1144,94 @@ export const recommendOutcomeSchema = z.object({
 });
 export type RecommendOutcome = z.infer<typeof recommendOutcomeSchema>;
 
+/**
+ * One recurring signal in the library's taste, as the For-you header shows it:
+ * a tag, a studio, a staff member or a voice actor the user's games share.
+ */
+export const forYouSignalSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  count: z.number(),
+});
+export type ForYouSignal = z.infer<typeof forYouSignalSchema>;
+
+/** The library's taste seeds, computed locally and shown before any query. */
+export const forYouProfileSchema = z.object({
+  considered: z.number(),
+  ready: z.boolean(),
+  tags: z.array(forYouSignalSchema),
+  developers: z.array(forYouSignalSchema),
+  staff: z.array(forYouSignalSchema),
+  voices: z.array(forYouSignalSchema),
+  topGames: z.array(z.string()),
+});
+export type ForYouProfile = z.infer<typeof forYouProfileSchema>;
+
+/** One For-you result card: the entry plus the overlap a user can check. */
+export const forYouCardSchema = z.object({
+  vnId: z.string(),
+  title: z.string(),
+  alttitle: z.string().nullable(),
+  released: z.string().nullable(),
+  imageUrl: z.string().nullable(),
+  /** Cover sexual rating in hundredths, same units as `SearchHit`. */
+  sexual: z.number().nullable(),
+  /** Cover violence rating in hundredths. */
+  violence: z.number().nullable(),
+  length: z.number().nullable(),
+  lengthMinutes: z.number().nullable(),
+  rating: z.number().nullable(),
+  votecount: z.number().nullable(),
+  /** 0 finished, 1 in development, 2 cancelled. */
+  devstatus: z.number().nullable(),
+  developers: z.array(z.string()),
+  score: z.number(),
+  because: z.string().nullable(),
+  themes: z.array(z.string()),
+  creators: z.array(z.string()),
+  voices: z.array(z.string()),
+});export type ForYouCard = z.infer<typeof forYouCardSchema>;
+
+/** Which seed category drives the query. */
+export const forYouSourceSchema = z.enum([
+  "combined",
+  "tags",
+  "studios",
+  "staff",
+  "voices",
+]);
+export type ForYouSource = z.infer<typeof forYouSourceSchema>;
+
+export const forYouSortSchema = z.enum([
+  "taste",
+  "rating",
+  "votes",
+  "released",
+  "title",
+]);
+export type ForYouSort = z.infer<typeof forYouSortSchema>;
+
+/** A For-you search request. All filters optional except the source. */
+export interface ForYouRequest {
+  source: ForYouSource;
+  length?: number;
+  ratingMin?: number;
+  votesMin?: number;
+  releasedAfter?: string;
+  language?: string;
+  sort?: ForYouSort;
+  page?: number;
+}
+
+/** One page of For-you results. */
+export const forYouPageSchema = z.object({
+  items: z.array(forYouCardSchema),
+  more: z.boolean(),
+  fromCache: z.boolean(),
+  /** Stable code explaining an empty page: `seeds` or `source`. */
+  note: z.string().nullable(),
+});
+export type ForYouPage = z.infer<typeof forYouPageSchema>;
 
 /** One selectable Locale Emulator profile. */
 export const launchProfileSchema = z.object({

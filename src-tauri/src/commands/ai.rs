@@ -34,53 +34,11 @@ pub struct TasteView {
 #[tauri::command]
 pub async fn ai_taste_profile(state: State<'_, AppState>) -> CommandResult<TasteView> {
     let pool = state.db().pool();
-    let games = profiled_games(pool)
+    let games = crate::db::queries::for_you::seeded_games(pool)
         .await
         .map_err(|err| CommandError::new("db", err.to_string()))?;
     let profile = vn_core::taste::profile(&games);
     Ok(TasteView { profile })
-}
-
-/// Every live game, in the shape the taste profile expects.
-///
-/// Shared by the profile and the recommendation query so both read the same
-/// tags: a recommendation built from a different view of the library than the
-/// profile shown beside it would be two answers to one question.
-async fn profiled_games(
-    pool: &sqlx::SqlitePool,
-) -> Result<Vec<vn_core::taste::ProfiledGame>, crate::db::DbError> {
-    use sqlx::Row as _;
-    let rows = sqlx::query(
-        "SELECT g.id AS id, g.title AS title, g.status AS status, g.rating AS rating, \
-                g.vndb_id AS vndb_id, d.tags_json AS tags_json \
-         FROM games g LEFT JOIN vndb_details d ON d.vn_id = g.vndb_id \
-         WHERE g.deleted = 0 ORDER BY g.title",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let games: Vec<vn_core::taste::ProfiledGame> = rows
-        .into_iter()
-        .map(|row| {
-            let json: Option<String> = row.get("tags_json");
-            // A malformed cache row must not break the whole profile; that game
-            // then simply has no tags and is reported as undetermined.
-            let tags: Vec<vn_core::taste::TagWeight> = json
-                .and_then(|text| serde_json::from_str(&text).ok())
-                .unwrap_or_default();
-            vn_core::taste::ProfiledGame {
-                id: row.get("id"),
-                title: row.get("title"),
-                status: row.get("status"),
-                rating: row
-                    .get::<Option<i64>, _>("rating")
-                    .and_then(|value| u8::try_from(value).ok()),
-                tags,
-                work_id: row.get::<Option<String>, _>("vndb_id"),
-            }
-        })
-        .collect();
-    Ok(games)
 }
 
 /// Whether an `http://` base URL points at this machine.
@@ -479,7 +437,7 @@ pub async fn ai_recommend(
     // Steer the search with the user's own strongest themes. Without this the
     // query is just the seed title, which finds the game's store page rather than
     // readers discussing what someone who liked it would enjoy next.
-    let taste = profiled_games(pool)
+    let taste = crate::db::queries::for_you::seeded_games(pool)
         .await
         .map(|games| {
             vn_core::taste::profile(&games)

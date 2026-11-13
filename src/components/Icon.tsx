@@ -37,7 +37,8 @@ export type IconName =
   | "gamepad"
   | "screen"
   | "trash"
-  | "sync";
+  | "sync"
+  | "external";
 
 interface IconProps {
   name: IconName;
@@ -176,6 +177,13 @@ const paths: Record<IconName, ReactNode> = {
       <path d="M20 3.5V8h-4.5" />
       <path d="M19.5 15a7.5 7.5 0 0 1-12.9 3.4L4 16" />
       <path d="M4 20.5V16h4.5" />
+    </>
+  ),
+  external: (
+    <>
+      <path d="M14.5 4.5H19.5V9.5" />
+      <path d="M19.5 4.5L11 13" />
+      <path d="M17.5 13.5v6H4.5V6.5H10" />
     </>
   ),
 };

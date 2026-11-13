@@ -39,6 +39,11 @@ import {
   updateViewSchema,
   recommendSettingsSchema,
   recommendOutcomeSchema,
+  forYouProfileSchema,
+  forYouPageSchema,
+  type ForYouProfile,
+  type ForYouPage,
+  type ForYouRequest,
   launchCapabilitySchema,
   launchOutcomeSchema,
   titleConfigSchema,
@@ -299,6 +304,10 @@ export interface Api {
   getAfkConfig(): Promise<AfkConfig>;
   setAfkConfig(thresholdMs: number, excludeAfk: boolean): Promise<AfkConfig>;
   vndbSearch(query: string, page?: number): Promise<SearchResponse>;
+  /** The library's taste seeds for the For-you recommendations. */
+  forYouProfile(): Promise<ForYouProfile>;
+  /** One page of VNDB entries matching the library's taste. */
+  forYouSearch(request: ForYouRequest): Promise<ForYouPage>;
   vndbPreview(vnId: string): Promise<DetailPayload>;
   vndbRefreshDetail(gameId: string): Promise<DetailPayload>;
   vndbRefreshAll(startAt?: number): Promise<RefreshAllOutcome>;
@@ -629,6 +638,8 @@ export const api: Api = {
       excludeAfk,
     }),
   vndbSearch: (query, page) => call("vndb_search", searchResponseSchema, { query, page }),
+  forYouProfile: () => call("for_you_profile", forYouProfileSchema),
+  forYouSearch: (request) => call("for_you_search", forYouPageSchema, { request }),
   vndbPreview: (vnId) => call("vndb_preview", detailPayloadSchema, { vnId }),
   vndbRefreshDetail: (gameId) =>
     call("vndb_refresh_detail", detailPayloadSchema, { gameId }),

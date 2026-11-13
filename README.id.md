@@ -82,10 +82,18 @@ Seiya-Saiga. Langkah pilihan, rute, dan lencana ending disajikan rapi per
 tab, lengkap dengan pencarian judul Jepang yang dinormalisasi dan opsi
 terjemahan.
 
-**Rekomendasi bacaan.** Tanya apa yang layak dibaca berikutnya. Profil selera
-dihitung lokal dari tag VNDB gim-gim di pustakamu, dan pertanyaan bisa
-menjangkau web terbuka lewat pencarian Tavily yang selalu menyertakan tautan
-sumber halamannya, bukan tebakan tanpa rujukan.
+**Rekomendasi bacaan.** Discover punya dua tab. **Tanya** memakai Tavily dan
+penyedia chat pilihanmu, lengkap dengan tautan sumber. **Untukmu** mencocokkan
+entri VNDB dengan tag, studio, penulis, ilustrator dan pengisi suara dari
+pustakamu, tanpa model atau kunci API. Gim yang dimainkan dan diberi nilai tinggi
+(hingga 10,0) berpengaruh paling besar, gim dropped maupun wishlist tanpa nilai
+diabaikan, tema spesifik serta kreator yang sama berbobot lebih besar daripada tag
+umum, dan tab Seiyuu menyeimbangkan berbagai aktor favorit agar tidak didominasi
+satu nama. Setiap kartu menyebut bukti kecocokan dan gim pustaka yang terkait.
+Urutan Selera merangking maksimal 50 kandidat gabungan secara lokal; urutan lainnya
+mengikuti VNDB. Kartu tampil beberapa per baris di jendela lebar dan satu kolom di
+layar sempit. Filter mencakup durasi, nilai, tanggal rilis, bahasa dan jumlah
+suara.
 
 **Sinkronisasi dan cadangan.** Selaraskan pustaka dan sesi baca antarperangkat
 lewat folder bersama di jaringan lokal (LAN) tanpa bergantung pada server pihak

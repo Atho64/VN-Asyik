@@ -5,18 +5,22 @@ import { Button } from "@/components/Button";
 import { Icon } from "@/components/Icon";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { RecommendOutcome, RecommendSettings } from "@/lib/ipc/types";
+import { ForYouPanel } from "@/features/recommend/ForYouPanel";
 
 /**
- * "What to read next?" — answered from what people wrote, not from tags.
+ * Discover, in two tabs.
  *
- * Every suggestion carries the pages it came from. That is the point: a
- * recommendation without a source is a confident guess, so the links are shown
- * rather than collected in a footnote.
+ * "Ask" answers "what to read next?" from what people wrote: every suggestion
+ * carries the pages it came from, because a recommendation without a source is
+ * a confident guess. "For you" answers the same question from VNDB's own
+ * catalogue, matched against the library's taste; it needs no key and no
+ * network beyond VNDB itself. See `ForYouPanel` for that half.
  *
  * Layout: one centred column of readable width. The previous version stretched
  * every control across the full window, which put the submit button 1400px from
  * the input it submits and left the screen looking like an unfinished form.
  */
+
 /// Open a citation through Rust's scheme allowlist.
 ///
 /// Tavily supplies these URLs, so they are third-party text and must not reach an
@@ -30,6 +34,49 @@ async function openSource(url: string): Promise<void> {
 }
 
 export function RecommendScreen() {
+  const { t } = useI18n();
+  const [tab, setTab] = useState<"ask" | "foryou">("ask");
+
+  return (
+    // The For-you results are a card grid, so the container widens past the
+    // Ask tab's readable measure; the ask flow keeps its own column width.
+    <div className={tab === "foryou" ? "discover discover--wide" : "discover"}>
+      <header className="discover__head">
+        <h1 className="page-title">{t("recommend.title")}</h1>
+        <p className="page-sub">{t("recommend.intro")}</p>
+      </header>
+
+      {/* Proper tabs, like the library's view switcher: two panels, one shown. */}
+      <div className="tabs" role="tablist" aria-label={t("recommend.title")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "ask"}
+          className="tabs__tab"
+          onClick={() => setTab("ask")}
+        >
+          <Icon name="search" size={14} />
+          {t("recommend.tabAsk")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "foryou"}
+          className="tabs__tab"
+          onClick={() => setTab("foryou")}
+        >
+          <Icon name="spark" size={14} />
+          {t("recommend.tabForYou")}
+        </button>
+      </div>
+
+      {tab === "foryou" ? <ForYouPanel /> : <AskTab />}
+    </div>
+  );
+}
+
+/** The Tavily + chat-provider flow, unchanged from when it was the whole screen. */
+function AskTab() {
   const { t } = useI18n();
   const [settings, setSettings] = useState<RecommendSettings | null>(null);
   const [keyInput, setKeyInput] = useState("");
@@ -105,12 +152,7 @@ export function RecommendScreen() {
   ];
 
   return (
-    <div className="discover">
-      <header className="discover__head">
-        <h1 className="page-title">{t("recommend.title")}</h1>
-        <p className="page-sub">{t("recommend.intro")}</p>
-      </header>
-
+    <>
       {!settings.supported && <p className="notice">{t("recommend.unsupported")}</p>}
 
       {error && (
@@ -304,6 +346,6 @@ export function RecommendScreen() {
           </p>
         </section>
       )}
-    </div>
+    </>
   );
 }

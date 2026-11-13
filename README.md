@@ -78,10 +78,17 @@ Step-by-step choices, route branches, and ending badges are organized into
 clean tabs, backed by normalized Japanese title search and inline translation
 options.
 
-**Recommendations.** Ask what to read next. A taste profile is computed
-locally from the VNDB tags of the games in your library, and questions can
-reach the open web through Tavily searches that always link back to cited
-sources rather than guessing without receipts.
+**Recommendations.** Discover has two tabs. **Ask** uses Tavily and your selected
+chat provider, with links to its sources. **For you** matches VNDB entries against
+your library's tags, studios, writers, illustrators and voice actors, without a
+model or API key. Played and rated games drive the profile — higher ratings (up
+to 10.0) count most strongly, dropped and unrated wishlist games stay out — while
+rare themes carry more weight than widespread tags, shared creators match rare-tag
+scale, and Voices balances across favoured actors instead of repeating one. Each
+card names its matching evidence and a related library game. Taste orders up to
+50 merged matches locally; other sorts follow VNDB. Results form a grid on wider
+windows and one column on narrow screens. Filters cover length, rating, release
+date, language and vote count.
 
 **Sync and backups.** Sync libraries and sessions across devices over a shared
 folder on your local network (LAN) without third-party servers. Or export your

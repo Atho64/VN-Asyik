@@ -11,6 +11,7 @@ pub mod chat;
 pub mod clock;
 pub mod companion;
 pub mod emulator;
+pub mod for_you;
 pub mod ids;
 pub mod journal;
 pub mod library;

@@ -115,7 +115,11 @@ fn decode_search(payload: &str) -> Result<SearchResponse, serde_json::Error> {
     serde_json::from_str(payload)
 }
 
-async fn library_vndb_ids(
+/// VNDB ids of every live game in the library.
+///
+/// Shared with the "For you" search, which excludes owned works locally
+/// rather than growing the request filter with the user's whole library.
+pub(crate) async fn library_vndb_ids(
     pool: &sqlx::SqlitePool,
 ) -> Result<std::collections::HashSet<String>, crate::db::DbError> {
     let rows: Vec<(String,)> =
@@ -509,7 +513,7 @@ pub(crate) async fn store_detail(
     // rather than a child table with its own sync rules for cached data.
     let json = |value: &dyn Fn() -> String| value();
     sqlx::query(
-        "INSERT INTO vndb_details (vn_id, title, alttitle, titles_json, aliases_json, length_minutes, length, length_votes, description, rating, average, votecount, released, olang, devstatus, languages_json, platforms_json, tags_json, releases_json, characters_json, screenshots_json, developers_json, extlinks_json, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(vn_id) DO UPDATE SET title = excluded.title, alttitle = excluded.alttitle, titles_json = excluded.titles_json, aliases_json = excluded.aliases_json, length_minutes = excluded.length_minutes, length = excluded.length, length_votes = excluded.length_votes, description = excluded.description, rating = excluded.rating, average = excluded.average, votecount = excluded.votecount, released = excluded.released, olang = excluded.olang, devstatus = excluded.devstatus, languages_json = excluded.languages_json, platforms_json = excluded.platforms_json, tags_json = excluded.tags_json, releases_json = excluded.releases_json, characters_json = excluded.characters_json, screenshots_json = excluded.screenshots_json, developers_json = excluded.developers_json, extlinks_json = excluded.extlinks_json, fetched_at = excluded.fetched_at",
+        "INSERT INTO vndb_details (vn_id, title, alttitle, titles_json, aliases_json, length_minutes, length, length_votes, description, rating, average, votecount, released, olang, devstatus, languages_json, platforms_json, tags_json, releases_json, characters_json, screenshots_json, developers_json, extlinks_json, staff_json, va_json, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(vn_id) DO UPDATE SET title = excluded.title, alttitle = excluded.alttitle, titles_json = excluded.titles_json, aliases_json = excluded.aliases_json, length_minutes = excluded.length_minutes, length = excluded.length, length_votes = excluded.length_votes, description = excluded.description, rating = excluded.rating, average = excluded.average, votecount = excluded.votecount, released = excluded.released, olang = excluded.olang, devstatus = excluded.devstatus, languages_json = excluded.languages_json, platforms_json = excluded.platforms_json, tags_json = excluded.tags_json, releases_json = excluded.releases_json, characters_json = excluded.characters_json, screenshots_json = excluded.screenshots_json, developers_json = excluded.developers_json, extlinks_json = excluded.extlinks_json, staff_json = excluded.staff_json, va_json = excluded.va_json, fetched_at = excluded.fetched_at",
     )
     .bind(&payload.vn_id)
     .bind(&payload.title)
@@ -539,17 +543,42 @@ pub(crate) async fn store_detail(
     .bind(json(&|| encode_list(&payload.screenshots)))
     .bind(json(&|| encode_list(&payload.developers)))
     .bind(json(&|| encode_list(&payload.extlinks)))
+    // `DetailPayload` does not carry staff or the voice cast — the detail
+    // screen does not render them yet — so these bind straight from the `Vn`.
+    // They exist for the "For you" seeds: who wrote and drew the games the
+    // user rates highly, and who voices them.
+    .bind(json(&|| encode_list(&vn.staff)))
+    .bind(json(&|| encode_list(&voice_credits(vn))))
     .bind(timestamp.as_millis())
     .execute(pool)
     .await?;
     Ok(())
 }
 
+/// The voice cast as the recommendation seeds need it: one entry per actor,
+/// deduplicated by staff id.
+///
+/// `vn.va` is a character×actor matrix — the same character appears once per
+/// voice actor — so storing it whole would bloat every detail row with
+/// character payloads the seeds never read.
+pub(crate) fn voice_credits(vn: &Vn) -> Vec<crate::vndb::dto::StaffCredit> {
+    let mut seen = std::collections::HashSet::new();
+    let mut credits = Vec::new();
+    for actor in vn.va.iter().filter_map(|entry| entry.staff.as_ref()) {
+        if let Some(id) = actor.id.as_ref()
+            && seen.insert(id.clone())
+        {
+            credits.push(actor.clone());
+        }
+    }
+    credits
+}
+
 /// Serialise a cached list, degrading to `[]` rather than failing the write.
 ///
 /// Every list in `vndb_details` is display data: losing one field of a VN page is
 /// a smaller failure than losing the whole row after a successful network call.
-fn encode_list<T: Serialize>(value: &T) -> String {
+pub(crate) fn encode_list<T: Serialize>(value: &T) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "[]".to_owned())
 }
 
@@ -1343,6 +1372,21 @@ mod detail_storage_tests {
                 name: Some("Fear of Death".to_owned()),
                 ..Tag::default()
             }],
+            staff: vec![crate::vndb::dto::StaffMember {
+                id: Some("s545".to_owned()),
+                name: Some("Nakazawa Takumi".to_owned()),
+                original: Some("中澤 工".to_owned()),
+                role: Some("scenario".to_owned()),
+                ..crate::vndb::dto::StaffMember::default()
+            }],
+            va: vec![crate::vndb::dto::VoiceActor {
+                character: None,
+                staff: Some(crate::vndb::dto::StaffCredit {
+                    id: Some("s2001".to_owned()),
+                    name: Some("Suzumura Kenichi".to_owned()),
+                    original: Some("鈴村 健一".to_owned()),
+                }),
+            }],
             screenshots: vec![Image {
                 id: Some("sf190".to_owned()),
                 url: Some("https://t.vndb.org/sf/90/190.jpg".to_owned()),
@@ -1455,6 +1499,20 @@ mod detail_storage_tests {
                 .expect("characters column");
         assert!(stored.0.contains("Matsunaga Sara"), "got {}", stored.0);
         assert_ne!(stored.0, "[]", "the cast column must not be a literal");
+
+        // Same class of guard for the "For you" seeds: the staff and voice
+        // columns were added in 0037, and a silently empty seed row would show
+        // up later as recommendations with no creators behind them.
+        let (staff_json, va_json): (String, String) =
+            sqlx::query_as("SELECT staff_json, va_json FROM vndb_details WHERE vn_id = 'v17'")
+                .fetch_one(db.pool())
+                .await
+                .expect("seed columns");
+        assert!(staff_json.contains("scenario"), "got {staff_json}");
+        assert!(staff_json.contains("Nakazawa Takumi"), "got {staff_json}");
+        assert!(va_json.contains("Suzumura Kenichi"), "got {va_json}");
+        // The same actor twice would double a voice seed's weight.
+        assert_eq!(voice_credits(&full_vn()).len(), 1);
     }
 
     #[tokio::test]
