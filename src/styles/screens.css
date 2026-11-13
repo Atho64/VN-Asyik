@@ -446,11 +446,11 @@
 .detail__hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
   align-items: end;
-  gap: var(--space-6);
-  padding: var(--space-6) 0 var(--space-5);
-  margin-bottom: var(--space-5);
+  gap: var(--space-5);
+  padding: var(--space-5) 0 var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
 .detail__art {
@@ -678,6 +678,9 @@
   line-height: var(--leading-tight);
   letter-spacing: -0.02em;
   text-wrap: balance;
+  /* A long unspaced title (FORTUNE×WORLD) must wrap, not clip at the edge. */
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 /* Alternate titles: one row of quiet chips under the main title.
@@ -697,8 +700,12 @@
 }
 
 .detail__alt {
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  max-width: 100%;
+  padding: 4px var(--space-3);
+  border-radius: var(--radius-m, 12px);
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
   font-size: var(--text-xs);
@@ -758,7 +765,7 @@
 .detail__columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
-  gap: var(--space-5);
+  gap: var(--space-4);
   align-items: start;
 }
 
@@ -825,6 +832,23 @@
 
   .detail__art {
     width: 100%;
+  }
+
+  .detail__title {
+    font-size: 1.375rem;
+    text-wrap: wrap;
+    hyphens: auto;
+  }
+
+  .detail__alts {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .detail__alt {
+    font-size: 0.75rem;
+    line-height: 1.35;
   }
 
   /* The rating spends a chip's width on "dari 10", which a 0-10 field does
@@ -972,7 +996,7 @@
 .settings {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
   max-width: var(--settings-width);
   width: 100%;
   min-width: 0;
@@ -1386,6 +1410,22 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-bottom: var(--space-3);
+}
+
+/* The add/map form sits in a collapsed disclosure so the executable card reads
+ * as a list, not a form. Own class rather than `.map-exe__advanced`: that rule
+ * belongs to the Android advanced section, and this is the game detail's
+ * affordance — same shape, different owner. */
+.detail__exe-add > summary {
+  cursor: pointer;
+  min-height: var(--touch-target);
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.detail__exe-add[open] > summary {
+  color: var(--accent-strong);
 }
 
 /* The Remove button stays inside the card and stops the text from pushing it

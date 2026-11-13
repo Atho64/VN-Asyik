@@ -29,6 +29,9 @@ vi.mock("./LocalePanel", () => ({ LocalePanel: () => <p>Windows locale tools</p>
 vi.mock("./LunaPanel", () => ({ LunaPanel: () => <p>Luna live text</p> }));
 vi.mock("./PresencePanel", () => ({ PresencePanel: () => <p>Discord Presence</p> }));
 vi.mock("./TitleParsingPanel", () => ({ TitleParsingPanel: () => <p>Window titles</p> }));
+vi.mock("@/features/tracking/TrackingScreen", () => ({
+  TrackingScreen: () => <p>Tracking panel</p>,
+}));
 
 const { default: SettingsScreen } = await import("./SettingsScreen");
 
@@ -56,7 +59,7 @@ beforeEach(() => {
 });
 
 function renderSettings(
-  initialTab?: "general" | "vndb" | "transfer",
+  initialTab?: "general" | "tracking" | "vndb" | "transfer",
   locale: "en" | "id" = "en",
 ) {
   return render(
@@ -164,6 +167,29 @@ describe("unified settings data tab", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.getByRole("button", { name: "Impor file" })).toBeInTheDocument();
+  });
+
+  it("keeps tracking and the AFK group in the tab only", async () => {
+    useAppStore.setState({
+      platform: {
+        ...useAppStore.getState().platform!,
+        os: "windows",
+        kind: "desktop",
+      },
+    });
+    renderSettings();
+    const tabs = screen.getByRole("tablist");
+    expect(within(tabs).getAllByRole("button", { name: "Tracking" })).toHaveLength(1);
+    // The tab is the only way in: the AFK group moved out of General with the
+    // screen, so idle detection is not configurable from two places.
+    expect(
+      screen.queryByRole("heading", { name: "Idle detection" }),
+    ).toBeNull();
+    await userEvent.click(within(tabs).getByRole("button", { name: "Tracking" }));
+    expect(screen.getByText("Tracking panel")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Idle detection" }),
+    ).toBeInTheDocument();
   });
 
   it("does not expose Windows locale or window-title controls on Android", () => {

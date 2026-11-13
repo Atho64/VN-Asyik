@@ -358,9 +358,51 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .bp__hero-copy {
-    padding-block: var(--space-6);
+    padding-block: var(--space-5);
   }
   .bp__hero-cover {
+    display: none;
+  }
+  /* The side-to-side fade left a hard image edge on the right of a one-column hero. */
+  .bp__hero::before {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--bg) 60%, transparent),
+      var(--bg)
+    );
+  }
+  .bp__backdrop {
+    opacity: 0.22;
+  }
+  .bp__title {
+    max-width: none;
+    font-size: var(--text-xl);
+    -webkit-line-clamp: 4;
+  }
+  .bp__alt {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+  }
+  .bp__meta {
+    margin-top: var(--space-4);
+  }
+  /* Two equal touch targets across the row instead of a button and a bare link. */
+  .bp__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+  .bp__actions .btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    padding-inline: var(--space-3);
+  }
+  /* Keyboard and gamepad hints mean nothing on a touchscreen. */
+  .bp__controls {
     display: none;
   }
   .bp__grid {

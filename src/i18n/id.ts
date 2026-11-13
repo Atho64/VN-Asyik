@@ -600,6 +600,7 @@ export const id: Messages = {
   "detail.away": "Meninggalkan",
   "detail.afkColumn": "Meninggalkan",
   "detail.executable": "File exe game",
+  "detail.addExecutable": "Tambah file exe",
   "detail.executableMapped": "File exe dipetakan",
   "detail.ratingPlaceholder": "Nilai",
   "detail.ratingOutOf": "dari 10",

@@ -326,6 +326,50 @@ describe("returning to a game", () => {
   });
 });
 
+describe("game detail layout", () => {
+  it("opens the main column with the executable card", async () => {
+    // The executable mapping feeds the Play button in the hero, so its card is
+    // the first thing in the reading column. This pins the container order, not
+    // just a string: a card that lands before it must fail here.
+    mocks.listExecutables.mockResolvedValue([
+      {
+        id: "exe-1",
+        game_id: "game-one",
+        exe_path: "C:/Games/saba.exe",
+        exe_name: "saba.exe",
+        runner_kind: null,
+        launch_target: null,
+        title_match: null,
+      },
+    ]);
+    const { container } = renderDetail();
+    await screen.findByRole("heading", { name: "A visual novel" });
+
+    const mainColumn = container.querySelector(".detail__columns > div:first-child");
+    expect(mainColumn).not.toBeNull();
+    const firstCard = mainColumn?.querySelector(".card");
+    expect(firstCard).not.toBeNull();
+    expect(firstCard).toHaveClass("detail__executable");
+    // Mapped executables stay visible; the add form is the collapsed disclosure.
+    expect(container.querySelector(".detail__executable .executable-list")).not.toBeNull();
+    expect(container.querySelector(".detail__executable .detail__exe-add")).not.toBeNull();
+  });
+
+  it("keeps Notes and the destructive action in the side rail", async () => {
+    // The rail used to hold only Delete, so the writing surface lived in the
+    // reading column and the rail wasted 400px. Both must now sit in the aside,
+    // and Notes must have left the main column.
+    renderDetail();
+    await screen.findByRole("heading", { name: "A visual novel" });
+
+    const aside = document.querySelector(".detail__aside");
+    expect(aside?.querySelector(".textarea")).not.toBeNull();
+    expect(aside?.querySelector(".btn--danger")).not.toBeNull();
+    const mainColumn = document.querySelector(".detail__columns > div:first-child");
+    expect(mainColumn?.querySelector(".textarea")).toBeNull();
+  });
+});
+
 describe("VNDB metadata refresh across navigation", () => {
   beforeEach(() => {
     useAppStore.setState({ refreshingVndb: [], vndbDetails: {} });

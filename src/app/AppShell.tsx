@@ -22,7 +22,6 @@ interface NavEntry {
   to: string;
   labelKey:
     | "nav.library"
-    | "nav.tracking"
     | "nav.stats"
     | "nav.timeline"
     | "nav.recommend"
@@ -36,13 +35,12 @@ interface NavEntry {
 }
 
 /**
- * Top-level navigation: Library, Tracking, Stats, Timeline, Recommend, Chat,
- * Presence, Guide, and Settings. VNDB Sync and Device Data Transfer live inside
+ * Top-level navigation: Library, Stats, Timeline, Recommend, Chat, Presence,
+ * Guide, and Settings. Tracking, VNDB Sync and Device Data Transfer live inside
  * Settings to keep the main navigation uncluttered.
  */
 const navEntries: NavEntry[] = [
   { to: "/", labelKey: "nav.library", icon: "library" },
-  { to: "/tracking", labelKey: "nav.tracking", icon: "play" },
   { to: "/stats", labelKey: "nav.stats", icon: "stats" },
   { to: "/timeline", labelKey: "nav.timeline", icon: "clock" },
   { to: "/recommend", beta: true, labelKey: "nav.recommend", icon: "spark" },
@@ -53,7 +51,7 @@ const navEntries: NavEntry[] = [
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ];
 
-const mobilePaths = new Set(["/", "/tracking", "/stats", "/settings"]);
+const mobilePaths = new Set(["/", "/stats", "/settings"]);
 const mobileEntries = navEntries.filter((entry) => mobilePaths.has(entry.to));
 
 export function AppShell() {
@@ -70,7 +68,10 @@ export function AppShell() {
   const navigate = useNavigate();
   const moreActive = moreEntries.some((entry) => entry.to === pathname);
   const settingsActive =
-    pathname === "/settings" || pathname === "/sync" || pathname === "/devices";
+    pathname === "/settings" ||
+    pathname === "/sync" ||
+    pathname === "/devices" ||
+    pathname === "/tracking";
 
   useEffect(() => {
     let disposed = false;

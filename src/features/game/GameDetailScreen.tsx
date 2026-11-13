@@ -684,24 +684,87 @@ export function GameDetailScreen() {
       )}
 
       <div className="detail__columns">
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-          <Card>
-            <CardHeader title={t("detail.notes")} />
-            <label className="visually-hidden" htmlFor="notes">
-              {t("detail.notes")}
-            </label>
-            <textarea
-              id="notes"
-              className="textarea"
-              value={notes}
-              // Rust rejects anything past MAX_NOTES_CHARS, so the limit is visible
-              // here instead of arriving as a failed save after a paste.
-              maxLength={MAX_NOTES_CHARS}
-              placeholder={t("detail.notesPlaceholder")}
-              onChange={(event) => setNotes(event.target.value)}
-              onBlur={() => void saveNotes()}
-            />
-          </Card>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          {/* The executable mapping is the first card: it feeds the Play button in
+              the hero above, so the one setup step a game needs sits at the top
+              rather than below the gallery. The mapped list stays visible; the
+              add form is a collapsed disclosure, because once a game is mapped
+              this card only ever needs to list and remove. */}
+          {id ? (
+            <Card className="detail__executable">
+              <CardHeader title={t("detail.executable")} />
+              {executables.length > 0 ? (
+                <ul className="executable-list">
+                  {executables.map((entry) => (
+                    <li key={entry.id} className="tracking__row tracking__row--divided">
+                      <Icon name="play" size={14} />
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span
+                          className="row__title"
+                          title={entry.exe_path ?? entry.exe_name}
+                        >
+                          {entry.exe_path ?? entry.exe_name}
+                          {entry.runner_kind ? (
+                            <span
+                              className="chip"
+                              style={{
+                                fontSize: "var(--font-size-xs)",
+                                padding: "2px 6px",
+                                marginLeft: "var(--space-2)",
+                              }}
+                            >
+                              {entry.runner_kind.toUpperCase()}
+                            </span>
+                          ) : null}
+                        </span>
+                        {entry.launch_target || entry.title_match ? (
+                          <span className="row__sub">
+                            {entry.launch_target ?? ""}
+                            {entry.title_match ? ` [title: ${entry.title_match}]` : ""}
+                          </span>
+                        ) : null}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              await api.trackingRemoveExecutable(entry.id);
+                              const allExes = await api.trackingListExecutables();
+                              setExecutables(
+                                allExes.filter((item) => item.game_id === id),
+                              );
+                            } catch (caught) {
+                              pushToast(
+                                "error",
+                                caught instanceof IpcError
+                                  ? caught.message
+                                  : t("common.error"),
+                              );
+                            }
+                          })();
+                        }}
+                      >
+                        {t("tracking.remove")}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <details className="detail__exe-add">
+                <summary>{t("detail.addExecutable")}</summary>
+                <MapExecutable
+                  games={[]}
+                  onMapped={async () => {
+                    const allExes = await api.trackingListExecutables().catch(() => []);
+                    setExecutables(allExes.filter((entry) => entry.game_id === id));
+                    pushToast("success", t("detail.executableMapped"));
+                  }}
+                  fixedGameId={id}
+                />
+              </details>
+            </Card>
+          ) : null}
 
           {/* The facts come before the description: a reader deciding whether this
               is the VN they are thinking of needs the date, the developer and the
@@ -774,79 +837,6 @@ export function GameDetailScreen() {
             />
           ) : null}
 
-          {id ? (
-            <Card>
-              <CardHeader title={t("detail.executable")} />
-              {executables.length > 0 ? (
-                <ul className="executable-list">
-                  {executables.map((entry) => (
-                    <li key={entry.id} className="tracking__row tracking__row--divided">
-                      <Icon name="play" size={14} />
-                      <span style={{ minWidth: 0, flex: 1 }}>
-                        <span
-                          className="row__title"
-                          title={entry.exe_path ?? entry.exe_name}
-                        >
-                          {entry.exe_path ?? entry.exe_name}
-                          {entry.runner_kind ? (
-                            <span
-                              className="chip"
-                              style={{
-                                fontSize: "var(--font-size-xs)",
-                                padding: "2px 6px",
-                                marginLeft: "var(--space-2)",
-                              }}
-                            >
-                              {entry.runner_kind.toUpperCase()}
-                            </span>
-                          ) : null}
-                        </span>
-                        {entry.launch_target || entry.title_match ? (
-                          <span className="row__sub">
-                            {entry.launch_target ?? ""}
-                            {entry.title_match ? ` [title: ${entry.title_match}]` : ""}
-                          </span>
-                        ) : null}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          void (async () => {
-                            try {
-                              await api.trackingRemoveExecutable(entry.id);
-                              const allExes = await api.trackingListExecutables();
-                              setExecutables(
-                                allExes.filter((item) => item.game_id === id),
-                              );
-                            } catch (caught) {
-                              pushToast(
-                                "error",
-                                caught instanceof IpcError
-                                  ? caught.message
-                                  : t("common.error"),
-                              );
-                            }
-                          })();
-                        }}
-                      >
-                        {t("tracking.remove")}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <MapExecutable
-                games={[]}
-                onMapped={async () => {
-                  const allExes = await api.trackingListExecutables().catch(() => []);
-                  setExecutables(allExes.filter((entry) => entry.game_id === id));
-                  pushToast("success", t("detail.executableMapped"));
-                }}
-                fixedGameId={id}
-              />
-            </Card>
-          ) : null}
-
           {id ? <RoutesCard gameId={id} onAddTime={() => setSessionOpen(true)} /> : null}
 
           {/* The script card sits with the routes: both are per-game material
@@ -883,6 +873,27 @@ export function GameDetailScreen() {
         </div>
 
         <div className="detail__aside">
+          {/* Notes shares the side rail with the destructive action: the writing
+              surface leaves the reading column and the rail stops being a
+              400 px strip that holds one button. */}
+          <Card>
+            <CardHeader title={t("detail.notes")} />
+            <label className="visually-hidden" htmlFor="notes">
+              {t("detail.notes")}
+            </label>
+            <textarea
+              id="notes"
+              className="textarea"
+              value={notes}
+              // Rust rejects anything past MAX_NOTES_CHARS, so the limit is visible
+              // here instead of arriving as a failed save after a paste.
+              maxLength={MAX_NOTES_CHARS}
+              placeholder={t("detail.notesPlaceholder")}
+              onChange={(event) => setNotes(event.target.value)}
+              onBlur={() => void saveNotes()}
+            />
+          </Card>
+
           <Button variant="danger" onClick={() => setDeleteOpen(true)}>
             {t("detail.delete")}
           </Button>

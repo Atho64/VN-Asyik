@@ -598,6 +598,7 @@ export const en = {
   "detail.away": "Away",
   "detail.afkColumn": "Away",
   "detail.executable": "Game executable",
+  "detail.addExecutable": "Add executable",
   "detail.executableMapped": "Executable mapped",
   "detail.ratingPlaceholder": "Rate",
   "detail.ratingOutOf": "of 10",

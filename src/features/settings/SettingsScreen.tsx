@@ -10,6 +10,7 @@ import { ChatPanel } from "@/features/settings/ChatPanel";
 import { LocalePanel } from "@/features/settings/LocalePanel";
 import { LunaPanel } from "@/features/settings/LunaPanel";
 import { TitleParsingPanel } from "@/features/settings/TitleParsingPanel";
+import { TrackingScreen } from "@/features/tracking/TrackingScreen";
 import { UpdatePanel } from "@/features/update/UpdatePanel";
 import { SyncScreen } from "@/features/sync/SyncScreen";
 import { DeviceSyncScreen } from "@/features/sync/DeviceSyncScreen";
@@ -24,11 +25,11 @@ import type {
   SyncSettings,
 } from "@/lib/ipc/types";
 
-export type SettingsTab = "general" | "vndb" | "transfer";
+export type SettingsTab = "general" | "tracking" | "vndb" | "transfer";
 
 /**
- * Settings screen consolidating General preferences, VNDB Sync, and Device
- * Data Transfer & Backup into a single place.
+ * Settings screen consolidating General preferences, Tracking, VNDB Sync, and
+ * Device Data Transfer & Backup into a single place.
  */
 export default function SettingsScreen({
   initialTab,
@@ -85,6 +86,10 @@ export default function SettingsScreen({
           <Icon name="settings" size={14} />
           {t("settings.tabGeneral")}
         </Chip>
+        <Chip selected={tab === "tracking"} onClick={() => setTab("tracking")}>
+          <Icon name="play" size={14} />
+          {t("nav.tracking")}
+        </Chip>
         <Chip selected={tab === "vndb"} onClick={() => setTab("vndb")}>
           <Icon name="sync" size={14} />
           {t("settings.tabVndb")}
@@ -104,6 +109,85 @@ export default function SettingsScreen({
               syncSettings={syncSettings}
               setSyncSettings={setSyncSettings}
             />
+          ) : null}
+        </>
+      ) : null}
+
+      {/* Tracking joins the tab row with the AFK group beside it: the idle
+          threshold and away-time toggle are playtime-tracking behaviour, so this
+          one tab answers "how is my playtime measured" end to end. */}
+      {tab === "tracking" ? (
+        <>
+          <TrackingScreen />
+          {isWindows ? (
+            <section className="settings__group">
+              <h2 className="settings__group-title">{t("settings.afk")}</h2>
+
+              <div className="settings__row">
+                <span className="settings__label">
+                  {t("settings.afkThreshold")}
+                  <span className="settings__hint">{t("settings.afkThresholdHint")}</span>
+                </span>
+                <div className="settings__control">
+                  {[30_000, 60_000, 300_000].map((threshold) => (
+                    <Chip
+                      key={threshold}
+                      selected={afk?.threshold_ms === threshold}
+                      onClick={() => {
+                        if (!afk) return;
+                        void (async () => {
+                          try {
+                            setAfk(await api.setAfkConfig(threshold, afk.exclude_afk));
+                          } catch (caught) {
+                            pushToast(
+                              "error",
+                              caught instanceof IpcError
+                                ? caught.message
+                                : t("common.error"),
+                            );
+                          }
+                        })();
+                      }}
+                    >
+                      {t("settings.seconds", { count: threshold / 1000 })}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+
+              <div className="settings__row">
+                <span className="settings__label">
+                  {t("settings.awayLabel")}
+                  <span className="settings__hint">{t("settings.afkExcludeHint")}</span>
+                </span>
+                <div className="settings__control">
+                  <Chip
+                    selected={afk?.exclude_afk === true}
+                    onClick={() => {
+                      if (!afk) return;
+                      void (async () => {
+                        try {
+                          setAfk(
+                            await api.setAfkConfig(afk.threshold_ms, !afk.exclude_afk),
+                          );
+                        } catch (caught) {
+                          pushToast(
+                            "error",
+                            caught instanceof IpcError
+                              ? caught.message
+                              : t("common.error"),
+                          );
+                        }
+                      })();
+                    }}
+                  >
+                    {afk?.exclude_afk
+                      ? t("settings.afkExclude")
+                      : t("settings.afkInclude")}
+                  </Chip>
+                </div>
+              </div>
+            </section>
           ) : null}
         </>
       ) : null}
@@ -233,81 +317,11 @@ export default function SettingsScreen({
             </div>
           </section>
 
-          {isWindows ? (
-            <section className="settings__group">
-              <h2 className="settings__group-title">{t("settings.afk")}</h2>
-
-              <div className="settings__row">
-                <span className="settings__label">
-                  {t("settings.afkThreshold")}
-                  <span className="settings__hint">{t("settings.afkThresholdHint")}</span>
-                </span>
-                <div className="settings__control">
-                  {[30_000, 60_000, 300_000].map((threshold) => (
-                    <Chip
-                      key={threshold}
-                      selected={afk?.threshold_ms === threshold}
-                      onClick={() => {
-                        if (!afk) return;
-                        void (async () => {
-                          try {
-                            setAfk(await api.setAfkConfig(threshold, afk.exclude_afk));
-                          } catch (caught) {
-                            pushToast(
-                              "error",
-                              caught instanceof IpcError
-                                ? caught.message
-                                : t("common.error"),
-                            );
-                          }
-                        })();
-                      }}
-                    >
-                      {t("settings.seconds", { count: threshold / 1000 })}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-
-              <div className="settings__row">
-                <span className="settings__label">
-                  {t("settings.awayLabel")}
-                  <span className="settings__hint">{t("settings.afkExcludeHint")}</span>
-                </span>
-                <div className="settings__control">
-                  <Chip
-                    selected={afk?.exclude_afk === true}
-                    onClick={() => {
-                      if (!afk) return;
-                      void (async () => {
-                        try {
-                          setAfk(
-                            await api.setAfkConfig(afk.threshold_ms, !afk.exclude_afk),
-                          );
-                        } catch (caught) {
-                          pushToast(
-                            "error",
-                            caught instanceof IpcError
-                              ? caught.message
-                              : t("common.error"),
-                          );
-                        }
-                      })();
-                    }}
-                  >
-                    {afk?.exclude_afk
-                      ? t("settings.afkExclude")
-                      : t("settings.afkInclude")}
-                  </Chip>
-                </div>
-              </div>
-            </section>
-          ) : null}
-
           <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.updates")}</h2>
             <UpdatePanel />
           </section>
+
 
           <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.languageTools")}</h2>

@@ -96,8 +96,9 @@ const router = createBrowserRouter([
       {
         path: "tracking",
         lazy: async () => {
-          const { TrackingScreen } = await import("@/features/tracking/TrackingScreen");
-          return { Component: TrackingScreen };
+          const { default: SettingsScreen } =
+            await import("@/features/settings/SettingsScreen");
+          return { Component: () => <SettingsScreen key="tracking" initialTab="tracking" /> };
         },
       },
       {
