@@ -25,6 +25,11 @@ const ACTIVE_SELECTION_KEY: &str = "android.activeSelection";
 const LAST_IMPORTED_KEY: &str = "android.lastImportedAtMs";
 // Android retains usage events for only a few days (SDK UsageStatsManager docs).
 const REPLAY_WINDOW_MS: i64 = 3 * 24 * 60 * 60 * 1_000;
+/// How long the game may stay out of the foreground before the selection ends by
+/// itself. `UsageStats` cannot see process death, so closing the game would
+/// otherwise leave Recording on forever. Short trips to a browser or a
+/// walkthrough survive; a closed game does not. Away time is never counted.
+const AWAY_GRACE_MS: i64 = 15 * 60 * 1_000;
 
 /// Serialises launch, foreground return, and manual stop so concurrent IPC calls
 /// cannot commit the same active session twice.
@@ -317,7 +322,16 @@ async fn apply_query_result(
     let cutoff = selection
         .stopped_at_ms
         .map_or(cutoff, |stop| stop.min(cutoff));
-    let keep_active = !force && boundary.is_none() && selection.stopped_at_ms.is_none();
+    let packages = vec![selection.package.clone()];
+    let last_foreground_ms = intervals_for(&packages, &events, cutoff)
+        .iter()
+        .map(|interval| interval.end_ms)
+        .max()
+        .unwrap_or(selection.started_at_ms)
+        .max(selection.started_at_ms);
+    let abandoned = until_ms.saturating_sub(last_foreground_ms) > AWAY_GRACE_MS;
+    let keep_active =
+        !force && boundary.is_none() && selection.stopped_at_ms.is_none() && !abandoned;
     let title = match EntityId::parse(&selection.game_id) {
         Ok(gid) => mapping::game_title(pool, gid)
             .await
@@ -683,15 +697,15 @@ mod tests {
         let game = seed_game(db.pool(), &device, "Away").await;
         let selected = selection(game);
 
-        // Reading for 90 s, then another app for 5 minutes, then VN Asyik itself
-        // resumes at 400_000 -- which is what `tracking_android_session` replays
-        // when the user comes back.
+        // Reading for 90 s, then another app for a few minutes, then VN Asyik
+        // itself resumes at 300_000 -- which is what `tracking_android_session`
+        // replays when the user comes back.
         let events = vec![
             event(Some("org.example.runner"), 1, 2_000),
             event(Some("com.android.chrome"), 1, 92_000),
-            event(Some(SELF_PACKAGE_MARKER), 1, 400_000),
+            event(Some(SELF_PACKAGE_MARKER), 1, 300_000),
         ];
-        let view = apply_query_result(db.pool(), &device, selected, 401_000, false, Ok(events))
+        let view = apply_query_result(db.pool(), &device, selected, 301_000, false, Ok(events))
             .await
             .expect("replay");
 
@@ -704,6 +718,31 @@ mod tests {
             load_selection(db.pool()).await.expect("load").is_some(),
             "the selection survives so reading can continue"
         );
+    }
+
+    #[tokio::test]
+    async fn a_game_left_in_the_background_ends_the_session() {
+        // Reported bug: closing the game left "Recording" on indefinitely, because
+        // UsageStats has no process-death event. Past the grace period away from
+        // the foreground the selection ends and only the read time is kept.
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Closed").await;
+        let selected = selection(game);
+
+        let events = vec![
+            event(Some("org.example.runner"), 1, 2_000),
+            event(Some(SELF_PACKAGE_MARKER), 1, 92_000),
+        ];
+        let until = 92_000 + AWAY_GRACE_MS + 1_000;
+        let view = apply_query_result(db.pool(), &device, selected, until, false, Ok(events))
+            .await
+            .expect("replay");
+
+        assert!(!view.active, "an abandoned game must stop recording");
+        assert_eq!(view.counted_ms, 90_000);
+        assert_eq!(total(db.pool(), game).await, 90_000);
+        assert!(load_selection(db.pool()).await.expect("load").is_none());
     }
 
     #[tokio::test]
