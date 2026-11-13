@@ -178,6 +178,8 @@ export const id: Messages = {
   "tracking.title": "Pelacakan waktu",
   "tracking.intro":
     "Aplikasi hanya menghitung waktu saat jendela game aktif dan kamu tidak sedang pergi. Tidak ada yang ditulis ke dalam game.",
+  "tracking.linuxBetaNotice":
+    "Pelacakan di Linux masih berstatus Beta: deteksi jendela aktif dan waktu diam bisa berbeda tergantung desktop environment dan compositor Wayland.",
   "tracking.unavailable": "Tidak tersedia di perangkat ini",
   "tracking.unavailableReason":
     "Build ini tidak bisa membaca fokus proses di sini, jadi waktu hanya bisa diisi manual.",
@@ -858,6 +860,14 @@ export const id: Messages = {
   "similar.modelDownload": "Unduh model",
   "similar.modelReady": "Model pembanding sudah terpasang.",
   "stats.title": "Statistik",
+  "stats.tabs": "Tampilan statistik",
+  "stats.tabOverview": "Ringkasan",
+  "stats.tabActivity": "Aktivitas",
+  "stats.tabRecap": "Kilas balik",
+  "stats.tabTaste": "Selera",
+  "stats.recapMode": "Periode kilas balik",
+  "stats.recapYearly": "Tahunan",
+  "stats.recapAllTime": "Sepanjang waktu",
   "time.title": "Waktu bermain",
   "time.period": "Periode",
   "time.daily": "Per hari",
@@ -1065,7 +1075,7 @@ export const id: Messages = {
   "settings.presenceDefaultTitle": "Judul visual novel kamu",
   "settings.presenceCycleDetails": "Putar fakta VNDB",
   "settings.presenceCycleDetailsHint":
-    "Memutar baris detail antara developer, rating, durasi, dan tahun rilis, bukan mengulang judul.",
+    "Saat aktif, baris detail diputar antara developer, rating, durasi, dan tahun rilis (atau daftar kustom di bawah). Saat mati, tampil satu baris ringkasan.",
   "settings.presenceCycleSeconds": "Detik per fakta",
   "settings.presenceState": "Baris State",
   "settings.presenceShowCover": "Tampilkan Sampul",
@@ -1111,7 +1121,7 @@ export const id: Messages = {
   "settings.presenceRotate": "Putar bergantian",
   "settings.presenceVndbDetailsItems": "Baris VNDB bergantian",
   "settings.presenceVndbDetailsItemsHint":
-    "Biarkan kosong untuk memutar fakta bawaan: developer, rating, durasi, tahun rilis.",
+    "Biarkan kosong untuk baris ringkas bawaan (★ {vndb_rating}/10 · {vndb_year} · {vndb_length}), atau aktifkan Putar untuk memutar developer, rating, durasi, dan tahun.",
   "settings.presenceVndbStateTemplate": "Templat baris status",
   "settings.presenceVndbStateTemplateHint":
     "Biarkan kosong untuk menampilkan rute dan bab, atau status daftar VNDB bila keduanya tidak terdeteksi.",
@@ -1144,6 +1154,8 @@ export const id: Messages = {
   "settings.presencePreviewElapsed": "Waktu berjalan ditampilkan di sini",
   "settings.presenceSave": "Simpan pengaturan presence",
   "settings.presenceSaved": "Pengaturan presence tersimpan",
+  "settings.presenceResetDefaults": "Kembalikan format bawaan",
+  "settings.presenceDefaultsRestored": "Format bawaan dikembalikan (klik Simpan untuk menerapkan)",
   "settings.presenceDiscordToken": "Token Pengguna Discord",
   "settings.presenceDiscordTokenHint":
     "Diperlukan di Android untuk berkomunikasi langsung dengan Discord Gateway.",
@@ -1173,6 +1185,7 @@ export const id: Messages = {
   "settings.nsfwBlur": "Buramkan sampai dibuka",
   "settings.nsfwHide": "Sembunyikan",
   "settings.language": "Bahasa",
+  "settings.appLanguage": "Bahasa aplikasi",
   "settings.metadataTitle": "Metadata VNDB",
   "settings.refreshLabel": "Perbarui metadata dari VNDB",
   "settings.refreshHint":
@@ -1187,6 +1200,9 @@ export const id: Messages = {
   "settings.refreshFailures": "Yang gagal",
   "settings.platform": "Perangkat ini",
   "settings.platformOs": "Platform",
+  "settings.platformOsLinuxBeta": "Linux (Beta)",
+  "settings.linuxBetaNotice":
+    "Dukungan Linux masih berstatus Beta. Deteksi fokus jendela, waktu diam, atau IPC Discord bisa berbeda tergantung desktop environment.",
   "settings.capability": "Kemampuan",
   "settings.capabilities": "Yang berfungsi di sini",
   "settings.data": "Data",
@@ -1318,7 +1334,7 @@ export const id: Messages = {
   "guide.chapters.p2":
     "Rute dan ending kamu yang memberi nama; chapter hasil deteksi dan manual bisa digabung lewat tawaran merge.",
   "guide.chapters.p3":
-    "Kalau caption game-mu berbentuk lain, pakai Pola khusus (regex) di Pengaturan, Umum.",
+    "Kalau caption game-mu berbentuk lain, pakai Pola khusus (regex) di Pengaturan, Pelacakan.",
   "guide.game.title": "Mulai dari aplikasi",
   "guide.game.body":
     "Tombol Play menjalankan game yang sudah dipetakan, dan prosesnya langsung terikat ke game itu.",

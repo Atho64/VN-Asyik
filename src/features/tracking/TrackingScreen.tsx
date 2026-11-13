@@ -26,6 +26,7 @@ import { MapExecutable } from "@/features/tracking/MapExecutable";
 export function TrackingScreen() {
   const { t } = useI18n();
   const cards = useAppStore((state) => state.cards);
+  const platform = useAppStore((state) => state.platform);
   const pushToast = useAppStore((state) => state.pushToast);
 
   const [capability, setCapability] = useState<TrackerCapability | null>(null);
@@ -251,6 +252,11 @@ export function TrackingScreen() {
             <p className="body" style={{ marginBottom: "var(--space-4)" }}>
               {t("tracking.intro")}
             </p>
+            {platform?.os === "linux" ? (
+              <p className="notice notice--warn" style={{ marginBottom: "var(--space-4)" }}>
+                {t("tracking.linuxBetaNotice")}
+              </p>
+            ) : null}
 
             <div className="settings__row">
               <span className="settings__label">

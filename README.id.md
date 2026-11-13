@@ -1,6 +1,6 @@
 # VN Asyik
 
-Pustaka visual novel dan pelacak waktu baca untuk Windows, Linux, dan Android. Data
+Pustaka visual novel dan pelacak waktu baca untuk Windows, Android, dan Linux (Beta). Data
 diambil dari VNDB, disimpan lokal di SQLite, dan tetap jalan tanpa jaringan.
 Rust dan Tauri di sisi belakang, React di sisi depan.
 
@@ -143,7 +143,7 @@ judul yang tidak menyebut nama game yang sedang dilacak diabaikan.
 ### Pola khusus
 
 Kalau game-mu menulis bentuk yang tidak tercakup di atas, buka **Pengaturan →
-Umum → Membaca bab dari judul jendela**, ubah **Sumber** ke **Pola khusus**,
+Pelacakan → Membaca bab dari judul jendela**, ubah **Sumber** ke **Pola khusus**,
 lalu isi polanya. Sintaksnya Rust [`regex`](https://docs.rs/regex) 1.x: waktu
 linear, tanpa look-around, tanpa backreference, maksimal 512 byte (sekitar 170
 karakter Jepang), dan dijalankan pada seluruh judul apa adanya, termasuk nama
@@ -339,7 +339,7 @@ apa pun alasannya, aplikasi mengatakannya, bukan berpura-pura.
 Unduh prarilis terbaru dari [GitHub Releases](https://github.com/Atho64/VN-Asyik/releases).
 Windows menyediakan installer `.exe` dan `.msi`; keduanya belum ditandatangani
 dan mungkin menampilkan peringatan SmartScreen. Android menggunakan
-`app-universal-release.apk` yang ditandatangani. Linux memakai `.AppImage`:
+`app-universal-release.apk` yang ditandatangani. Linux (Beta) memakai `.AppImage`:
 jadikan bisa dieksekusi lalu jalankan.
 
 Untuk membangun dari kode sumber:

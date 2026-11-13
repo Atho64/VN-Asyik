@@ -1515,7 +1515,7 @@ mod tests {
         assert_eq!(activity.name.as_deref(), Some("Steins;Gate"));
         assert_eq!(
             activity.details.as_deref(),
-            Some("Nitroplus"),
+            Some("★ 8.86/10"),
             "details must not repeat the title"
         );
     }
@@ -1623,6 +1623,7 @@ mod tests {
         let service = PresenceService::with_sink(
             PresenceSettings {
                 enabled: true,
+                cycle_vndb_details: true,
                 cycle_seconds: vn_core::presence::MIN_CYCLE_SECONDS,
                 ..Default::default()
             },

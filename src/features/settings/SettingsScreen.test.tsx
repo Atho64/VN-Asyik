@@ -169,7 +169,7 @@ describe("unified settings data tab", () => {
     expect(screen.getByRole("button", { name: "Impor file" })).toBeInTheDocument();
   });
 
-  it("keeps tracking and the AFK group in the tab only", async () => {
+  it("keeps tracking, window-title parsing, and the AFK group in the tab only", async () => {
     useAppStore.setState({
       platform: {
         ...useAppStore.getState().platform!,
@@ -180,16 +180,15 @@ describe("unified settings data tab", () => {
     renderSettings();
     const tabs = screen.getByRole("tablist");
     expect(within(tabs).getAllByRole("button", { name: "Tracking" })).toHaveLength(1);
-    // The tab is the only way in: the AFK group moved out of General with the
-    // screen, so idle detection is not configurable from two places.
-    expect(
-      screen.queryByRole("heading", { name: "Idle detection" }),
-    ).toBeNull();
+    // The tab is the only way in: both window-title chapter parsing and the
+    // AFK group moved out of General with the screen, so tracking settings are
+    // not split across two tabs.
+    expect(screen.queryByText("Window titles")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Idle detection" })).toBeNull();
     await userEvent.click(within(tabs).getByRole("button", { name: "Tracking" }));
     expect(screen.getByText("Tracking panel")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Idle detection" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Window titles")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Idle detection" })).toBeInTheDocument();
   });
 
   it("does not expose Windows locale or window-title controls on Android", () => {
@@ -197,5 +196,36 @@ describe("unified settings data tab", () => {
     expect(screen.queryByText("Windows locale tools")).toBeNull();
     expect(screen.queryByText("Window titles")).toBeNull();
     expect(screen.getByText("This device")).toBeInTheDocument();
+  });
+
+  it("does not expose window-title or AFK controls in the Android tracking tab", () => {
+    renderSettings("tracking");
+    expect(screen.getByText("Tracking panel")).toBeInTheDocument();
+    expect(screen.queryByText("Window titles")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Idle detection" })).toBeNull();
+  });
+
+  it("places the app language section first on the General tab", () => {
+    renderSettings("general");
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    expect(headings[0]).toHaveTextContent("Language");
+  });
+
+  it("labels Linux as Beta in Capabilities without hiding tracking", () => {
+    useAppStore.setState({
+      platform: {
+        ...useAppStore.getState().platform!,
+        os: "linux",
+        kind: "desktop",
+        first_class: false,
+      },
+    });
+    renderSettings("general");
+    expect(screen.getByText("Linux (Beta)")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Linux support is currently in Beta/i),
+    ).toBeInTheDocument();
+    const tabs = screen.getByRole("tablist");
+    expect(within(tabs).getByRole("button", { name: "Tracking" })).toBeInTheDocument();
   });
 });

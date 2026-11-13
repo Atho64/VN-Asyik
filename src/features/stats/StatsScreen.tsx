@@ -18,6 +18,22 @@ import type { StatusBreakdown } from "@/lib/ipc/types";
 /** 53 weeks x 7 days, the standard contribution-graph span. */
 const WEEKS = 53;
 
+const STATS_TABS = [
+  ["overview", "stats.tabOverview"],
+  ["activity", "stats.tabActivity"],
+  ["recap", "stats.tabRecap"],
+  ["taste", "stats.tabTaste"],
+] as const;
+
+type StatsTab = (typeof STATS_TABS)[number][0];
+
+const RECAP_MODES = [
+  ["yearly", "stats.recapYearly"],
+  ["allTime", "stats.recapAllTime"],
+] as const;
+
+type RecapMode = (typeof RECAP_MODES)[number][0];
+
 interface DayCell {
   day: number;
   ms: number;
@@ -36,6 +52,8 @@ export function StatsScreen() {
   const cards = useAppStore((state) => state.cards);
   const loaded = useAppStore((state) => state.libraryLoaded);
 
+  const [tab, setTab] = useState<StatsTab>("overview");
+  const [recapMode, setRecapMode] = useState<RecapMode>("yearly");
   const [breakdown, setBreakdown] = useState<StatusBreakdown | null>(null);
   const [byDay, setByDay] = useState<DayCell[]>([]);
   const [failed, setFailed] = useState(false);
@@ -169,141 +187,183 @@ export function StatsScreen() {
       <header className="page-head">
         <h1 className="page-title">{t("stats.title")}</h1>
       </header>
-      <OnThisDay />
-      <TimeStats />
-      <TastePanel />
-      {/* The total and the status split are one thought ("how much, and of
-          what"), so they share one card like every other block on this page.
-          Previously they sat as bare text on the backdrop while the sections
-          under them were cards, which read as a different page. */}
-      <Card>
-        <CardHeader title={t("stats.overview")} />
-        <div className="stats__lede">
-          <div>
-            <p className="caption">{t("stats.totalTime")}</p>
-            <p className="stats__number">
-              {locale === "id"
-                ? formatDurationLong(totalMs, locale)
-                : `${Math.floor(totalMs / 3_600_000)}`}
-            </p>
-            {locale === "en" ? (
-              <p className="stats__unit">
-                {t("stats.unitHours")}
-                {totalMs % 3_600_000 > 0
-                  ? ` · ${Math.floor((totalMs % 3_600_000) / MS_PER_MINUTE)} ${t("stats.unitMin")}`
-                  : ""}
-              </p>
-            ) : null}
-            <p className="body" style={{ marginTop: "var(--space-3)" }}>
-              {t("stats.gamesTracked")}: <span className="tnum">{trackedGames}</span>
-            </p>
-            {afkMs > 0 ? (
-              <p className="caption" style={{ marginTop: "var(--space-1)" }}>
-                {t("stats.awayTime")}:{" "}
-                <span className="tnum">{formatDurationLong(afkMs, locale)}</span>
-              </p>
-            ) : null}
-          </div>
 
-          <div className="stats__rows">
-            <p className="caption" style={{ marginBottom: 4 }}>
-              {t("stats.byStatus")}
-            </p>
-            {statusOrder.map((status) => {
-              const count = countFor(status);
-              const ratio = breakdownTotal > 0 ? count / breakdownTotal : 0;
-              return (
-                <div className="stats__row" key={status}>
-                  <span>{t(`status.${status}`)}</span>
+      <div className="tabs" role="tablist" aria-label={t("stats.tabs")}>
+        {STATS_TABS.map(([value, labelKey]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={tab === value}
+            className="tabs__tab"
+            onClick={() => setTab(value)}
+          >
+            {t(labelKey)}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" ? (
+        <>
+          <OnThisDay />
+          {/* The total and the status split are one thought ("how much, and of
+              what"), so they share one card like every other block on this page.
+              Previously they sat as bare text on the backdrop while the sections
+              under them were cards, which read as a different page. */}
+          <Card>
+            <CardHeader title={t("stats.overview")} />
+            <div className="stats__lede">
+              <div>
+                <p className="caption">{t("stats.totalTime")}</p>
+                <p className="stats__number">
+                  {locale === "id"
+                    ? formatDurationLong(totalMs, locale)
+                    : `${Math.floor(totalMs / 3_600_000)}`}
+                </p>
+                {locale === "en" ? (
+                  <p className="stats__unit">
+                    {t("stats.unitHours")}
+                    {totalMs % 3_600_000 > 0
+                      ? ` · ${Math.floor((totalMs % 3_600_000) / MS_PER_MINUTE)} ${t("stats.unitMin")}`
+                      : ""}
+                  </p>
+                ) : null}
+                <p className="body" style={{ marginTop: "var(--space-3)" }}>
+                  {t("stats.gamesTracked")}: <span className="tnum">{trackedGames}</span>
+                </p>
+                {afkMs > 0 ? (
+                  <p className="caption" style={{ marginTop: "var(--space-1)" }}>
+                    {t("stats.awayTime")}:{" "}
+                    <span className="tnum">{formatDurationLong(afkMs, locale)}</span>
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="stats__rows">
+                <p className="caption" style={{ marginBottom: 4 }}>
+                  {t("stats.byStatus")}
+                </p>
+                {statusOrder.map((status) => {
+                  const count = countFor(status);
+                  const ratio = breakdownTotal > 0 ? count / breakdownTotal : 0;
+                  return (
+                    <div className="stats__row" key={status}>
+                      <span>{t(`status.${status}`)}</span>
+                      <span className="stats__bar">
+                        <span
+                          className="stats__bar-fill"
+                          style={{ width: `${Math.round(ratio * 100)}%`, display: "block" }}
+                        />
+                      </span>
+                      <span className="tnum caption">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title={t("stats.topGames")} />
+            <div className="stats__rows">
+              {top.map((card) => (
+                <div className="stats__row" key={card.game.meta.id}>
+                  <span className="stats__game-title" title={card.game.title}>
+                    {card.game.title}
+                  </span>
                   <span className="stats__bar">
                     <span
                       className="stats__bar-fill"
-                      style={{ width: `${Math.round(ratio * 100)}%`, display: "block" }}
+                      style={{
+                        width: `${Math.round((card.total_ms / maxTop) * 100)}%`,
+                        display: "block",
+                      }}
                     />
                   </span>
-                  <span className="tnum caption">{count}</span>
+                  <span className="tnum caption">
+                    {formatDurationLong(card.total_ms, locale)}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title={t("stats.topGames")} />
-        <div className="stats__rows">
-          {top.map((card) => (
-            <div className="stats__row" key={card.game.meta.id}>
-              <span
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-                title={card.game.title}
-              >
-                {card.game.title}
-              </span>
-              <span className="stats__bar">
-                <span
-                  className="stats__bar-fill"
-                  style={{
-                    width: `${Math.round((card.total_ms / maxTop) * 100)}%`,
-                    display: "block",
-                  }}
-                />
-              </span>
-              <span className="tnum caption">
-                {formatDurationLong(card.total_ms, locale)}
-              </span>
+              ))}
             </div>
-          ))}
-        </div>
-      </Card>
+          </Card>
+        </>
+      ) : null}
 
-      <AllTimeWrapped />
-      <YearReview byDay={byDay} />
+      {tab === "activity" ? (
+        <>
+          <Card>
+            <CardHeader
+              title={t("stats.heatmap")}
+              aside={
+                // One container, not a fragment: the header is space-between, so
+                // fragment children each claimed a flex slot and the legend floated
+                // to the middle of the card.
+                <span className="heatmap__aside">
+                  {/* The legend names the color scale, which the cells already show;
+                      the streaks are figures, so they stay readable by AT. */}
+                  <span className="caption" aria-hidden="true">
+                    {t("stats.heatmapLegend")} · {t("stats.heatmapLegendMore")}
+                  </span>
+                  <span className="heatmap__streaks caption tnum">
+                    <span>{t("stats.streakCurrent", { days: streak.current })}</span>
+                    <span>{t("stats.streakLongest", { days: streak.longest })}</span>
+                  </span>
+                </span>
+              }
+            />
+            {heatmap ? (
+              <div className="heatmap" role="img" aria-label={t("stats.heatmap")}>
+                {heatmap.cells.map((cell) => (
+                  <span
+                    key={cell.day}
+                    className="heatmap__cell"
+                    data-level={level(cell.ms, heatmap.max)}
+                    title={`${new Date(cell.day * MS_PER_DAY).toLocaleDateString(
+                      locale === "id" ? "id-ID" : "en-GB",
+                      // A day index encodes a calendar date as-if-UTC; rendering
+                      // it in UTC shows that exact date in every timezone.
+                      { timeZone: "UTC" },
+                    )}: ${formatDurationLong(cell.ms, locale)}`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="body">{t("stats.emptyBody")}</p>
+            )}
+          </Card>
+          <TimeStats />
+        </>
+      ) : null}
 
-      <Card>
-        <CardHeader
-          title={t("stats.heatmap")}
-          aside={
-            // One container, not a fragment: the header is space-between, so
-            // fragment children each claimed a flex slot and the legend floated
-            // to the middle of the card.
-            <span className="heatmap__aside">
-              {/* The legend names the color scale, which the cells already show;
-                  the streaks are figures, so they stay readable by AT. */}
-              <span className="caption" aria-hidden="true">
-                {t("stats.heatmapLegend")} · {t("stats.heatmapLegendMore")}
-              </span>
-              <span className="heatmap__streaks caption tnum">
-                <span>{t("stats.streakCurrent", { days: streak.current })}</span>
-                <span>{t("stats.streakLongest", { days: streak.longest })}</span>
-              </span>
-            </span>
-          }
-        />
-        {heatmap ? (
-          <div className="heatmap" role="img" aria-label={t("stats.heatmap")}>
-            {heatmap.cells.map((cell) => (
-              <span
-                key={cell.day}
-                className="heatmap__cell"
-                data-level={level(cell.ms, heatmap.max)}
-                title={`${new Date(cell.day * MS_PER_DAY).toLocaleDateString(
-                  locale === "id" ? "id-ID" : "en-GB",
-                  // A day index encodes a calendar date as-if-UTC; rendering
-                  // it in UTC shows that exact date in every timezone.
-                  { timeZone: "UTC" },
-                )}: ${formatDurationLong(cell.ms, locale)}`}
-              />
-            ))}
+      {tab === "recap" ? (
+        <>
+          <div className="stats__recap-bar">
+            <div
+              className="time__tabs stats__recap-tabs"
+              role="tablist"
+              aria-label={t("stats.recapMode")}
+            >
+              {RECAP_MODES.map(([mode, labelKey]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={recapMode === mode}
+                  className="time__tab"
+                  data-active={recapMode === mode ? "true" : "false"}
+                  onClick={() => setRecapMode(mode)}
+                >
+                  {t(labelKey)}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : (
-          <p className="body">{t("stats.emptyBody")}</p>
-        )}
-      </Card>
+          {recapMode === "yearly" ? <YearReview byDay={byDay} /> : <AllTimeWrapped />}
+        </>
+      ) : null}
+
+      {tab === "taste" ? <TastePanel /> : null}
     </div>
   );
 }

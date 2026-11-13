@@ -46,7 +46,14 @@ const MIN_CYCLE_SECONDS = 5;
 /** Discord renders at most two buttons on an activity. */
 const MAX_BUTTONS = 2;
 
-type WhichField = "details" | "state" | "title";
+type WhichField =
+  | "details"
+  | "state"
+  | "title"
+  | "vndb_details_items"
+  | "vndb_state"
+  | "custom_details_items"
+  | "custom_state_items";
 
 /** Which transform each template field is paired with. */
 type TransformKey =
@@ -71,6 +78,8 @@ function RotationListEditor({
   rotateLabel,
   seconds,
   secondsLabel,
+  placeholder,
+  onFocus,
   onItems,
   onRotate,
   onSeconds,
@@ -84,6 +93,8 @@ function RotationListEditor({
   rotateLabel: string;
   seconds: number;
   secondsLabel: string;
+  placeholder?: string;
+  onFocus?: () => void;
   onItems: (next: string[]) => void;
   onRotate: (next: boolean) => void;
   onSeconds: (next: number) => void;
@@ -125,7 +136,9 @@ function RotationListEditor({
         className="textarea presence-rotator__list"
         rows={Math.min(Math.max(draft.split("\n").length, 2), 6)}
         value={draft}
+        placeholder={placeholder}
         disabled={disabled}
+        onFocus={onFocus}
         onChange={(event) => commit(event.target.value)}
         spellCheck={false}
       />
@@ -423,12 +436,17 @@ export function PresencePanel() {
     const usable = (list: string[]) => list.filter((entry) => entry.trim() !== "").length;
     const isVndb = settings.details_mode === "vndb";
     const detailsRotating = isVndb
-      ? true
+      ? settings.cycle_vndb_details
       : settings.custom_details_rotate && settings.custom_details_items.length > 0;
+    const detailsCount = !detailsRotating
+      ? 0
+      : isVndb
+        ? settings.vndb_details_items.length > 0
+          ? usable(settings.vndb_details_items)
+          : 4
+        : usable(settings.custom_details_items);
     return {
-      details: detailsRotating
-        ? usable(isVndb ? settings.vndb_details_items : settings.custom_details_items)
-        : 0,
+      details: detailsCount,
       state: settings.custom_state_rotate ? usable(settings.custom_state_items) : 0,
     };
   }, [settings]);
@@ -511,16 +529,82 @@ export function PresencePanel() {
     updateSettings({ details_mode: mode });
   };
 
+  const appendTokenToList = (list: string[], token: string): string[] => {
+    if (list.length === 0) return [token];
+    const next = [...list];
+    next[next.length - 1] = `${next[next.length - 1]}${token}`;
+    return next;
+  };
+
   const insertToken = (token: string) => {
     if (activeField === "title") {
       updateSettings({ activity_name: (settings.activity_name ?? "") + token });
+    } else if (activeField === "vndb_state") {
+      updateSettings({ vndb_state_template: settings.vndb_state_template + token });
+    } else if (activeField === "vndb_details_items") {
+      resetPreview();
+      updateSettings({
+        vndb_details_items: appendTokenToList(settings.vndb_details_items, token),
+      });
+    } else if (activeField === "custom_details_items") {
+      resetPreview();
+      updateSettings({
+        custom_details_items: appendTokenToList(settings.custom_details_items, token),
+      });
+    } else if (activeField === "custom_state_items") {
+      resetPreview();
+      updateSettings({
+        custom_state_items: appendTokenToList(settings.custom_state_items, token),
+      });
     } else if (activeField === "details") {
-      const key =
-        settings.details_mode === "vndb" ? "vndb_state_template" : "custom_details";
-      updateSettings({ [key]: ((settings[key] as string) ?? "") + token });
+      if (settings.details_mode === "vndb") {
+        resetPreview();
+        updateSettings({
+          vndb_details_items: appendTokenToList(settings.vndb_details_items, token),
+        });
+      } else {
+        updateSettings({ custom_details: settings.custom_details + token });
+      }
     } else {
       updateSettings({ custom_state: settings.custom_state + token });
     }
+  };
+
+  const resetFormatting = () => {
+    const emptyTransform: TextTransform = {
+      prefix: "",
+      suffix: "",
+      remove: [],
+      replace: [],
+      trim: false,
+    };
+    resetPreview();
+    updateSettings({
+      details_mode: "vndb",
+      activity_name: null,
+      cycle_vndb_details: false,
+      cycle_seconds: 5,
+      vndb_details_items: [],
+      vndb_state_template: "",
+      vndb_swap_details_state: false,
+      vndb_loading_details: "Reading",
+      vndb_loading_state: "Loading VNDB data...",
+      vndb_details_transform: emptyTransform,
+      vndb_state_transform: emptyTransform,
+      custom_details: "{vn_name}",
+      custom_state: "{chapter}",
+      custom_details_items: [],
+      custom_state_items: [],
+      custom_details_rotate: false,
+      custom_state_rotate: false,
+      custom_details_cycle_seconds: 5,
+      custom_state_cycle_seconds: 5,
+      custom_details_transform: emptyTransform,
+      custom_state_transform: emptyTransform,
+      manual_details: "",
+      manual_state: "",
+    });
+    pushToast("info", t("settings.presenceDefaultsRestored"));
   };
 
   const setTransform = (key: TransformKey, next: TextTransform) => {
@@ -834,6 +918,7 @@ export function PresencePanel() {
                     rotateLabel={t("settings.presenceRotate")}
                     seconds={settings.custom_details_cycle_seconds}
                     secondsLabel={t("settings.presenceCycleSeconds")}
+                    onFocus={() => setActiveField("custom_details_items")}
                     onItems={(next) => {
                       resetPreview();
                       updateSettings({ custom_details_items: next });
@@ -874,6 +959,7 @@ export function PresencePanel() {
                     rotateLabel={t("settings.presenceRotate")}
                     seconds={settings.custom_state_cycle_seconds}
                     secondsLabel={t("settings.presenceCycleSeconds")}
+                    onFocus={() => setActiveField("custom_state_items")}
                     onItems={(next) => {
                       resetPreview();
                       updateSettings({ custom_state_items: next });
@@ -904,33 +990,9 @@ export function PresencePanel() {
 
               {settings.details_mode === "vndb" ? (
                 <>
-                  <div className="settings__row">
-                    <span className="settings__label">
-                      {t("settings.presenceCycleDetails")}
-                    </span>
-                    <div className="settings__control">
-                      <Chip
-                        selected={settings.cycle_vndb_details}
-                        onClick={() =>
-                          updateSettings({
-                            cycle_vndb_details: !settings.cycle_vndb_details,
-                          })
-                        }
-                      >
-                        {settings.cycle_vndb_details
-                          ? t("common.enabled")
-                          : t("common.disabled")}
-                      </Chip>
-                    </div>
-                  </div>
-                  <span className="settings__hint">
-                    {t("settings.presenceCycleDetailsHint")}
-                  </span>
-
                   {/* The list owns the interval and the on/off switch for this
-                      mode: a separate "Seconds per fact" field above it was the
-                      same value rendered twice, and only one of the two was on
-                      screen once rotation was switched off. */}
+                      mode: a separate toggle or seconds field above it would be
+                      the same value rendered twice. */}
                   <RotationListEditor
                     id="vndb-details-items"
                     label={t("settings.presenceVndbDetailsItems")}
@@ -940,11 +1002,16 @@ export function PresencePanel() {
                     rotateLabel={t("settings.presenceCycleDetails")}
                     seconds={settings.cycle_seconds}
                     secondsLabel={t("settings.presenceCycleSeconds")}
+                    placeholder="★ {vndb_rating}/10 · {vndb_year} · {vndb_length}"
+                    onFocus={() => setActiveField("vndb_details_items")}
                     onItems={(next) => {
                       resetPreview();
                       updateSettings({ vndb_details_items: next });
                     }}
-                    onRotate={(next) => updateSettings({ cycle_vndb_details: next })}
+                    onRotate={(next) => {
+                      resetPreview();
+                      updateSettings({ cycle_vndb_details: next });
+                    }}
                     onSeconds={(next) => updateSettings({ cycle_seconds: next })}
                     disabled={false}
                   />
@@ -958,11 +1025,11 @@ export function PresencePanel() {
                       type="text"
                       className="input"
                       value={settings.vndb_state_template}
-                      onFocus={() => setActiveField("details")}
+                      onFocus={() => setActiveField("vndb_state")}
                       onChange={(event) =>
                         updateSettings({ vndb_state_template: event.target.value })
                       }
-                      placeholder="★ {vndb_rating}/10 · {vndb_year} · {vndb_length}"
+                      placeholder="{route} - {chapter}"
                     />
                     <span className="settings__hint">
                       {t("settings.presenceVndbStateTemplateHint")}
@@ -1308,6 +1375,13 @@ export function PresencePanel() {
               <div className="presence-actions">
                 <Button onClick={() => void save()} disabled={busy}>
                   {t("settings.presenceSave")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={resetFormatting}
+                  disabled={busy}
+                >
+                  {t("settings.presenceResetDefaults")}
                 </Button>
                 {saved ? (
                   <span className="presence-saved">{t("settings.presenceSaved")}</span>

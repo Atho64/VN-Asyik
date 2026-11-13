@@ -186,3 +186,28 @@ describe("Android session recovery status", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("Linux Beta tracking notice", () => {
+  it("shows a Beta notice on Linux while keeping tracking controls active", async () => {
+    const { useAppStore } = await import("@/app/store");
+    const prev = useAppStore.getState().platform;
+    useAppStore.setState({
+      platform: {
+        os: "linux",
+        kind: "desktop",
+        process_tracking: "supported",
+        chapter_detection: "supported",
+        discord_presence: "supported",
+        cloud_sync: "supported",
+        first_class: false,
+      },
+    });
+    try {
+      renderScreen({ applicable: false, granted: false, settingsAction: null, reason: null }, true);
+      expect(await screen.findByText(/Linux tracking is currently in Beta/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Tracking" })).toBeInTheDocument();
+    } finally {
+      useAppStore.setState({ platform: prev });
+    }
+  });
+});

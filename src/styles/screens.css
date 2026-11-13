@@ -945,6 +945,18 @@
   background: var(--accent-strong);
 }
 
+.stats__game-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats__recap-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
 /* Heatmap: 53 weeks x 7 days, the densest data on any screen. */
 .heatmap {
   display: grid;
@@ -1650,6 +1662,12 @@
     padding: 0 var(--space-1);
     /* The base rule sets 32 px for a fine pointer; a phone needs the full target. */
     min-height: var(--touch-target);
+  }
+}
+
+@media (max-width: 599px) {
+  .time__tabs.stats__recap-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

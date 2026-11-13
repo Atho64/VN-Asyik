@@ -177,8 +177,9 @@ pub struct PresenceSettings {
     /// Template for the card **title**. `None` means "the VN's title", which is
     /// the `EwE` behaviour and the default.
     pub activity_name: Option<String>,
-    /// Rotate the VNDB details line through developer → rating → length → year.
-    /// `EwE` calls this the VNDB details cycle; it is on by default there.
+    /// Rotate the VNDB details line through developer → rating → length → year,
+    /// or cycle custom `vndb_details_items` entries when provided.
+    /// Off by default so linked VNs show a compact rating · year · length summary.
     pub cycle_vndb_details: bool,
     /// Seconds each VNDB fact stays on screen. Floored at [`MIN_CYCLE_SECONDS`].
     pub cycle_seconds: u32,
@@ -227,7 +228,7 @@ impl Default for PresenceSettings {
             show_timestamps: true,
             show_when_unfocused: true,
             activity_name: None,
-            cycle_vndb_details: true,
+            cycle_vndb_details: false,
             cycle_seconds: 5,
             vndb_loading_details: "Reading".to_string(),
             vndb_loading_state: "Loading VNDB data...".to_string(),
@@ -703,12 +704,58 @@ fn rotating_field(
     sanitize_discord_string(&transform.apply(&render_template(fixed, tokens)))
 }
 
-/// Renders the built-in four-fact VNDB details rotation.
+/// Renders a single compact VNDB summary (`★ rating/10 · year · length`),
+/// skipping absent fields cleanly and falling back to developer when none exist.
+/// Unlinked games draw on local library facts (`playtime`, `status`, length).
+fn builtin_vndb_summary(ctx: &PresenceContext) -> Option<String> {
+    if !ctx.vndb_linked {
+        return [&ctx.playtime, &ctx.status, &ctx.vndb_length]
+            .into_iter()
+            .find_map(|v| v.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+            .map(str::to_string);
+    }
+    let mut parts: Vec<String> = Vec::with_capacity(3);
+    if let Some(rating) = ctx
+        .vndb_rating
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        parts.push(format!("★ {rating}/10"));
+    }
+    if let Some(year) = ctx
+        .vndb_year
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        parts.push(year.to_string());
+    }
+    if let Some(length) = ctx
+        .vndb_length
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        parts.push(length.to_string());
+    }
+    if !parts.is_empty() {
+        return Some(parts.join(" · "));
+    }
+    ctx.vndb_developer
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// Renders the built-in VNDB details line: four-fact rotation when cycling is
+/// enabled, or the compact summary line otherwise.
 fn builtin_vndb_details(settings: &PresenceSettings, ctx: &PresenceContext) -> Option<String> {
     if settings.cycle_vndb_details {
         cycling_vndb_fact(ctx.cycle_index, ctx)
     } else {
-        ctx.vndb_developer.clone()
+        builtin_vndb_summary(ctx)
     }
 }
 
@@ -782,11 +829,16 @@ fn render_lines(
                     .as_deref()
                     .map(|t| settings.vndb_details_transform.apply(t))
             } else {
+                let item_index = if settings.cycle_vndb_details {
+                    ctx.cycle_index
+                } else {
+                    0
+                };
                 rotating_field(
                     &settings.vndb_details_items,
                     true,
                     "",
-                    ctx.cycle_index,
+                    item_index,
                     &tokens,
                     &settings.vndb_details_transform,
                 )
@@ -1071,7 +1123,10 @@ mod tests {
 
     #[test]
     fn the_details_line_cycles_through_every_available_vndb_fact() {
-        let settings = PresenceSettings::default();
+        let settings = PresenceSettings {
+            cycle_vndb_details: true,
+            ..Default::default()
+        };
         let seen: Vec<String> = (0..VNDB_FACT_COUNT)
             .map(|i| {
                 let ctx = PresenceContext {
@@ -1095,22 +1150,43 @@ mod tests {
         let mut ctx = cycling_context();
         ctx.vndb_rating = None;
         ctx.cycle_index = 1;
-        let act = build_activity(&PresenceSettings::default(), &ctx);
+        let settings = PresenceSettings {
+            cycle_vndb_details: true,
+            ..Default::default()
+        };
+        let act = build_activity(&settings, &ctx);
         assert_eq!(act.details.as_deref(), Some("Very long"));
     }
 
     #[test]
-    fn cycling_can_be_switched_off_to_a_fixed_developer_line() {
-        let settings = PresenceSettings {
-            cycle_vndb_details: false,
-            ..Default::default()
-        };
+    fn default_details_line_formats_a_compact_vndb_summary_without_cycling() {
+        let settings = PresenceSettings::default();
         let ctx = PresenceContext {
             cycle_index: 2,
             ..cycling_context()
         };
         let act = build_activity(&settings, &ctx);
-        assert_eq!(act.details.as_deref(), Some("5pb. / Nitroplus"));
+        assert_eq!(act.details.as_deref(), Some("★ 8.86/10 · 2009 · Very long"));
+
+        let partial = PresenceContext {
+            vndb_year: None,
+            ..cycling_context()
+        };
+        assert_eq!(
+            build_activity(&settings, &partial).details.as_deref(),
+            Some("★ 8.86/10 · Very long")
+        );
+
+        let dev_only = PresenceContext {
+            vndb_rating: None,
+            vndb_year: None,
+            vndb_length: None,
+            ..cycling_context()
+        };
+        assert_eq!(
+            build_activity(&settings, &dev_only).details.as_deref(),
+            Some("5pb. / Nitroplus")
+        );
     }
 
     #[test]
@@ -1710,6 +1786,7 @@ mod tests {
     #[test]
     fn a_vndb_template_list_rotates_instead_of_the_builtin_facts() {
         let settings = PresenceSettings {
+            cycle_vndb_details: true,
             vndb_details_items: vec![
                 "{vndb_status}".to_string(),
                 "By {vndb_developer}".to_string(),

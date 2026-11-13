@@ -1,0 +1,126 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { AppContext } from "@/app/AppProvider";
+import { useAppStore } from "@/app/store";
+import { createTranslator } from "@/i18n";
+
+const mocks = vi.hoisted(() => ({
+  statusBreakdown: vi.fn(),
+  playtimeByDay: vi.fn(),
+}));
+
+vi.mock("@/lib/ipc/client", () => ({
+  api: {
+    statusBreakdown: mocks.statusBreakdown,
+    playtimeByDay: mocks.playtimeByDay,
+  },
+}));
+
+vi.mock("@/features/stats/OnThisDay", () => ({
+  OnThisDay: () => <div data-testid="on-this-day" />,
+}));
+
+vi.mock("@/features/stats/TimeStats", () => ({
+  TimeStats: () => <div data-testid="time-stats" />,
+}));
+
+vi.mock("@/features/stats/AllTimeWrapped", () => ({
+  AllTimeWrapped: () => <div data-testid="all-time-wrapped" />,
+}));
+
+vi.mock("@/features/stats/YearReview", () => ({
+  YearReview: () => <div data-testid="year-review" />,
+}));
+
+vi.mock("@/features/stats/TastePanel", () => ({
+  TastePanel: () => <div data-testid="taste-panel" />,
+}));
+
+const { StatsScreen } = await import("./StatsScreen");
+
+const t = createTranslator("en");
+
+function renderStats() {
+  return render(
+    <AppContext.Provider value={{ t, locale: "en", ready: true, bootError: null }}>
+      <StatsScreen />
+    </AppContext.Provider>,
+  );
+}
+
+describe("StatsScreen", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.statusBreakdown.mockResolvedValue({
+      playing: 2,
+      wishlist: 1,
+      completed: 3,
+      on_hold: 0,
+      dropped: 0,
+    });
+    mocks.playtimeByDay.mockResolvedValue([[20_000, 3_600_000]]);
+    useAppStore.setState({
+      libraryLoaded: true,
+      cards: [
+        {
+          game: {
+            meta: { id: "g1", updated_at: 0, device_id_device: "d1", deleted: false },
+            title: "Steins;Gate",
+            title_original: null,
+            vndb_id: "v2002",
+            status: "completed",
+            rating: 90,
+            notes: null,
+            length_minutes: null,
+            manual_playtime_ms: 0,
+            accent_color: null,
+            cover_url: null,
+            cover_sexual: null,
+            cover_violence: null,
+            custom_cover_path: null,
+            custom_cover_source_vndb: false,
+            started_at: null,
+            finished_at: null,
+          },
+          tracked_ms: 7_200_000,
+          afk_ms: 0,
+          total_ms: 7_200_000,
+        },
+      ],
+    });
+  });
+
+  it("organizes sections into Overview, Activity, Recap, and Taste tabs without stacking duplicates", async () => {
+    const user = userEvent.setup();
+    renderStats();
+
+    expect(await screen.findByTestId("on-this-day")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Most played" })).toBeInTheDocument();
+    expect(screen.queryByTestId("time-stats")).toBeNull();
+    expect(screen.queryByTestId("year-review")).toBeNull();
+    expect(screen.queryByTestId("all-time-wrapped")).toBeNull();
+    expect(screen.queryByTestId("taste-panel")).toBeNull();
+
+    const tabs = screen.getByRole("tablist", { name: "Stats views" });
+
+    await user.click(within(tabs).getByRole("tab", { name: "Activity" }));
+    expect(screen.getByTestId("time-stats")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Play days, last 12 months" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Overview" })).toBeNull();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Recap" }));
+    expect(screen.getByTestId("year-review")).toBeInTheDocument();
+    expect(screen.queryByTestId("all-time-wrapped")).toBeNull();
+
+    const recapSwitch = screen.getByRole("tablist", { name: "Recap period" });
+    await user.click(within(recapSwitch).getByRole("tab", { name: "All-time" }));
+    expect(screen.getByTestId("all-time-wrapped")).toBeInTheDocument();
+    expect(screen.queryByTestId("year-review")).toBeNull();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Taste" }));
+    expect(screen.getByTestId("taste-panel")).toBeInTheDocument();
+  });
+});

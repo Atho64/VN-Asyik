@@ -78,7 +78,8 @@ pub const fn info() -> PlatformInfo {
         PlatformInfo {
             os: "linux",
             kind: "desktop",
-            first_class: true,
+            // Linux packaging/tracking is still Beta and not yet verified across distros.
+            first_class: false,
             // X11 and XWayland only. A native Wayland window cannot be seen by
             // any client, so this stays Experimental rather than Supported: the
             // probe connects when a display exists and says why when it does not.
@@ -173,6 +174,14 @@ mod tests {
         if cfg!(target_os = "android") {
             let info = info();
             assert_eq!(info.process_tracking, Support::Experimental);
+        }
+    }
+
+    #[test]
+    fn linux_reports_beta_non_first_class() {
+        if cfg!(target_os = "linux") {
+            let info = info();
+            assert!(!info.first_class);
         }
     }
 }

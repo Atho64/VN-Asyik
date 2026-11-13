@@ -117,12 +117,14 @@ export default function SettingsScreen({
         </>
       ) : null}
 
-      {/* Tracking joins the tab row with the AFK group beside it: the idle
-          threshold and away-time toggle are playtime-tracking behaviour, so this
-          one tab answers "how is my playtime measured" end to end. */}
+      {/* Tracking joins the tab row with window-title parsing and the AFK group
+          beside it: chapter detection, the idle threshold and the away-time
+          toggle are tracking behaviour, so this one tab answers "how are my
+          playtime and chapters measured" end to end. */}
       {tab === "tracking" ? (
         <>
           <TrackingScreen />
+          {isWindows ? <TitleParsingPanel /> : null}
           {isWindows ? (
             <section className="settings__group">
               <h2 className="settings__group-title">{t("settings.afk")}</h2>
@@ -200,6 +202,27 @@ export default function SettingsScreen({
 
       {tab === "general" ? (
         <>
+          <section className="settings__group">
+            <h2 className="settings__group-title">{t("settings.language")}</h2>
+            <div className="settings__row">
+              <span className="settings__label">{t("settings.appLanguage")}</span>
+              <div className="settings__control">
+                <Chip
+                  selected={prefs.language === "en"}
+                  onClick={() => void apply(() => api.setLanguage("en"))}
+                >
+                  English
+                </Chip>
+                <Chip
+                  selected={prefs.language === "id"}
+                  onClick={() => void apply(() => api.setLanguage("id"))}
+                >
+                  Indonesia
+                </Chip>
+              </div>
+            </div>
+          </section>
+
           <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.betaTitle")}</h2>
             <div className="settings__row">
@@ -329,28 +352,12 @@ export default function SettingsScreen({
           <LibraryLaunchSection />
           {platform?.kind === "desktop" ? <WindowLaunchSection /> : null}
 
-          <section className="settings__group">
-            <h2 className="settings__group-title">{t("settings.languageTools")}</h2>
-            <div className="settings__row">
-              <span className="settings__label">{t("settings.language")}</span>
-              <div className="settings__control">
-                <Chip
-                  selected={prefs.language === "en"}
-                  onClick={() => void apply(() => api.setLanguage("en"))}
-                >
-                  English
-                </Chip>
-                <Chip
-                  selected={prefs.language === "id"}
-                  onClick={() => void apply(() => api.setLanguage("id"))}
-                >
-                  Indonesia
-                </Chip>
-              </div>
-            </div>
-            {isWindows ? <LocalePanel /> : null}
-            {isWindows ? <TitleParsingPanel /> : null}
-          </section>
+          {isWindows ? (
+            <section className="settings__group">
+              <h2 className="settings__group-title">{t("settings.languageTools")}</h2>
+              <LocalePanel />
+            </section>
+          ) : null}
 
           <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.platform")}</h2>
@@ -586,12 +593,17 @@ function CapabilityMatrix({ platform }: { platform: PlatformInfo }) {
     [t("capability.cloudSync"), platform.cloud_sync],
   ];
 
+  const osLabel = platform.os === "linux" ? t("settings.platformOsLinuxBeta") : platform.os;
+
   return (
     <div className="capabilities">
       <div className="capabilities__row">
         <span className="caption">{t("settings.platformOs")}</span>
-        <span className="caption">{platform.os}</span>
+        <span className="caption">{osLabel}</span>
       </div>
+      {platform.os === "linux" ? (
+        <p className="notice notice--warn">{t("settings.linuxBetaNotice")}</p>
+      ) : null}
       {rows.map(([label, support]) => (
         <div className="capabilities__row" key={label}>
           <span>{label}</span>

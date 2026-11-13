@@ -38,7 +38,7 @@ const defaultSettings: PresenceSettings = {
   show_timestamps: true,
   show_when_unfocused: true,
   activity_name: null,
-  cycle_vndb_details: true,
+  cycle_vndb_details: false,
   cycle_seconds: 5,
   vndb_loading_details: "Reading",
   vndb_loading_state: "Loading VNDB data...",
@@ -572,5 +572,40 @@ describe("PresencePanel", () => {
         0,
       );
     });
+  });
+
+  it("shows default compact placeholders, removes duplicate rotate toggle, and resets formatting", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.presenceGetSettings).mockResolvedValueOnce({
+      ...defaultSettings,
+      enabled: true,
+      cycle_vndb_details: true,
+      vndb_details_items: ["{vndb_rating}/10 | {vndb_year}"],
+      vndb_state_template: "Custom {route}",
+    });
+
+    renderPanel();
+
+    const detailsList = await screen.findByLabelText("Rotating VNDB lines");
+    expect(detailsList).toHaveAttribute(
+      "placeholder",
+      "★ {vndb_rating}/10 · {vndb_year} · {vndb_length}",
+    );
+    const stateInput = screen.getByLabelText("State template");
+    expect(stateInput).toHaveAttribute("placeholder", "{route} - {chapter}");
+
+    // Only one Rotate toggle lives on the VNDB list editor (no duplicate row).
+    expect(screen.getAllByLabelText("Rotate VNDB facts")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Reset formatting to defaults" }));
+
+    expect(detailsList).toHaveValue("");
+    expect(stateInput).toHaveValue("");
+    const rotateToggle = screen.getByLabelText("Rotate VNDB facts");
+    expect(rotateToggle).toHaveAttribute("aria-pressed", "false");
+
+    // Enabling rotation without custom lines reveals the 4-entry preview pager.
+    await user.click(rotateToggle);
+    expect(screen.getByText("1 / 4")).toBeInTheDocument();
   });
 });

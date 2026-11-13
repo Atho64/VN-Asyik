@@ -1,6 +1,6 @@
 # VN Asyik
 
-A visual novel library and playtime tracker for Windows, Linux and Android. It reads
+A visual novel library and playtime tracker for Windows, Android and Linux (Beta). It reads
 from VNDB, keeps everything in a local SQLite database, and works with no
 network. Rust and Tauri on the backend, React on the front.
 
@@ -134,7 +134,7 @@ caption that does not name the game you track is ignored.
 
 ### Custom pattern
 
-If your game writes a shape none of those cover, open **Settings → General →
+If your game writes a shape none of those cover, open **Settings → Tracking →
 Reading chapters from window titles**, set **Source** to **Custom pattern**, and
 fill in a pattern. It is Rust [`regex`](https://docs.rs/regex) 1.x syntax:
 linear-time, no look-around, no backreferences, at most 512 bytes (about 170
@@ -319,7 +319,7 @@ tells you rather than pretending.
 Download the latest prerelease from [GitHub Releases](https://github.com/Atho64/VN-Asyik/releases).
 Windows has `.exe` and `.msi` installers; both are unsigned and may show a
 SmartScreen warning. Android uses the signed `app-universal-release.apk`. Linux
-has an `.AppImage`: make it executable and run it.
+(Beta) has an `.AppImage`: make it executable and run it.
 
 To build from source:
 

@@ -180,6 +180,8 @@ export const en = {
   "tracking.title": "Playtime tracking",
   "tracking.intro":
     "The app counts time only while the game's window is focused and you are not away. Nothing is written into the game.",
+  "tracking.linuxBetaNotice":
+    "Linux tracking is currently in Beta: active-window focus and idle detection may vary across desktop environments and Wayland compositors.",
   "tracking.unavailable": "Not available on this device",
   "tracking.unavailableReason":
     "This build cannot read process focus here, so playtime is manual only.",
@@ -856,6 +858,14 @@ export const en = {
   "similar.modelDownload": "Download model",
   "similar.modelReady": "The comparison model is installed.",
   "stats.title": "Stats",
+  "stats.tabs": "Stats views",
+  "stats.tabOverview": "Overview",
+  "stats.tabActivity": "Activity",
+  "stats.tabRecap": "Recap",
+  "stats.tabTaste": "Taste",
+  "stats.recapMode": "Recap period",
+  "stats.recapYearly": "Yearly",
+  "stats.recapAllTime": "All-time",
   "time.title": "Time played",
   "time.period": "Period",
   "time.daily": "By day",
@@ -1063,7 +1073,7 @@ export const en = {
   "settings.presenceDefaultTitle": "Your visual novel's title",
   "settings.presenceCycleDetails": "Rotate VNDB facts",
   "settings.presenceCycleDetailsHint":
-    "Cycles the details line through developer, rating, length and release year instead of repeating the title.",
+    "When turned on, cycles the details line through developer, rating, length and release year (or your custom list below). Off shows a single compact summary line.",
   "settings.presenceCycleSeconds": "Seconds per fact",
   "settings.presenceState": "State line",
   "settings.presenceShowCover": "Show Cover Art",
@@ -1109,7 +1119,7 @@ export const en = {
   "settings.presenceRotate": "Rotate through the list",
   "settings.presenceVndbDetailsItems": "Rotating VNDB lines",
   "settings.presenceVndbDetailsItemsHint":
-    "Leave empty to rotate the built-in facts: developer, rating, length, release year.",
+    "Leave empty for the default compact line (★ {vndb_rating}/10 · {vndb_year} · {vndb_length}), or turn Rotate on to cycle developer, rating, length and year.",
   "settings.presenceVndbStateTemplate": "State template",
   "settings.presenceVndbStateTemplateHint":
     "Leave empty to show the route and chapter, or your VNDB list status when neither is detected.",
@@ -1142,6 +1152,8 @@ export const en = {
   "settings.presencePreviewElapsed": "Elapsed time shown here",
   "settings.presenceSave": "Save presence settings",
   "settings.presenceSaved": "Presence settings saved",
+  "settings.presenceResetDefaults": "Reset formatting to defaults",
+  "settings.presenceDefaultsRestored": "Default formatting restored (click Save to apply)",
   "settings.presenceDiscordToken": "Discord User Token",
   "settings.presenceDiscordTokenHint":
     "Required on Android to communicate directly with Discord Gateway.",
@@ -1171,6 +1183,7 @@ export const en = {
   "settings.nsfwBlur": "Blur until revealed",
   "settings.nsfwHide": "Hide entirely",
   "settings.language": "Language",
+  "settings.appLanguage": "App language",
   "settings.metadataTitle": "VNDB metadata",
   "settings.refreshLabel": "Update metadata from VNDB",
   "settings.refreshHint":
@@ -1185,6 +1198,9 @@ export const en = {
   "settings.refreshFailures": "What failed",
   "settings.platform": "This device",
   "settings.platformOs": "Platform",
+  "settings.platformOsLinuxBeta": "Linux (Beta)",
+  "settings.linuxBetaNotice":
+    "Linux support is currently in Beta. Window focus, idle detection, or Discord IPC may need manual tweaks depending on your desktop environment.",
   "settings.capability": "Capability",
   "settings.capabilities": "What works here",
   "settings.data": "Data",
@@ -1313,7 +1329,7 @@ export const en = {
   "guide.chapters.p2":
     "Routes and endings are yours to name; a detected chapter and a manual one can be joined with the offered merge.",
   "guide.chapters.p3":
-    "If your game writes another shape, use a custom pattern (regex) in Settings, General.",
+    "If your game writes another shape, use a custom pattern (regex) in Settings, Tracking.",
   "guide.game.title": "Start from the app",
   "guide.game.body":
     "The Play button launches a mapped game and binds that process to it immediately.",
