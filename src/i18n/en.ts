@@ -1572,7 +1572,7 @@ export const en = {
   "update.install": "Download and install",
   "update.downloading": "Downloading",
   "update.started": "The installer was started from {{path}}.",
-  "update.openPage": "Open the release page",
+  "update.openPage": "Open on GitHub",
   "update.available": "Version {{version}} is ready to install.",
   "update.error.offline": "The release page could not be reached.",
   "update.error.rate_limited": "GitHub is rate limiting checks; try again later.",

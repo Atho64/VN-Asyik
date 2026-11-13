@@ -17,6 +17,8 @@ use crate::state::AppState;
 
 /// Where releases are listed.
 const RELEASES_URL: &str = "https://api.github.com/repos/Atho64/VN-Asyik/releases?per_page=20";
+/// Fallback release page when a release entry omits `html_url`.
+const RELEASES_PAGE_URL: &str = "https://github.com/Atho64/VN-Asyik/releases";
 /// How long a check is trusted. GitHub's anonymous quota is 60 requests an hour.
 const CACHE_MS: i64 = 6 * 60 * 60 * 1000;
 /// The version compiled into this build.
@@ -198,7 +200,7 @@ async fn fetch(client: &reqwest::Client) -> Result<Cache, String> {
     Ok(Cache {
         checked_at: 0,
         latest: Some(version),
-        url: release.html_url,
+        url: release.html_url.filter(|url| !url.trim().is_empty()),
         // Extension checks go through `Path`, as the download does with the name,
         // and ignore case: a release asset may be spelled `.APK`.
         setup: pick(&|name| has_extension(name, &["exe"])),
@@ -206,9 +208,52 @@ async fn fetch(client: &reqwest::Client) -> Result<Cache, String> {
     })
 }
 
-/// Whether this build may launch the downloaded installer itself.
+/// Whether this build may download and launch an installer itself.
+///
+/// Only Windows ships an interactive setup binary (`setup.exe`). Android,
+/// Linux and macOS open the GitHub release page instead of running an
+/// error-prone in-app download and package handoff.
 const fn can_install() -> bool {
-    cfg!(any(target_os = "windows", target_os = "android"))
+    cfg!(target_os = "windows")
+}
+
+/// Installer asset used by `update_install` on platforms that support it.
+fn platform_asset(cache: &Cache) -> Option<Asset> {
+    if cfg!(target_os = "windows") {
+        cache.setup.clone()
+    } else {
+        None
+    }
+}
+
+/// Shape the UI-facing update status from a cached GitHub check.
+fn view_from_cache(
+    current: &str,
+    cache: Option<&Cache>,
+    error: Option<String>,
+    installable: bool,
+    asset: Option<Asset>,
+) -> UpdateView {
+    let available = cache
+        .and_then(|cache| cache.latest.as_deref())
+        .is_some_and(|latest| is_newer(latest, current));
+    let url = cache.and_then(|cache| {
+        cache
+            .url
+            .clone()
+            .filter(|url| !url.trim().is_empty())
+            .or_else(|| Some(RELEASES_PAGE_URL.to_owned()))
+    });
+    UpdateView {
+        current: current.to_owned(),
+        latest: cache.and_then(|cache| cache.latest.clone()),
+        available,
+        url,
+        asset: if installable { asset } else { None },
+        checked_at: cache.map(|cache| cache.checked_at),
+        error,
+        can_install: installable,
+    }
 }
 
 /// Report the newest published version.
@@ -240,34 +285,21 @@ pub async fn update_check(state: State<'_, AppState>, force: bool) -> CommandRes
             Err(reason) => error = Some(reason),
         }
     }
-    let asset = cache.as_ref().and_then(|cache| {
-        if cfg!(target_os = "android") {
-            cache.apk.clone()
-        } else if cfg!(target_os = "windows") {
-            cache.setup.clone()
-        } else {
-            None
-        }
-    });
-    Ok(UpdateView {
-        current: CURRENT.to_owned(),
-        latest: cache.as_ref().and_then(|cache| cache.latest.clone()),
-        available: cache
-            .as_ref()
-            .and_then(|cache| cache.latest.as_deref())
-            .is_some_and(|latest| is_newer(latest, CURRENT)),
-        url: cache.as_ref().and_then(|cache| cache.url.clone()),
-        asset,
-        checked_at: cache.as_ref().map(|cache| cache.checked_at),
+    let asset = cache.as_ref().and_then(platform_asset);
+    Ok(view_from_cache(
+        CURRENT,
+        cache.as_ref(),
         error,
-        can_install: can_install(),
-    })
+        can_install(),
+        asset,
+    ))
 }
 
 /// Download the installer and start it.
 ///
-/// Returns the file it wrote, so the UI can say where it went. On Android the
-/// download is handed to the system package installer instead of being executed.
+/// Returns the file it wrote, so the UI can say where it went. Supported on
+/// Windows only; Android and other platforms open the GitHub release page
+/// via `open_external` instead.
 ///
 /// # Errors
 /// `no_update`, `download_failed`, `launch_failed` or `unsupported`.
@@ -276,6 +308,12 @@ pub async fn update_install(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<String> {
+    if !can_install() {
+        return Err(CommandError::new(
+            "unsupported",
+            "this build cannot install the update itself",
+        ));
+    }
     let view = update_check(state, true).await?;
     let Some(asset) = view.asset.filter(|_| view.available) else {
         return Err(CommandError::new(
@@ -283,14 +321,8 @@ pub async fn update_install(
             "no newer release is available",
         ));
     };
-    if !view.can_install {
-        return Err(CommandError::new(
-            "unsupported",
-            "this build cannot install the update itself",
-        ));
-    }
     let file = download(&app, &asset).await?;
-    launch(&app, &file)?;
+    launch(&file)?;
     Ok(file.display().to_string())
 }
 
@@ -378,27 +410,19 @@ async fn download(
 /// Start the downloaded installer.
 ///
 /// Windows runs the setup program, which shows its own window: this app never
-/// installs anything silently. Android hands the APK to the system installer.
-/// A platform without a package to run gets an error instead of a mystery file.
-fn launch(app: &tauri::AppHandle, path: &std::path::Path) -> Result<(), CommandError> {
+/// installs anything silently. Other platforms open the GitHub release page
+/// instead and return `unsupported` if invoked directly.
+fn launch(path: &std::path::Path) -> Result<(), CommandError> {
     #[cfg(target_os = "windows")]
     {
-        let _ = app;
         std::process::Command::new(path)
             .spawn()
             .map(|_| ())
             .map_err(|err| CommandError::new("launch_failed", err.to_string()))
     }
-    #[cfg(target_os = "android")]
+    #[cfg(not(target_os = "windows"))]
     {
-        use tauri_plugin_opener::OpenerExt as _;
-        app.opener()
-            .open_path(path.to_string_lossy().to_string(), None::<&str>)
-            .map_err(|err| CommandError::new("launch_failed", err.to_string()))
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "android")))]
-    {
-        let _ = (app, path);
+        let _ = path;
         Err(CommandError::new(
             "unsupported",
             "this build cannot install the update itself",
@@ -485,5 +509,50 @@ mod tests {
         assert_eq!(safe_file_name(r"..\evil.exe"), None);
         assert_eq!(safe_file_name(".hidden"), None);
         assert_eq!(safe_file_name(""), None);
+    }
+
+    #[test]
+    fn non_installable_platforms_use_release_page_instead_of_asset() {
+        let cache = Cache {
+            checked_at: 123,
+            latest: Some("9.9.9".to_owned()),
+            url: Some("https://github.com/Atho64/VN-Asyik/releases/tag/v9.9.9".to_owned()),
+            setup: Some(Asset {
+                name: "VN.Asyik_9.9.9_x64-setup.exe".to_owned(),
+                url: "https://github.com/Atho64/VN-Asyik/releases/download/v9.9.9/setup.exe"
+                    .to_owned(),
+                size: Some(42),
+            }),
+            apk: Some(Asset {
+                name: "app-universal-release.apk".to_owned(),
+                url: "https://github.com/Atho64/VN-Asyik/releases/download/v9.9.9/app.apk"
+                    .to_owned(),
+                size: Some(99),
+            }),
+        };
+
+        let link_only = view_from_cache("0.2.4", Some(&cache), None, false, cache.apk.clone());
+        assert!(link_only.available);
+        assert!(!link_only.can_install);
+        assert_eq!(link_only.asset, None);
+        assert_eq!(
+            link_only.url.as_deref(),
+            Some("https://github.com/Atho64/VN-Asyik/releases/tag/v9.9.9")
+        );
+
+        let fallback = Cache {
+            url: None,
+            ..cache.clone()
+        };
+        let fallback_view = view_from_cache("0.2.4", Some(&fallback), None, false, None);
+        assert_eq!(fallback_view.url.as_deref(), Some(RELEASES_PAGE_URL));
+
+        let windows = view_from_cache("0.2.4", Some(&cache), None, true, cache.setup.clone());
+        assert!(windows.can_install);
+        assert_eq!(
+            windows.asset.as_ref().map(|a| a.name.as_str()),
+            Some("VN.Asyik_9.9.9_x64-setup.exe")
+        );
+        assert_eq!(can_install(), cfg!(target_os = "windows"));
     }
 }

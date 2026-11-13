@@ -6,44 +6,88 @@ import { Button } from "@/components/Button";
 import { Card, CardHeader } from "@/components/Card";
 import { api, IpcError } from "@/lib/ipc/client";
 
-/**
- * One line above the library asking to install a newer build.
- *
- * It appears only when a check found something newer, and only on a platform that
- * can install it: a button that downloads a file it cannot run is worse than no
- * button. The Settings card below is the same answer with the detail, for anyone
- * who wants to read the version numbers or check on demand.
- */
-export function UpdateBanner() {
+type BusyAction = "check" | "install" | "open" | null;
+
+function useUpdateActions() {
   const { t } = useI18n();
   const update = useAppStore((state) => state.update);
+  const setUpdate = useAppStore((state) => state.setUpdate);
   const pushToast = useAppStore((state) => state.pushToast);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<BusyAction>(null);
 
-  if (!update?.available || !update.canInstall) return null;
-
-  const install = async (): Promise<void> => {
-    setBusy(true);
+  const runAction = async (
+    action: Exclude<BusyAction, null>,
+    work: () => Promise<void>,
+  ): Promise<void> => {
+    setBusyAction(action);
     try {
-      const path = await api.updateInstall();
-      pushToast("success", t("update.started", { path }));
+      await work();
     } catch (caught) {
       pushToast(
         "error",
         caught instanceof IpcError ? caught.message : t("common.error"),
       );
     } finally {
-      setBusy(false);
+      setBusyAction(null);
+    }
+  };
+
+  const check = (force: boolean): Promise<void> =>
+    runAction("check", async () => {
+      setUpdate(await api.updateCheck(force));
+    });
+
+  const install = (): Promise<void> =>
+    runAction("install", async () => {
+      const path = await api.updateInstall();
+      pushToast("success", t("update.started", { path }));
+    });
+
+  const openPage = (url: string): Promise<void> =>
+    runAction("open", async () => {
+      await api.openExternal(url);
+    });
+
+  return { t, update, busyAction, busy: busyAction !== null, check, install, openPage };
+}
+
+/**
+ * One line above the library asking to update when a newer build exists.
+ *
+ * Self-installing builds (Windows) download and launch the setup executable
+ * directly; other platforms (Android, Linux, macOS) open the GitHub release
+ * page in the user's browser instead of downloading in-app.
+ */
+export function UpdateBanner() {
+  const { t, update, busyAction, busy, install, openPage } = useUpdateActions();
+
+  if (!update?.available) return null;
+  const releaseUrl = update.url;
+  if (!update.canInstall && !releaseUrl) return null;
+
+  const canSelfInstall = update.canInstall;
+  const message = canSelfInstall
+    ? t("update.available", { version: update.latest ?? "" })
+    : t("update.behind", { version: update.latest ?? "" });
+  const label = canSelfInstall
+    ? busyAction === "install"
+      ? t("update.downloading")
+      : t("update.install")
+    : t("update.openPage");
+
+  const handleAction = (): void => {
+    if (canSelfInstall) {
+      void install();
+    } else if (releaseUrl) {
+      void openPage(releaseUrl);
     }
   };
 
   return (
     <div className="update-banner" role="status">
-      <span>
-        {t("update.available", { version: update.latest ?? "" })}
-      </span>
-      <Button variant="primary" onClick={() => void install()} disabled={busy}>
-        {busy ? t("update.downloading") : t("update.install")}
+      <span>{message}</span>
+      <Button variant="primary" onClick={handleAction} disabled={busy}>
+        {label}
       </Button>
     </div>
   );
@@ -54,40 +98,7 @@ export function UpdateBanner() {
  * one, and a way to fetch it.
  */
 export function UpdatePanel() {
-  const { t } = useI18n();
-  const update = useAppStore((state) => state.update);
-  const setUpdate = useAppStore((state) => state.setUpdate);
-  const pushToast = useAppStore((state) => state.pushToast);
-  const [busy, setBusy] = useState(false);
-
-  const check = async (force: boolean): Promise<void> => {
-    setBusy(true);
-    try {
-      setUpdate(await api.updateCheck(force));
-    } catch (caught) {
-      pushToast(
-        "error",
-        caught instanceof IpcError ? caught.message : t("common.error"),
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const install = async (): Promise<void> => {
-    setBusy(true);
-    try {
-      const path = await api.updateInstall();
-      pushToast("success", t("update.started", { path }));
-    } catch (caught) {
-      pushToast(
-        "error",
-        caught instanceof IpcError ? caught.message : t("common.error"),
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+  const { t, update, busyAction, busy, check, install, openPage } = useUpdateActions();
 
   /** One sentence for the row: what the last answer said. */
   const status = (): string => {
@@ -101,6 +112,8 @@ export function UpdatePanel() {
     return t("update.current");
   };
 
+  const releaseUrl = update?.url;
+
   return (
     <Card>
       <CardHeader title={t("update.title")} />
@@ -113,16 +126,17 @@ export function UpdatePanel() {
         </div>
         <div className="settings__control">
           <Button onClick={() => void check(true)} disabled={busy}>
-            {busy ? t("update.checking") : t("update.check")}
+            {busyAction === "check" ? t("update.checking") : t("update.check")}
           </Button>
           {update?.available && update.canInstall ? (
             <Button variant="primary" onClick={() => void install()} disabled={busy}>
-              {t("update.install")}
+              {busyAction === "install" ? t("update.downloading") : t("update.install")}
             </Button>
           ) : null}
-          {update?.available && !update.canInstall && update.url ? (
+          {update?.available && !update.canInstall && releaseUrl ? (
             <Button
-              onClick={() => void api.openExternal(update.url ?? "")}
+              variant="primary"
+              onClick={() => void openPage(releaseUrl)}
               disabled={busy}
             >
               {t("update.openPage")}

@@ -1576,7 +1576,7 @@ export const id: Messages = {
   "update.install": "Unduh dan pasang",
   "update.downloading": "Mengunduh",
   "update.started": "Installer dijalankan dari {{path}}.",
-  "update.openPage": "Buka halaman rilis",
+  "update.openPage": "Buka di GitHub",
   "update.available": "Versi {{version}} siap dipasang.",
   "update.error.offline": "Halaman rilis tidak bisa dihubungi.",
   "update.error.rate_limited": "GitHub membatasi pemeriksaan; coba lagi nanti.",
