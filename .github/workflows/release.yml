@@ -39,26 +39,30 @@ jobs:
           RELEASE_NOTES: |
             ## What's new
 
-            - **Linux support.** Playtime tracking, chapter detection from window
-              titles, Discord Rich Presence and screenshots now work on Linux over
-              X11. Visual novels running through XWayland are tracked on a Wayland
-              desktop too; a native Wayland window cannot be inspected by any app,
-              and the app says so instead of counting nothing. Linux ships as an
-              `.AppImage`.
-            - **Screenshots.** One button captures the game you are reading — the
-              game window on Windows, the whole screen on Android — and Windows also
-              binds it to `Ctrl+Shift+S`. Captures are grouped by game under a second
-              Timeline tab, open full size, and can be deleted. A library export now
-              carries them, so a backup does not lose the pictures.
-            - **Themes.** Beyond the accent colour: surfaces, text, corners, density
-              and glass strength, with four presets and a custom editor that keeps
-              body text at AA contrast. Themes export and import as a small JSON
-              file. The per-game artwork tint is now a switch.
-            - **Presence preview fixes.** The settings preview paints from local
-              bytes instead of asking the WebView to fetch a remote image, and is
-              bounded to the size it renders at. Covers with an alpha channel blur
-              correctly again, and saving an ImgBB key no longer leaves uploads
-              locked out for five minutes.
+            - **Shell, startup, and window placement.** Added a collapsible
+              compact icon sidebar toggle, library startup category/filter
+              persistence (or configurable default sort), and desktop window
+              launch position preferences (centered or saved custom bounds)
+              — closing #1.
+            - **Settings & Stats organization.** Moved App Language to the top
+              of General Settings, consolidated Tracking and Window-title
+              chapter parsing inside `Settings → Tracking`, and organized Stats
+              into **Overview**, **Activity**, **Recap** (Yearly / All-time), and
+              **Taste** tabs.
+            - **Stats Recap & Discover.** Added All-time Wrapped, reading rhythm
+              metrics, exportable Wrapped share cards, and a VNDB taste-matching
+              **For you** tab in Discover.
+            - **Discord Rich Presence defaults & UI.** Switched the default VNDB
+              details line to a compact single line
+              (`★ {vndb_rating}/10 · {vndb_year} · {vndb_length}`), removed the
+              duplicate Rotate toggle, fixed the State template placeholder, and
+              added a **Reset formatting to defaults** button.
+            - **Android & Updater fixes.** Fixed Android entry-point startup,
+              ended abandoned UsageStats sessions after a 15-minute away grace
+              period, and pointed non-Windows update notices to GitHub releases.
+            - **Linux marked Beta.** Linux tracking, Discord Rich Presence, and
+              `.AppImage` builds remain usable right away for testers and are
+              now explicitly labeled as Beta in the app, READMEs, and downloads.
 
             ## Downloads
 
@@ -66,18 +70,19 @@ jobs:
               Windows SmartScreen may display a warning.
             - **Android:** use `app-universal-release.apk`. The official build uses the
               existing release signing key and package `com.atho.vnasyik`.
-            - **Linux:** use the `.AppImage`. Make it executable and run it.
+            - **Linux (Beta):** use the `.AppImage`. Make it executable and run it.
 
             ## Notes
 
-            - Linux support is new and has had one desktop test pass, not a survey of
-              distributions. If tracking reports unavailable, the message names the
-              reason.
+            - Linux support is currently in Beta: active-window and idle detection
+              can still vary across distributions and Wayland compositors. If
+              tracking reports unavailable, the message names the reason.
             - Android screenshots require the system screen-casting permission, and
               capture the whole screen rather than one window.
             - Companion remains experimental and further development is paused.
-            - Automated tests were rerun for this release: the Rust suite on Windows
-              and Linux, the frontend suite, and the Android cross-compile check.
+            - Automated tests were rerun for this release: the Rust workspace suite,
+              clippy, the frontend lint/typecheck/build/Vitest suite, and the
+              Android cross-compile check.
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release already exists"
