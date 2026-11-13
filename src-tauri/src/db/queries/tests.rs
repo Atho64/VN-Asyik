@@ -8,6 +8,7 @@ use vn_core::model::{
 };
 
 use super::*;
+use crate::commands::journey::MonthMoment;
 use crate::db::Db;
 use crate::db::reading;
 
@@ -1127,6 +1128,10 @@ async fn a_finished_falls_back_to_the_first_achieved_ending() {
 }
 
 #[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one fixture proves every figure of a single year agrees"
+)]
 async fn year_review_aggregates_one_local_year() {
     let (db, device) = fixture().await;
     let mut autumn = Game::new(&device, now(), "Autumn VN", GameStatus::Playing).unwrap();
@@ -1221,6 +1226,25 @@ async fn year_review_aggregates_one_local_year() {
     assert_eq!(review.top_games.len(), 1);
     assert_eq!(review.top_games[0].game_id, autumn.meta.id);
     assert_eq!(review.top_games[0].counted_ms, 60_000);
+    // November 14 06:00Z is November in every real timezone, so the month is
+    // stable even though the local day index is not.
+    assert_eq!(
+        review.busiest_month,
+        Some(MonthMoment {
+            month: 11,
+            counted_ms: 60_000
+        })
+    );
+    let busiest_day = review.busiest_day.expect("busiest day");
+    assert_eq!(busiest_day.counted_ms, 60_000);
+    assert_eq!(review.average_session_ms, Some(30_000));
+    assert_eq!(review.longest_streak_days, 1);
+    assert!(review.top_route.is_none(), "no session names a route yet");
+    assert_eq!(review.games_continued, 0, "Autumn VN starts in 2023");
+    assert_eq!(review.weekday_ms.len(), 7);
+    assert_eq!(review.weekday_ms.iter().sum::<i64>(), 60_000);
+    assert_eq!(review.hour_ms.len(), 24);
+    assert_eq!(review.hour_ms.iter().sum::<i64>(), 60_000);
 
     let review_2024 = journey::year_review(db.pool(), 2024).await.expect("review");
     assert_eq!(review_2024.total_ms, 5_000);
@@ -1239,6 +1263,200 @@ async fn year_review_aggregates_one_local_year() {
     assert!(quiet.longest_session.is_none());
     assert!(quiet.first_game.is_none());
     assert!(quiet.top_games.is_empty());
+}
+
+#[tokio::test]
+async fn year_review_reads_routes_streaks_and_continued_games() {
+    let (db, device) = fixture().await;
+    let game = Game::new(&device, now(), "Long VN", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &game).await.expect("game");
+    let route = Route::new(&device, now(), game.meta.id, "Shiroha").unwrap();
+    upsert_route(db.pool(), &route).await.expect("route");
+    let mut chapter = Chapter::new(&device, now(), game.meta.id, "Ch 1", 0).unwrap();
+    chapter.route_id = Some(route.meta.id);
+    upsert_chapter(db.pool(), &chapter).await.expect("chapter");
+
+    // One 2023 session makes the game a 2023 start; the three 2024 sessions are
+    // consecutive local days at noon UTC, so the streak is three in every real
+    // timezone. Two sessions name the route directly, one only its chapter, and
+    // both paths must roll up to the same route name.
+    let sessions = [
+        (
+            1_702_641_600_000_i64,
+            10 * 60_000_i64,
+            None,
+            Some(chapter.meta.id),
+        ),
+        (1_717_243_200_000, 20 * 60_000, Some(route.meta.id), None),
+        (1_717_329_600_000, 30 * 60_000, None, Some(chapter.meta.id)),
+        (1_717_416_000_000, 40 * 60_000, Some(route.meta.id), None),
+    ];
+    for (started_at, counted_ms, route_id, chapter_id) in sessions {
+        let mut session = PlaySession::new(
+            &device,
+            now(),
+            game.meta.id,
+            Timestamp::from_millis(started_at),
+            Timestamp::from_millis(started_at + counted_ms),
+            counted_ms,
+            SessionSource::Desktop,
+        )
+        .unwrap();
+        session.route_id = route_id;
+        session.chapter_id = chapter_id;
+        insert_session(db.pool(), &session).await.expect("session");
+    }
+
+    let review = journey::year_review(db.pool(), 2024).await.expect("review");
+    assert_eq!(review.total_ms, 90 * 60_000);
+    assert_eq!(review.session_count, 3);
+    assert_eq!(review.active_days, 3);
+    assert_eq!(review.longest_streak_days, 3);
+    assert_eq!(review.average_session_ms, Some(30 * 60_000));
+    assert_eq!(review.busiest_month.map(|month| month.month), Some(6));
+    assert_eq!(
+        review.top_route,
+        Some(crate::commands::journey::RouteMoment {
+            name: "Shiroha".to_owned(),
+            counted_ms: 90 * 60_000,
+        })
+    );
+    assert_eq!(review.games_continued, 1, "the game started in 2023");
+    assert_eq!(review.games_started, 0, "no game starts in 2024");
+    assert_eq!(review.weekday_ms.iter().sum::<i64>(), 90 * 60_000);
+    assert_eq!(review.hour_ms.iter().sum::<i64>(), 90 * 60_000);
+
+    let first_year = journey::year_review(db.pool(), 2023).await.expect("review");
+    assert_eq!(first_year.total_ms, 10 * 60_000);
+    assert_eq!(first_year.longest_streak_days, 1);
+    assert_eq!(first_year.games_continued, 0);
+    assert_eq!(
+        first_year.top_route.map(|route| route.name),
+        Some("Shiroha".to_owned()),
+        "a chapter's route is the same fact as a direct route"
+    );
+}
+
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one fixture proves every all-time aggregate agrees"
+)]
+async fn library_wrapped_aggregates_every_year() {
+    let (db, device) = fixture().await;
+    let mut long = Game::new(&device, now(), "Long VN", GameStatus::Completed).unwrap();
+    long.set_rating(Some(85)).unwrap();
+    long.finished_at = Some(Timestamp::from_millis(1_696_000_000_000));
+    upsert_game(db.pool(), &long).await.expect("long game");
+    let short = Game::new(&device, now(), "Short VN", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &short).await.expect("short game");
+
+    let route = Route::new(&device, now(), long.meta.id, "Shiroha").unwrap();
+    upsert_route(db.pool(), &route).await.expect("route");
+    let mut chapter = Chapter::new(&device, now(), long.meta.id, "Ch 1", 0).unwrap();
+    chapter.route_id = Some(route.meta.id);
+    upsert_chapter(db.pool(), &chapter).await.expect("chapter");
+
+    // Three consecutive 2023 days for the long game, then one 2024 day for the
+    // short one. Noon UTC keeps each session on the same local day in every real
+    // timezone, so the streak and the day buckets are deterministic.
+    let sessions = [
+        (
+            1_685_620_800_000_i64,
+            10 * 60_000_i64,
+            long.meta.id,
+            None,
+            Some(chapter.meta.id),
+        ),
+        (
+            1_685_707_200_000,
+            20 * 60_000,
+            long.meta.id,
+            Some(route.meta.id),
+            None,
+        ),
+        (
+            1_685_793_600_000,
+            30 * 60_000,
+            long.meta.id,
+            None,
+            Some(chapter.meta.id),
+        ),
+        (1_717_243_200_000, 40 * 60_000, short.meta.id, None, None),
+    ];
+    for (started_at, counted_ms, game_id, route_id, chapter_id) in sessions {
+        let mut session = PlaySession::new(
+            &device,
+            now(),
+            game_id,
+            Timestamp::from_millis(started_at),
+            Timestamp::from_millis(started_at + counted_ms),
+            counted_ms,
+            SessionSource::Desktop,
+        )
+        .unwrap();
+        session.route_id = route_id;
+        session.chapter_id = chapter_id;
+        insert_session(db.pool(), &session).await.expect("session");
+    }
+
+    let mut ending = Ending::new(&device, now(), long.meta.id, "True End").unwrap();
+    ending.achieved = true;
+    ending.achieved_at = Some(Timestamp::from_millis(1_696_000_000_000));
+    upsert_ending(db.pool(), &ending).await.expect("ending");
+    reading::upsert(
+        db.pool(),
+        &journal_entry(
+            &device,
+            long.meta.id,
+            1_696_000_000_000,
+            "At the gate",
+            "Shiroha",
+            "",
+        ),
+    )
+    .await
+    .expect("entry");
+
+    let wrapped = wrapped::library_wrapped(db.pool()).await.expect("wrapped");
+    assert_eq!(wrapped.total_ms, 100 * 60_000);
+    assert_eq!(wrapped.session_count, 4);
+    assert_eq!(wrapped.active_days, 4);
+    assert_eq!(wrapped.games_tracked, 2);
+    assert_eq!(wrapped.games_in_library, 2);
+    assert_eq!(wrapped.games_finished, 1);
+    assert_eq!(wrapped.endings_reached, 1);
+    assert_eq!(wrapped.journal_entries, 1);
+    assert_eq!(wrapped.average_rating_decivotes, Some(85));
+    assert_eq!(wrapped.average_session_ms, Some(25 * 60_000));
+    assert_eq!(wrapped.longest_streak_days, 3);
+    assert_eq!(
+        wrapped.longest_session.map(|moment| moment.counted_ms),
+        Some(40 * 60_000)
+    );
+    assert_eq!(
+        wrapped.first_game.map(|moment| moment.game_id),
+        Some(long.meta.id)
+    );
+    assert_eq!(wrapped.first_year, Some(2023));
+    assert_eq!(wrapped.top_games.len(), 2);
+    assert_eq!(wrapped.top_games[0].game_id, long.meta.id);
+    assert_eq!(wrapped.top_games[0].counted_ms, 60 * 60_000);
+    assert_eq!(wrapped.top_games[1].game_id, short.meta.id);
+    assert_eq!(
+        wrapped.top_route.map(|route| route.name),
+        Some("Shiroha".to_owned())
+    );
+    assert_eq!(wrapped.busiest_month.map(|month| month.month), Some(6));
+    assert_eq!(
+        wrapped.busiest_day.map(|day| day.counted_ms),
+        Some(40 * 60_000)
+    );
+    assert_eq!(wrapped.most_read_year.map(|year| year.year), Some(2023));
+    assert_eq!(wrapped.weekday_ms.len(), 7);
+    assert_eq!(wrapped.weekday_ms.iter().sum::<i64>(), 100 * 60_000);
+    assert_eq!(wrapped.hour_ms.len(), 24);
+    assert_eq!(wrapped.hour_ms.iter().sum::<i64>(), 100 * 60_000);
 }
 
 // On this day

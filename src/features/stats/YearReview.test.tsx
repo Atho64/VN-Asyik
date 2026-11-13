@@ -5,10 +5,31 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppContext } from "@/app/AppProvider";
 import { createTranslator } from "@/i18n";
 import { MS_PER_DAY } from "@/lib/time";
+import type * as ShareCardCanvasModule from "./shareCardCanvas";
 import { YearReview, yearsWithDays } from "./YearReview";
 
-const mocks = vi.hoisted(() => ({ yearReview: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  yearReview: vi.fn(),
+  saveShareCard: vi.fn(),
+  shareShareCard: vi.fn(),
+}));
 vi.mock("@/lib/ipc/client", () => ({ api: mocks }));
+// jsdom has no canvas implementation; the card's drawing is covered by the pure
+// helper tests, while this suite only checks the dialog wiring.
+vi.mock("./shareCardCanvas", async (importOriginal) => {
+  const actual = await importOriginal<typeof ShareCardCanvasModule>();
+  return {
+    ...actual,
+    drawShareCard: vi.fn().mockResolvedValue(undefined),
+    shareCardDataUrl: vi.fn(() => "data:image/png;base64,AAAA"),
+    shareCardFilename: vi.fn(
+      (model: { filename: string }, format: string) =>
+        format === "story"
+          ? `${model.filename}-story.png`
+          : `${model.filename}.png`,
+    ),
+  };
+});
 
 describe("yearsWithDays", () => {
   it("collects the years of recorded days plus the current one, newest first", () => {
@@ -43,6 +64,19 @@ const review2024 = {
   longestSession: { gameId: "g1", title: "Autumn VN", countedMs: 2_400_000 },
   firstGame: { gameId: "g1", title: "Autumn VN", startedAt: 1 },
   topGames: [{ gameId: "g1", title: "Autumn VN", countedMs: 3_600_000 }],
+  busiestMonth: { month: 5, countedMs: 3_600_000 },
+  busiestDay: {
+    day: Math.floor(Date.UTC(2024, 4, 10) / MS_PER_DAY),
+    countedMs: 3_600_000,
+  },
+  averageSessionMs: 3_600_000,
+  longestStreakDays: 3,
+  topRoute: { name: "Shiroha", countedMs: 2_400_000 },
+  gamesContinued: 1,
+  weekdayMs: [0, 0, 0, 0, 0, 3_600_000, 0],
+  hourMs: Array.from({ length: 24 }, (_, index) =>
+    index === 20 ? 3_600_000 : 0,
+  ),
 };
 
 function mount(byDay: Array<{ day: number }>) {
@@ -55,7 +89,9 @@ function mount(byDay: Array<{ day: number }>) {
   );
 }
 
-beforeEach(() => vi.resetAllMocks());
+// Clear calls, not implementations: the share-card mock's resolved promise must
+// survive between tests, or the dialog's draw effect calls `.catch` on undefined.
+beforeEach(() => vi.clearAllMocks());
 
 describe("year in review", () => {
   it("renders the figures of the selected year", async () => {
@@ -109,8 +145,63 @@ describe("year in review", () => {
       longestSession: null,
       firstGame: null,
       topGames: [],
+      busiestMonth: null,
+      busiestDay: null,
+      averageSessionMs: null,
+      longestStreakDays: 0,
+      topRoute: null,
+      gamesContinued: 0,
+      weekdayMs: [0, 0, 0, 0, 0, 0, 0],
+      hourMs: Array.from({ length: 24 }, () => 0),
     });
     mount([]);
     expect(await screen.findByText("Nothing recorded in 2024 yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+  });
+
+  it("opens the share card for a year with recorded time", async () => {
+    const user = userEvent.setup();
+    mocks.yearReview.mockResolvedValueOnce(review2024);
+    mount([{ day: Math.floor(Date.UTC(2024, 4, 10) / MS_PER_DAY) }]);
+    await screen.findByText("Reading time");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Share 2024 in review" }),
+    ).toBeInTheDocument();
+  });
+
+  it("saves the card through the PNG command", async () => {
+    const user = userEvent.setup();
+    mocks.yearReview.mockResolvedValueOnce(review2024);
+    mocks.saveShareCard.mockResolvedValueOnce(true);
+    mount([{ day: Math.floor(Date.UTC(2024, 4, 10) / MS_PER_DAY) }]);
+    await screen.findByText("Reading time");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    await user.click(await screen.findByRole("button", { name: "Save image" }));
+    await waitFor(() => {
+      expect(mocks.saveShareCard).toHaveBeenCalledWith(
+        "data:image/png;base64,AAAA",
+        "vn-asyik-2024-wrapped.png",
+      );
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("Image saved.");
+  });
+
+  it("saves the story format with its own file name", async () => {
+    const user = userEvent.setup();
+    mocks.yearReview.mockResolvedValueOnce(review2024);
+    mocks.saveShareCard.mockResolvedValueOnce(true);
+    mount([{ day: Math.floor(Date.UTC(2024, 4, 10) / MS_PER_DAY) }]);
+    await screen.findByText("Reading time");
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    await user.click(await screen.findByRole("tab", { name: "Story (9:16)" }));
+    await user.click(await screen.findByRole("button", { name: "Save image" }));
+    await waitFor(() => {
+      expect(mocks.saveShareCard).toHaveBeenCalledWith(
+        "data:image/png;base64,AAAA",
+        "vn-asyik-2024-wrapped-story.png",
+      );
+    });
   });
 });

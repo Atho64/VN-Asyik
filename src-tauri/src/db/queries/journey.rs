@@ -18,13 +18,13 @@ use vn_core::ids::EntityId;
 use vn_core::model::{Game, SessionSource};
 
 use crate::commands::journey::{
-    FirstGameMoment, LongestSessionMoment, MemoryEvent, TimelineCursor, TimelineEvent,
-    TimelinePage, YearReview, YearReviewGame,
+    DayMoment, FirstGameMoment, LongestSessionMoment, MemoryEvent, MonthMoment, RouteMoment,
+    TimelineCursor, TimelineEvent, TimelinePage, YearReview, YearReviewGame,
 };
 use crate::db::models::GameRow;
 use crate::db::pool::DbError;
 
-fn corrupt(err: String) -> DbError {
+pub(crate) fn corrupt(err: String) -> DbError {
     DbError::Corrupt(err)
 }
 
@@ -314,6 +314,25 @@ struct SessionFigures {
     longest_session: Option<LongestSessionMoment>,
     first_game: Option<FirstGameMoment>,
     top_games: Vec<YearReviewGame>,
+    busiest_month: Option<MonthMoment>,
+    busiest_day: Option<DayMoment>,
+    average_session_ms: Option<i64>,
+    longest_streak_days: i64,
+    top_route: Option<RouteMoment>,
+    games_continued: i64,
+    weekday_ms: Vec<i64>,
+    hour_ms: Vec<i64>,
+}
+
+/// A small SQL bucket index, checked rather than cast: a corrupt row must not
+/// silently land in the wrong weekday or hour.
+pub(crate) fn bucket_index(value: i64, len: usize, label: &str) -> Result<usize, DbError> {
+    let index =
+        usize::try_from(value).map_err(|_| corrupt(format!("{label} out of range: {value}")))?;
+    if index >= len {
+        return Err(corrupt(format!("{label} out of range: {value}")));
+    }
+    Ok(index)
 }
 
 /// # Errors
@@ -340,6 +359,44 @@ async fn session_figures(pool: &SqlitePool, year_text: &str) -> Result<SessionFi
     .fetch_one(pool)
     .await?;
 
+    let (longest_session, first_game, top_games) = session_highlights(pool, year_text).await?;
+    let rhythm = session_rhythm(pool, year_text).await?;
+    let (top_route, games_continued) = session_routes(pool, year_text).await?;
+
+    Ok(SessionFigures {
+        total_ms,
+        afk_ms,
+        session_count,
+        active_days,
+        longest_session,
+        first_game,
+        top_games,
+        busiest_month: rhythm.busiest_month,
+        busiest_day: rhythm.busiest_day,
+        average_session_ms: rhythm.average_session_ms,
+        longest_streak_days: rhythm.longest_streak_days,
+        top_route,
+        games_continued,
+        weekday_ms: rhythm.weekday_ms,
+        hour_ms: rhythm.hour_ms,
+    })
+}
+
+/// The longest session, the first game, and the top five games of the year.
+///
+/// # Errors
+/// `db_error` when a query fails, `corrupt` for an unparseable id.
+async fn session_highlights(
+    pool: &SqlitePool,
+    year_text: &str,
+) -> Result<
+    (
+        Option<LongestSessionMoment>,
+        Option<FirstGameMoment>,
+        Vec<YearReviewGame>,
+    ),
+    DbError,
+> {
     let longest: Option<(i64, String, String)> = sqlx::query_as(
         "SELECT ps.counted_ms, ps.game_id, g.title \
          FROM play_sessions ps JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
@@ -407,15 +464,207 @@ async fn session_figures(pool: &SqlitePool, year_text: &str) -> Result<SessionFi
         })
         .collect::<Result<Vec<_>, DbError>>()?;
 
-    Ok(SessionFigures {
-        total_ms,
-        afk_ms,
-        session_count,
-        active_days,
-        longest_session,
-        first_game,
-        top_games,
+    Ok((longest_session, first_game, top_games))
+}
+
+/// The "when did this year happen" figures: busiest month and day, mean session,
+/// local-day streak, and the weekday/hour distributions.
+struct SessionRhythm {
+    busiest_month: Option<MonthMoment>,
+    busiest_day: Option<DayMoment>,
+    average_session_ms: Option<i64>,
+    longest_streak_days: i64,
+    weekday_ms: Vec<i64>,
+    hour_ms: Vec<i64>,
+}
+
+/// The busiest month and day, or `None` for a quiet year.
+///
+/// # Errors
+/// `db_error` when a query fails, `corrupt` for an out-of-range month.
+async fn busiest_moments(
+    pool: &SqlitePool,
+    year_text: &str,
+) -> Result<(Option<MonthMoment>, Option<DayMoment>), DbError> {
+    // These answer "when did this year happen" with the same local calendar the
+    // rest of the card uses. Both are `None` for a quiet year rather than
+    // January 1 / day zero, which would look like a real answer.
+    let busiest_month: Option<(i64, i64)> = sqlx::query_as(
+        "SELECT CAST(strftime('%m', ps.started_at / 1000, 'unixepoch', 'localtime') AS INTEGER), \
+                SUM(ps.counted_ms) \
+         FROM play_sessions ps JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
+         WHERE ps.deleted = 0 \
+           AND strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime') = ? \
+         GROUP BY 1 \
+         ORDER BY SUM(ps.counted_ms) DESC, 1 ASC LIMIT 1",
+    )
+    .bind(year_text)
+    .fetch_optional(pool)
+    .await?;
+    let busiest_month = busiest_month
+        .map(|(month, counted_ms)| -> Result<MonthMoment, DbError> {
+            let month = i32::try_from(month)
+                .map_err(|_| corrupt(format!("month out of range: {month}")))?;
+            Ok(MonthMoment { month, counted_ms })
+        })
+        .transpose()?;
+
+    let busiest_day: Option<(i64, i64)> = sqlx::query_as(
+        "SELECT CAST(strftime('%s', ps.started_at / 1000, 'unixepoch', 'localtime', \
+                                'start of day') AS INTEGER) / 86400, \
+                SUM(ps.counted_ms) \
+         FROM play_sessions ps JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
+         WHERE ps.deleted = 0 \
+           AND strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime') = ? \
+         GROUP BY 1 \
+         ORDER BY SUM(ps.counted_ms) DESC, 1 ASC LIMIT 1",
+    )
+    .bind(year_text)
+    .fetch_optional(pool)
+    .await?;
+    let busiest_day = busiest_day.map(|(day, counted_ms)| DayMoment { day, counted_ms });
+    Ok((busiest_month, busiest_day))
+}
+
+/// Mean session, local-day streak, and the weekday/hour distributions.
+///
+/// # Errors
+/// `db_error` when a query fails, `corrupt` for an out-of-range bucket.
+async fn rhythm_distributions(
+    pool: &SqlitePool,
+    year_text: &str,
+) -> Result<(Option<i64>, i64, Vec<i64>, Vec<i64>), DbError> {
+    // Zero-length rows are excluded: a session created and immediately cancelled
+    // would otherwise pull the mean toward a duration nobody read.
+    let average_session_ms: Option<i64> = sqlx::query_scalar(
+        "SELECT SUM(ps.counted_ms) / COUNT(*) \
+         FROM play_sessions ps JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
+         WHERE ps.deleted = 0 AND ps.counted_ms > 0 \
+           AND strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime') = ?",
+    )
+    .bind(year_text)
+    .fetch_one(pool)
+    .await?;
+
+    let day_rows: Vec<i64> = sqlx::query_scalar(
+        "SELECT DISTINCT CAST(strftime('%s', ps.started_at / 1000, 'unixepoch', 'localtime', \
+                                      'start of day') AS INTEGER) / 86400 \
+         FROM play_sessions ps JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
+         WHERE ps.deleted = 0 AND ps.counted_ms > 0 \
+           AND strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime') = ? \
+         ORDER BY 1",
+    )
+    .bind(year_text)
+    .fetch_all(pool)
+    .await?;
+    let longest_streak_days = vn_core::stats::longest_day_streak(&day_rows)
+        .and_then(|days| i64::try_from(days).ok())
+        .unwrap_or(0);
+
+    let weekday_rows: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT (CAST(strftime('%w', ps.started_at / 1000, 'unixepoch', 'localtime') AS INTEGER) + 6) % 7, \
+                SUM(ps.counted_ms) \
+         FROM play_sessions ps JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
+         WHERE ps.deleted = 0 \
+           AND strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime') = ? \
+         GROUP BY 1",
+    )
+    .bind(year_text)
+    .fetch_all(pool)
+    .await?;
+    let mut weekday_ms = vec![0i64; 7];
+    for (index, counted_ms) in weekday_rows {
+        weekday_ms[bucket_index(index, 7, "weekday")?] = counted_ms;
+    }
+
+    let hour_rows: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT CAST(strftime('%H', ps.started_at / 1000, 'unixepoch', 'localtime') AS INTEGER), \
+                SUM(ps.counted_ms) \
+         FROM play_sessions ps JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
+         WHERE ps.deleted = 0 \
+           AND strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime') = ? \
+         GROUP BY 1",
+    )
+    .bind(year_text)
+    .fetch_all(pool)
+    .await?;
+    let mut hour_ms = vec![0i64; 24];
+    for (index, counted_ms) in hour_rows {
+        hour_ms[bucket_index(index, 24, "hour")?] = counted_ms;
+    }
+
+    Ok((average_session_ms, longest_streak_days, weekday_ms, hour_ms))
+}
+
+/// # Errors
+/// `db_error` when a query fails, `corrupt` for an out-of-range bucket.
+async fn session_rhythm(pool: &SqlitePool, year_text: &str) -> Result<SessionRhythm, DbError> {
+    let (busiest_month, busiest_day) = busiest_moments(pool, year_text).await?;
+    let (average_session_ms, longest_streak_days, weekday_ms, hour_ms) =
+        rhythm_distributions(pool, year_text).await?;
+    Ok(SessionRhythm {
+        busiest_month,
+        busiest_day,
+        average_session_ms,
+        longest_streak_days,
+        weekday_ms,
+        hour_ms,
     })
+}
+
+/// The top route and how many games continued from an earlier year.
+///
+/// # Errors
+/// `db_error` when a query fails.
+async fn session_routes(
+    pool: &SqlitePool,
+    year_text: &str,
+) -> Result<(Option<RouteMoment>, i64), DbError> {
+    // A session can name its route directly (new rows) or only its chapter (old
+    // rows); the chapter's linked route is the same fact one join away, and the
+    // engine's `route_name` is the last fallback when no user route exists. All
+    // three joins are live-row joins, so a deleted route cannot win the year.
+    let top_route: Option<(String, i64)> = sqlx::query_as(
+        "SELECT COALESCE(r.name, cr.name, c.route_name) AS name, \
+                SUM(ps.counted_ms) AS counted_ms \
+         FROM play_sessions ps \
+         JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
+         LEFT JOIN routes r ON r.id = ps.route_id AND r.deleted = 0 \
+         LEFT JOIN chapters c ON c.id = ps.chapter_id AND c.deleted = 0 \
+         LEFT JOIN routes cr ON cr.id = c.route_id AND cr.deleted = 0 \
+         WHERE ps.deleted = 0 \
+           AND strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime') = ? \
+           AND COALESCE(r.name, cr.name, c.route_name) IS NOT NULL \
+           AND TRIM(COALESCE(r.name, cr.name, c.route_name)) <> '' \
+         GROUP BY COALESCE(r.name, cr.name, c.route_name) \
+         ORDER BY counted_ms DESC, name ASC LIMIT 1",
+    )
+    .bind(year_text)
+    .fetch_optional(pool)
+    .await?;
+    let top_route = top_route.map(|(name, counted_ms)| RouteMoment { name, counted_ms });
+
+    // Continued means the first session predates the selected year but a session
+    // in the selected year exists. A game read only in 2023 is not "continued in
+    // 2024" just because its row still exists.
+    let (games_continued,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM ( \
+             SELECT ps.game_id, \
+                    MIN(strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime')) AS first_year, \
+                    MAX(CASE WHEN strftime('%Y', ps.started_at / 1000, 'unixepoch', 'localtime') = ? \
+                             THEN 1 ELSE 0 END) AS in_year \
+             FROM play_sessions ps JOIN games g ON g.id = ps.game_id AND g.deleted = 0 \
+             WHERE ps.deleted = 0 \
+             GROUP BY ps.game_id \
+             HAVING in_year = 1 AND CAST(first_year AS INTEGER) < CAST(? AS INTEGER) \
+         )",
+    )
+    .bind(year_text)
+    .bind(year_text)
+    .fetch_one(pool)
+    .await?;
+
+    Ok((top_route, games_continued))
 }
 
 /// # Errors
@@ -523,5 +772,13 @@ pub async fn year_review(pool: &SqlitePool, year: i32) -> Result<YearReview, DbE
         longest_session: sessions.longest_session,
         first_game: sessions.first_game,
         top_games: sessions.top_games,
+        busiest_month: sessions.busiest_month,
+        busiest_day: sessions.busiest_day,
+        average_session_ms: sessions.average_session_ms,
+        longest_streak_days: sessions.longest_streak_days,
+        top_route: sessions.top_route,
+        games_continued: sessions.games_continued,
+        weekday_ms: sessions.weekday_ms,
+        hour_ms: sessions.hour_ms,
     })
 }

@@ -244,20 +244,17 @@ fn is_leap(year: i64) -> bool {
     (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
-/// Longest run of consecutive calendar days that have at least one session.
+/// Longest run of consecutive day indexes.
 ///
-/// Days are UTC. Two sessions that straddle midnight count as two days, which is
-/// the honest reading of "played on these days".
+/// The caller owns what a day means: `longest_streak` passes UTC days, while the
+/// Year in Review passes the local day indexes its SQL already buckets by. Empty
+/// input has no streak, which is `None` rather than zero.
 #[must_use]
-pub fn longest_streak(sessions: &[SessionSample]) -> Option<usize> {
-    let mut days: Vec<i64> = sessions
-        .iter()
-        .filter(|session| session.counted_ms > 0)
-        .map(|session| session.started_at.div_euclid(DAY_MS))
-        .collect();
+pub fn longest_day_streak(days: &[i64]) -> Option<usize> {
     if days.is_empty() {
         return None;
     }
+    let mut days = days.to_vec();
     days.sort_unstable();
     days.dedup();
 
@@ -272,6 +269,20 @@ pub fn longest_streak(sessions: &[SessionSample]) -> Option<usize> {
         }
     }
     Some(best)
+}
+
+/// Longest run of consecutive calendar days that have at least one session.
+///
+/// Days are UTC. Two sessions that straddle midnight count as two days, which is
+/// the honest reading of "played on these days".
+#[must_use]
+pub fn longest_streak(sessions: &[SessionSample]) -> Option<usize> {
+    let days: Vec<i64> = sessions
+        .iter()
+        .filter(|session| session.counted_ms > 0)
+        .map(|session| session.started_at.div_euclid(DAY_MS))
+        .collect();
+    longest_day_streak(&days)
 }
 
 #[cfg(test)]
@@ -456,6 +467,19 @@ mod tests {
     #[test]
     fn no_sessions_means_no_streak() {
         assert!(longest_streak(&[]).is_none());
+    }
+
+    #[test]
+    fn a_day_streak_sorts_and_deduplicates_its_input() {
+        // The Year in Review reads distinct local day indexes from SQL, but the
+        // helper must not depend on that: unsorted input with a repeated day is
+        // still one run of three.
+        assert_eq!(longest_day_streak(&[12, 10, 11, 11, 20]), Some(3));
+    }
+
+    #[test]
+    fn an_empty_day_list_has_no_streak() {
+        assert!(longest_day_streak(&[]).is_none());
     }
 
     #[test]

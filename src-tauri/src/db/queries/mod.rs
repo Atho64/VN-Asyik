@@ -13,6 +13,7 @@ use crate::db::models::{ChapterRow, EndingRow, GameRow, PrefsSnapshot, RouteRow,
 use crate::db::pool::DbError;
 
 pub mod journey;
+pub mod wrapped;
 
 fn corrupt(err: &vn_core::model::ModelError) -> DbError {
     DbError::Corrupt(err.to_string())

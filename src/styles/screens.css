@@ -874,9 +874,9 @@
 .stats__lede {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-6);
+  gap: var(--space-5);
   align-items: start;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-5);
 }
 
 .stats__number {
@@ -1545,7 +1545,7 @@
 .stats-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
   max-width: 72rem;
   width: 100%;
   margin-inline: auto;
@@ -1673,12 +1673,171 @@
   outline-offset: 1px;
 }
 
+/* The year chips and the share action share the header's right edge; the chip
+ * list scrolls on its own while the button stays reachable. */
+.review__aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.review__aside .btn {
+  flex: 0 0 auto;
+}
+
 .review__figures {
   margin-top: var(--space-3);
 }
 
 .review__first {
   margin: var(--space-3) 0 0;
+}
+
+/* Reading rhythm: two compact distributions, weekday and hour. */
+.rhythm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--space-5);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.rhythm__block {
+  min-width: 0;
+}
+
+.rhythm__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 88px;
+  margin-top: var(--space-3);
+}
+
+.rhythm__bar {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 3px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.rhythm__fill {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+
+.rhythm__labels {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.rhythm__labels--hour {
+  display: flex;
+  justify-content: space-between;
+}
+
+.rhythm__peak {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 599px) {
+  .rhythm {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+}
+
+/* Share card preview: the canvas is the export source, so its CSS size is a
+ * view of the same 1080x1350 backing store. */
+.share-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.share-card__formats {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.share-card__format {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+@media (max-width: 599px) {
+  .share-card__format {
+    min-height: var(--touch-target);
+  }
+}
+
+.share-card__format[data-active="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 500;
+}
+
+.share-card__format:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.share-card__canvas {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--border);
+  background: #070910;
+  box-shadow: var(--shadow-2);
+}
+
+.share-card__canvas--post {
+  max-width: 420px;
+  aspect-ratio: 4 / 5;
+}
+
+.share-card__canvas--story {
+  max-width: 300px;
+  aspect-ratio: 9 / 16;
+}
+
+.share-card__hint {
+  text-align: center;
+  max-width: 44ch;
+}
+
+.share-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  width: 100%;
 }
 
 /* Legend and streaks travel as one aside on the header's right edge. */

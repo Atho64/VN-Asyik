@@ -37,6 +37,14 @@ export interface Artwork {
    * scale, so a hidden cover cannot be laundered through it.
    */
   backdropUrl: string | null;
+  /**
+   * The cached, pre-blurred backdrop as a data URL, or `null`.
+   *
+   * Canvas surfaces cannot draw a remote image without tainting the canvas, so
+   * the share card needs a local source specifically. This is the same image
+   * `backdropUrl` prefers, and it is withheld under the same concealment rule.
+   */
+  localBackdropUrl: string | null;
   /** What the calling surface must do with the artwork. */
   policy: ArtPolicy;
   palette: ReturnType<typeof fallbackPalette>;
@@ -170,9 +178,10 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
       : "hide";
   const imageUrl = policy === "blur" ? blurredUrl : policy === "hide" ? null : artUrl;
   // Revealed artwork may supply the backdrop: the user asked for exactly that.
-  const backdropUrl = concealed
+  const localBackdropUrl = concealed
     ? null
-    : (customArt?.backdrop_data_url ?? localArt?.backdrop_data_url ?? artUrl);
+    : (customArt?.backdrop_data_url ?? localArt?.backdrop_data_url ?? null);
+  const backdropUrl = concealed ? null : (localBackdropUrl ?? artUrl);
   // Never sample a concealed cover for the accent: a blurred thumbnail still
   // leaks the dominant colours of artwork the user asked to conceal.
   const palette = usePalette(concealed ? null : artUrl, game.accent_color, game.title);
@@ -183,6 +192,7 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
     artUrl,
     imageUrl,
     backdropUrl,
+    localBackdropUrl,
     policy,
     palette,
     fallback,

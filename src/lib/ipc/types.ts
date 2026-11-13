@@ -165,6 +165,35 @@ export const yearReviewGameSchema = z.object({
 });
 export type YearReviewGame = z.infer<typeof yearReviewGameSchema>;
 
+/** The busiest month of a Year in Review. */
+export const yearReviewMonthSchema = z.object({
+  /** Calendar month, 1 to 12. */
+  month: z.number(),
+  countedMs: z.number(),
+});
+export type YearReviewMonth = z.infer<typeof yearReviewMonthSchema>;
+
+/** The busiest local day, using the heatmap's as-if-UTC day index. */
+export const yearReviewDaySchema = z.object({
+  day: z.number(),
+  countedMs: z.number(),
+});
+export type YearReviewDay = z.infer<typeof yearReviewDaySchema>;
+
+/** The route with the most time in a Year in Review. */
+export const yearReviewRouteSchema = z.object({
+  name: z.string(),
+  countedMs: z.number(),
+});
+export type YearReviewRoute = z.infer<typeof yearReviewRouteSchema>;
+
+/** The year with the most reading time across the whole library. */
+export const yearMomentSchema = z.object({
+  year: z.number(),
+  countedMs: z.number(),
+});
+export type YearMoment = z.infer<typeof yearMomentSchema>;
+
 /** The Rust DTO renames to camelCase, unlike the plain domain types. */
 export const yearReviewSchema = z.object({
   year: z.number(),
@@ -196,8 +225,72 @@ export const yearReviewSchema = z.object({
     })
     .nullable(),
   topGames: yearReviewGameSchema.array(),
+  /** The busiest calendar month, when the year has counted time. */
+  busiestMonth: yearReviewMonthSchema.nullable(),
+  /** The busiest local day, using the heatmap's day-index encoding. */
+  busiestDay: yearReviewDaySchema.nullable(),
+  /** Mean counted time per non-empty session in the year. */
+  averageSessionMs: z.number().nullable(),
+  /** Longest run of consecutive local reading days inside the year. */
+  longestStreakDays: z.number(),
+  /** The route with the most time in the year, when sessions name one. */
+  topRoute: yearReviewRouteSchema.nullable(),
+  /** Games read in the year whose first-ever session was earlier. */
+  gamesContinued: z.number(),
+  /** Reading time per local weekday, Monday first (index 0..6). */
+  weekdayMs: z.array(z.number()).length(7),
+  /** Reading time per local hour of day (index 0..23). */
+  hourMs: z.array(z.number()).length(24),
 });
 export type YearReview = z.infer<typeof yearReviewSchema>;
+
+/** Library-wide aggregates for the all-time wrapped card. */
+export const libraryWrappedSchema = z.object({
+  totalMs: z.number(),
+  afkMs: z.number(),
+  sessionCount: z.number(),
+  /** Distinct local days with recorded time, across every year. */
+  activeDays: z.number(),
+  /** Games with at least one session. */
+  gamesTracked: z.number(),
+  /** Games whose status is `completed`. */
+  gamesFinished: z.number(),
+  /** Every live game in the library, played or not. */
+  gamesInLibrary: z.number(),
+  endingsReached: z.number(),
+  journalEntries: z.number(),
+  /** Mean rating of every rated live game, in decivotes. */
+  averageRatingDecivotes: z.number().nullable(),
+  averageSessionMs: z.number().nullable(),
+  longestSession: z
+    .object({
+      gameId: z.string(),
+      title: z.string(),
+      countedMs: z.number(),
+    })
+    .nullable(),
+  longestStreakDays: z.number(),
+  firstGame: z
+    .object({
+      gameId: z.string(),
+      title: z.string(),
+      startedAt: z.number(),
+    })
+    .nullable(),
+  /** Local year of the first session, for the "since" line. */
+  firstYear: z.number().nullable(),
+  /** Top 5 games by tracked time across the whole library. */
+  topGames: yearReviewGameSchema.array(),
+  topRoute: yearReviewRouteSchema.nullable(),
+  busiestMonth: yearReviewMonthSchema.nullable(),
+  busiestDay: yearReviewDaySchema.nullable(),
+  mostReadYear: yearMomentSchema.nullable(),
+  /** Reading time per local weekday, Monday first (index 0..6). */
+  weekdayMs: z.array(z.number()).length(7),
+  /** Reading time per local hour of day (index 0..23). */
+  hourMs: z.array(z.number()).length(24),
+});
+export type LibraryWrapped = z.infer<typeof libraryWrappedSchema>;
 
 /**
  * One past moment that shares today's month and day, for the Stats card.
@@ -1050,6 +1143,7 @@ export const recommendOutcomeSchema = z.object({
   credits: z.number(),
 });
 export type RecommendOutcome = z.infer<typeof recommendOutcomeSchema>;
+
 
 /** One selectable Locale Emulator profile. */
 export const launchProfileSchema = z.object({

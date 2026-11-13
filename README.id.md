@@ -46,8 +46,14 @@ tidak melaporkan apa pun.
 sesinya sendiri. Peta panas hari baca dengan streak baca saat ini dan
 terpanjang, plus kartu rekap tahunan yang merangkum tahun mana pun yang punya
 catatan: waktu membaca, hari membaca, akhir yang dicapai, catatan jurnal, gim
-yang dimulai dan diselesaikan, sesi terpanjang, gim pertama tahun itu, dan
-lima gim dengan waktu terbanyak.
+yang dimulai, dilanjutkan, dan diselesaikan, sesi dan streak terpanjang, gim
+pertama tahun itu, bulan dan hari tersibuk, rute terlama, dan lima gim dengan
+waktu terbanyak. Rincian
+hari dan jam menunjukkan kapan bacaan itu benar-benar terjadi. Tahun mana pun
+yang punya catatan bisa dibagikan sebagai postingan 1080 x 1350 atau story
+1080 x 1920, dibuat di perangkat lalu disimpan atau dikirim lewat lembar
+berbagi sistem. Kartu rekap sepanjang masa merangkum seluruh koleksi dan
+dibagikan dengan cara yang sama.
 
 **Lini Masa.** Perjalanan membaca dari semua gim dalam satu aliran: sesi,
 catatan jurnal, akhir yang dicapai, dan gim yang selesai, terbaru dulu,

@@ -237,6 +237,142 @@ pub async fn save_library_document(
     .await
 }
 
+/// Ceiling for a generated share card. A 1080x1350 PNG is far below this; the
+/// limit exists so a malformed data URL cannot exhaust memory.
+const MAX_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Decode the PNG data URL a share card produces.
+///
+/// The prefix, the base64 and the PNG signature are all checked here rather than
+/// trusted: this is the boundary between a canvas in the webview and a file on
+/// disk, and writing arbitrary bytes under a `.png` name would be silent
+/// corruption.
+///
+/// # Errors
+/// `invalid_image` for a non-PNG data URL or bad base64; `file_too_large` past
+/// [`MAX_IMAGE_BYTES`].
+pub fn decode_png_data_url(data_url: &str) -> CommandResult<Vec<u8>> {
+    use base64::Engine as _;
+    const PREFIX: &str = "data:image/png;base64,";
+    let encoded = data_url
+        .strip_prefix(PREFIX)
+        .ok_or_else(|| CommandError::new("invalid_image", "Expected a PNG data URL"))?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|_| CommandError::new("invalid_image", "The image data is not valid base64"))?;
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(CommandError::new("file_too_large", "Image exceeds 16 MiB"));
+    }
+    if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err(CommandError::new("invalid_image", "The image is not a PNG"));
+    }
+    Ok(bytes)
+}
+
+/// Save a generated PNG through the platform picker.
+///
+/// # Errors
+/// `file_too_large` past [`MAX_IMAGE_BYTES`], or a picker/write failure.
+pub async fn save_image(
+    app: tauri::AppHandle,
+    filename: String,
+    bytes: Vec<u8>,
+) -> CommandResult<bool> {
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(CommandError::new("file_too_large", "Image exceeds 16 MiB"));
+    }
+    tauri::async_runtime::spawn_blocking(move || save_image_blocking(&app, &filename, &bytes))
+        .await
+        .map_err(|err| CommandError::new("image", err.to_string()))?
+}
+
+/// Share a generated PNG through the Android share sheet.
+///
+/// Android is the only platform with a system share sheet this app can reach;
+/// desktop callers get a clear unsupported result and use Save image instead.
+///
+/// # Errors
+/// `file_too_large` past [`MAX_IMAGE_BYTES`], or a share failure.
+#[cfg(target_os = "android")]
+pub async fn share_image(filename: String, bytes: Vec<u8>) -> CommandResult<()> {
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(CommandError::new("file_too_large", "Image exceeds 16 MiB"));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        use base64::Engine as _;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        mobile::call::<()>(
+            "shareDocument",
+            serde_json::json!({
+                "filename": filename,
+                "contents": encoded,
+                "mime": "image/png",
+                "base64": true,
+            }),
+        )
+        .map_err(|err| CommandError::new("image", err))
+    })
+    .await
+    .map_err(|err| CommandError::new("image", err.to_string()))?
+}
+
+/// Desktop has no share sheet; Save image is the supported path.
+#[cfg(not(target_os = "android"))]
+pub fn share_image(_filename: String, _bytes: Vec<u8>) -> std::future::Ready<CommandResult<()>> {
+    std::future::ready(Err(CommandError::new(
+        "unsupported_platform",
+        "Use Save image on this platform",
+    )))
+}
+
+#[cfg(target_os = "android")]
+fn save_image_blocking(
+    _app: &tauri::AppHandle,
+    filename: &str,
+    bytes: &[u8],
+) -> CommandResult<bool> {
+    use base64::Engine as _;
+    #[derive(serde::Deserialize)]
+    struct Reply {
+        saved: bool,
+    }
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    mobile::call::<Reply>(
+        "saveDocument",
+        serde_json::json!({
+            "filename": filename,
+            "contents": encoded,
+            "mime": "image/png",
+            "base64": true,
+        }),
+    )
+    .map(|reply| reply.saved)
+    .map_err(|err| CommandError::new("image", err))
+}
+
+#[cfg(not(target_os = "android"))]
+fn save_image_blocking(
+    app: &tauri::AppHandle,
+    filename: &str,
+    bytes: &[u8],
+) -> CommandResult<bool> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(file) = app
+        .dialog()
+        .file()
+        .add_filter("PNG image", &["png"])
+        .set_file_name(filename)
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+    let path = file
+        .into_path()
+        .map_err(|err| CommandError::new("image", err.to_string()))?;
+    std::fs::write(path, bytes).map_err(|err| CommandError::new("image", err.to_string()))?;
+    Ok(true)
+}
+
 async fn save_document_with_limit(
     app: tauri::AppHandle,
     filename: String,
@@ -396,4 +532,44 @@ pub fn share_document(
         "unsupported_platform",
         "Use Save file on this platform",
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn png_data_url(bytes: &[u8]) -> String {
+        use base64::Engine as _;
+        format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        )
+    }
+
+    #[test]
+    fn a_png_data_url_decodes_to_the_original_bytes() {
+        let bytes = b"\x89PNG\r\n\x1a\npayload";
+        assert_eq!(
+            decode_png_data_url(&png_data_url(bytes)).expect("decode"),
+            bytes
+        );
+    }
+
+    #[test]
+    fn a_non_png_data_url_is_refused() {
+        let err = decode_png_data_url("data:image/jpeg;base64,AAAA").expect_err("refuse");
+        assert_eq!(err.code, "invalid_image");
+    }
+
+    #[test]
+    fn bad_base64_is_refused() {
+        let err = decode_png_data_url("data:image/png;base64,not base64!").expect_err("refuse");
+        assert_eq!(err.code, "invalid_image");
+    }
+
+    #[test]
+    fn a_decoded_payload_without_the_png_signature_is_refused() {
+        let err = decode_png_data_url(&png_data_url(b"not a png")).expect_err("refuse");
+        assert_eq!(err.code, "invalid_image");
+    }
 }

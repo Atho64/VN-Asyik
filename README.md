@@ -44,8 +44,13 @@ answer for a game that reports nothing.
 **Stats.** Playtime by game, route and month, from the sessions themselves. A
 play-day heatmap with current and longest reading streaks, and a year-in-review
 card that sums up any recorded year: time read, days read, endings reached,
-journal entries, games started and finished, the longest sitting, the first
-game of the year, and the five games you spent the most time in.
+journal entries, games started, continued and finished, the longest sitting and
+streak, the first game of the year, the busiest month and day, the longest
+route, and the five games you spent the most time in. A weekday and hour breakdown shows when the reading
+actually happened. Any year with recorded time can be shared as a 1080 x 1350
+post or a 1080 x 1920 story, generated on the device and saved or sent through
+the system share sheet. An all-time wrapped card sums up the whole library and
+shares the same way.
 
 **Timeline.** Your reading journey across every game in one feed: sessions,
 journal notes, endings reached and finished games, newest first, grouped by

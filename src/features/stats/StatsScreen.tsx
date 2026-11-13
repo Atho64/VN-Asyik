@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
+import { AllTimeWrapped } from "@/features/stats/AllTimeWrapped";
 import { OnThisDay } from "@/features/stats/OnThisDay";
 import { TastePanel } from "@/features/stats/TastePanel";
 import { TimeStats } from "@/features/stats/TimeStats";
@@ -260,6 +261,7 @@ export function StatsScreen() {
         </div>
       </Card>
 
+      <AllTimeWrapped />
       <YearReview byDay={byDay} />
 
       <Card>

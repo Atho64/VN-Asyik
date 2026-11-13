@@ -22,6 +22,7 @@ import {
   applyResultSchema,
   timelinePageSchema,
   yearReviewSchema,
+  libraryWrappedSchema,
   memoryEventSchema,
   journalExportOutcomeSchema,
   chapterSchema,
@@ -136,6 +137,7 @@ import {
   type StatusBreakdown,
   type TimelinePage,
   type YearReview,
+  type LibraryWrapped,
   type MemoryEvent,
   type JournalExportOutcome,
   presenceActivitySchema,
@@ -254,6 +256,12 @@ export interface Api {
   timelinePage(before?: { ts: number; id: string }): Promise<TimelinePage>;
   /** Yearly aggregates for the review card on the Stats page. */
   yearReview(year: number): Promise<YearReview>;
+  /** Library-wide aggregates for the all-time wrapped card. */
+  libraryWrapped(): Promise<LibraryWrapped>;
+  /** Save the Year in Review share card as a PNG. */
+  saveShareCard(dataUrl: string, filename: string): Promise<boolean>;
+  /** Share the Year in Review card through the Android share sheet. */
+  shareShareCard(dataUrl: string, filename: string): Promise<void>;
   /**
    * Moments from earlier years that share today's month and day.
    *
@@ -559,6 +567,11 @@ export const api: Api = {
   timelinePage: (before) =>
     call("timeline_page", timelinePageSchema, { before: before ?? null }),
   yearReview: (year) => call("year_review", yearReviewSchema, { year }),
+  libraryWrapped: () => call("library_wrapped", libraryWrappedSchema),
+  saveShareCard: (dataUrl, filename) =>
+    call("save_share_card", z.boolean(), { filename, dataUrl }),
+  shareShareCard: (dataUrl, filename) =>
+    call("share_share_card", voidSchema, { filename, dataUrl }),
   listEndings: (gameId) => call("list_endings", endingSchema.array(), { gameId }),
   gameRoutes: (gameId) => call("game_routes", routeViewSchema.array(), { gameId }),
   createRoute: (gameId, name) => call("create_route", z.string(), { gameId, name }),

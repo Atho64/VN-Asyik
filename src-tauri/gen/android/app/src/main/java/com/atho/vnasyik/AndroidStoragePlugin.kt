@@ -43,6 +43,12 @@ class DocumentArgs {
      * HTML export that declared JSON opened in nothing.
      */
     var mime: String = "application/json"
+
+    /**
+     * The contents are base64 rather than UTF-8 text. Share cards are PNG bytes;
+     * every older caller leaves this false and keeps writing plain documents.
+     */
+    var base64: Boolean = false
 }
 
 @InvokeArg
@@ -242,8 +248,13 @@ class AndroidStoragePlugin(private val activity: Activity) : Plugin(activity) {
             try {
                 val uri = requireNotNull(result.data?.data)
                 val args = invoke.parseArgs(DocumentArgs::class.java)
+                val bytes = if (args.base64) {
+                    android.util.Base64.decode(args.contents, android.util.Base64.DEFAULT)
+                } else {
+                    args.contents.toByteArray(Charsets.UTF_8)
+                }
                 requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")).use {
-                    it.write(args.contents.toByteArray(Charsets.UTF_8))
+                    it.write(bytes)
                 }
                 invoke.resolve(JSObject().put("saved", true))
             } catch (_: Exception) {
@@ -295,14 +306,20 @@ class AndroidStoragePlugin(private val activity: Activity) : Plugin(activity) {
     fun shareDocument(invoke: Invoke) = io.execute {
         try {
             val args = invoke.parseArgs(DocumentArgs::class.java)
-            require(args.filename.matches(Regex("[a-zA-Z0-9_.-]+\\.json")))
+            // JSON transfers and PNG share cards are the only two things this
+            // plugin shares; the extension is part of the promise to the picker.
+            require(args.filename.matches(Regex("[a-zA-Z0-9_.-]+\\.(json|png)")))
             val directory = File(activity.cacheDir, "transfers")
             check(directory.isDirectory || directory.mkdirs())
             val file = File(directory, args.filename)
-            file.writeText(args.contents, Charsets.UTF_8)
+            if (args.base64) {
+                file.writeBytes(android.util.Base64.decode(args.contents, android.util.Base64.DEFAULT))
+            } else {
+                file.writeText(args.contents, Charsets.UTF_8)
+            }
             val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
             val send = Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
+                type = args.mime
                 putExtra(Intent.EXTRA_STREAM, uri)
                 clipData = ClipData.newRawUri("VN Asyik", uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
