@@ -1834,3 +1834,62 @@ async fn journal_search_pages_with_a_cursor() {
     assert_eq!(second.len(), 1);
     assert_eq!(second[0].created_at.as_millis(), 1_000);
 }
+
+#[tokio::test]
+async fn window_launch_and_ui_prefs_round_trip() {
+    let (db, _device) = fixture().await;
+
+    let initial_win = load_window_launch_prefs(db.pool())
+        .await
+        .expect("default window prefs");
+    assert_eq!(
+        initial_win,
+        vn_core::window::WindowLaunchPrefs {
+            mode: vn_core::window::WindowLaunchMode::Centered,
+            x: None,
+            y: None,
+        }
+    );
+
+    let custom_win = vn_core::window::WindowLaunchPrefs {
+        mode: vn_core::window::WindowLaunchMode::Customized,
+        x: Some(240),
+        y: Some(120),
+    };
+    save_window_launch_prefs(db.pool(), &custom_win)
+        .await
+        .expect("save window prefs");
+    assert_eq!(
+        load_window_launch_prefs(db.pool())
+            .await
+            .expect("reload window prefs"),
+        custom_win
+    );
+
+    let initial_ui = load_ui_prefs(db.pool()).await.expect("default ui prefs");
+    assert!(!initial_ui.sidebar_compact);
+    assert!(!initial_ui.library_remember_browse);
+    assert_eq!(
+        initial_ui.library_default_sort,
+        vn_core::library::SortKey::Recent
+    );
+
+    let custom_ui = vn_core::ui_prefs::UiPrefs {
+        sidebar_compact: true,
+        library_remember_browse: true,
+        library_default_sort: vn_core::library::SortKey::Playtime,
+        library_saved_browse: Some(vn_core::ui_prefs::SavedLibraryBrowse {
+            statuses: vec![GameStatus::Playing, GameStatus::Wishlist],
+            rated_only: true,
+            view: vn_core::ui_prefs::LibraryViewMode::Shelf,
+            sort: vn_core::library::SortKey::Rating,
+        }),
+    };
+    save_ui_prefs(db.pool(), &custom_ui)
+        .await
+        .expect("save ui prefs");
+    assert_eq!(
+        load_ui_prefs(db.pool()).await.expect("reload ui prefs"),
+        custom_ui
+    );
+}

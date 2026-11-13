@@ -18,6 +18,7 @@ pub mod tracking;
 pub mod tray;
 pub mod vndb;
 pub mod walkthrough;
+pub mod window_launch;
 
 use tauri::{Emitter, Manager};
 
@@ -274,6 +275,11 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::walkthrough::walkthrough_translate,
         commands::walkthrough::walkthrough_toggle_item,
         commands::walkthrough::walkthrough_clear_progress,
+        commands::ui::ui_prefs_get,
+        commands::ui::ui_prefs_set,
+        commands::ui::window_launch_get,
+        commands::ui::window_launch_set,
+        commands::ui::window_launch_capture,
     ]
 }
 
@@ -337,6 +343,17 @@ pub fn run() {
             let state = tauri::async_runtime::block_on(state::AppState::boot(&handle))?;
             app.manage(state);
             app.manage(companion::window::OverlayWindow::default());
+            app.manage(window_launch::WindowLaunchTracker::default());
+            #[cfg(desktop)]
+            {
+                let launch_prefs =
+                    tauri::async_runtime::block_on(crate::db::queries::load_window_launch_prefs(
+                        handle.state::<state::AppState>().db().pool(),
+                    ))
+                    .unwrap_or_default();
+                let tracker = handle.state::<window_launch::WindowLaunchTracker>();
+                window_launch::apply_startup_position(&handle, &launch_prefs, &tracker);
+            }
             let events = handle.clone();
             app.state::<state::AppState>()
                 .companion()
@@ -360,9 +377,15 @@ pub fn run() {
             #[cfg(not(desktop))]
             let _ = (window, event);
             #[cfg(desktop)]
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                tauri::WindowEvent::Moved(pos) => {
+                    window_launch::handle_window_moved(window, pos);
+                }
+                _ => {}
             }
         })
         .invoke_handler(handlers())

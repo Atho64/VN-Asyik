@@ -40,6 +40,19 @@ vi.mock("@/lib/ipc/client", () => ({
       reduce_effects: false,
       beta_features: false,
     }),
+    uiPrefsGet: vi.fn().mockResolvedValue({
+      sidebar_compact: false,
+      library_remember_browse: false,
+      library_default_sort: "recent",
+      library_saved_browse: null,
+    }),
+    uiPrefsSet: vi.fn().mockImplementation(async (patch: Record<string, unknown>) => ({
+      sidebar_compact: false,
+      library_remember_browse: true,
+      library_default_sort: "recent",
+      library_saved_browse: null,
+      ...patch,
+    })),
     platformInfo: mocks.platform,
     trackingAndroidSession: mocks.session,
     listGames: mocks.listGames,
@@ -63,6 +76,7 @@ const android = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   mocks.platform.mockResolvedValue(android);
   mocks.session.mockResolvedValue({ reason: null });
   mocks.listGames.mockResolvedValue([]);
@@ -72,6 +86,16 @@ beforeEach(() => {
     libraryLoaded: false,
     libraryError: null,
     appearance: null,
+    uiPrefs: null,
+    uiPrefsLoaded: false,
+    sidebarCompact: false,
+    libraryBrowse: {
+      query: "",
+      statuses: [],
+      ratedOnly: false,
+      view: "grid",
+      sort: "recent",
+    },
     prefs: {
       theme: "dark",
       language: "en",
@@ -212,5 +236,61 @@ describe("custom accent", () => {
     for (const name of ["--accent", "--accent-soft", "--accent-strong", "--on-accent", "--accent-contrast"]) {
       expect(root.style.getPropertyValue(name)).toBe("");
     }
+  });
+});
+
+describe("UI startup preferences hydration", () => {
+  it("hydrates compact rail and saved library browse filters on boot", async () => {
+    const { api } = await import("@/lib/ipc/client");
+    vi.mocked(api.uiPrefsGet).mockResolvedValueOnce({
+      sidebar_compact: true,
+      library_remember_browse: true,
+      library_default_sort: "recent",
+      library_saved_browse: {
+        statuses: ["playing", "completed"],
+        rated_only: true,
+        view: "list",
+        sort: "rating",
+      },
+    });
+
+    renderApp();
+    await screen.findByText("Library ready");
+
+    expect(useAppStore.getState().sidebarCompact).toBe(true);
+    expect(useAppStore.getState().libraryBrowse).toEqual({
+      query: "",
+      statuses: ["playing", "completed"],
+      ratedOnly: true,
+      view: "list",
+      sort: "rating",
+    });
+  });
+
+  it("uses library_default_sort when remember-on-launch is off", async () => {
+    const { api } = await import("@/lib/ipc/client");
+    vi.mocked(api.uiPrefsGet).mockResolvedValueOnce({
+      sidebar_compact: false,
+      library_remember_browse: false,
+      library_default_sort: "title",
+      library_saved_browse: {
+        statuses: ["wishlist"],
+        rated_only: true,
+        view: "shelf",
+        sort: "playtime",
+      },
+    });
+
+    renderApp();
+    await screen.findByText("Library ready");
+
+    expect(useAppStore.getState().sidebarCompact).toBe(false);
+    expect(useAppStore.getState().libraryBrowse).toEqual({
+      query: "",
+      statuses: [],
+      ratedOnly: false,
+      view: "grid",
+      sort: "title",
+    });
   });
 });

@@ -8,13 +8,18 @@
  */
 
 import { create } from "zustand";
-import { initialLibraryBrowse, type LibraryBrowse } from "@/lib/library";
+import {
+  initialLibraryBrowse,
+  resolveInitialLibraryBrowse,
+  type LibraryBrowse,
+} from "@/lib/library";
 import type {
   AppearanceView,
   DetailPayload,
   GameCard,
   PlatformInfo,
   Prefs,
+  UiPrefs,
   UpdateView,
 } from "@/lib/ipc/types";
 
@@ -109,6 +114,36 @@ interface AppState {
   /** Accent colour and background image, applied by the provider. */
   appearance: AppearanceView | null;
   setAppearance: (appearance: AppearanceView | null) => void;
+  /** Desktop sidebar compact icon mode + library startup preferences. */
+  uiPrefs: UiPrefs | null;
+  uiPrefsLoaded: boolean;
+  sidebarCompact: boolean;
+  setSidebarCompact: (compact: boolean) => void;
+  setUiPrefs: (prefs: UiPrefs) => void;
+  hydrateUiPrefs: (prefs: UiPrefs) => void;
+}
+
+const SIDEBAR_COMPACT_STORAGE_KEY = "vn_asyik_sidebar_compact";
+
+function readStoredSidebarCompact(): boolean {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      window.localStorage?.getItem(SIDEBAR_COMPACT_STORAGE_KEY) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredSidebarCompact(compact: boolean): void {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.setItem(SIDEBAR_COMPACT_STORAGE_KEY, compact ? "1" : "0");
+    }
+  } catch {
+    // Private browsing or test shims without writable localStorage simply skip caching.
+  }
 }
 
 const defaultPrefs: Prefs = {
@@ -137,9 +172,42 @@ export const useAppStore = create<AppState>((set) => ({
   vndbDetails: {},
   update: null,
   appearance: null,
+  uiPrefs: null,
+  uiPrefsLoaded: false,
+  sidebarCompact: readStoredSidebarCompact(),
 
   setUpdate: (update) => set({ update }),
   setAppearance: (appearance) => set({ appearance }),
+  setSidebarCompact: (compact) => {
+    writeStoredSidebarCompact(compact);
+    set((state) => ({
+      sidebarCompact: compact,
+      uiPrefs: state.uiPrefs ? { ...state.uiPrefs, sidebar_compact: compact } : state.uiPrefs,
+    }));
+  },
+  setUiPrefs: (uiPrefs) => {
+    writeStoredSidebarCompact(uiPrefs.sidebar_compact);
+    set({
+      uiPrefs,
+      uiPrefsLoaded: true,
+      sidebarCompact: uiPrefs.sidebar_compact,
+    });
+  },
+  hydrateUiPrefs: (uiPrefs) => {
+    writeStoredSidebarCompact(uiPrefs.sidebar_compact);
+    set((state) => {
+      const resolved = resolveInitialLibraryBrowse(uiPrefs);
+      return {
+        uiPrefs,
+        uiPrefsLoaded: true,
+        sidebarCompact: uiPrefs.sidebar_compact,
+        libraryBrowse: {
+          ...resolved,
+          query: state.libraryBrowse.query,
+        },
+      };
+    });
+  },
 
   setPrefs: (prefs) => set({ prefs, prefsLoaded: true }),
   setPlatform: (platform) => set({ platform }),

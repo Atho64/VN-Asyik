@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
 import { listenBetaFeatures } from "@/lib/ipc/prefs";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { GameCard } from "@/lib/ipc/types";
+import { savedBrowseEqual, toSavedLibraryBrowse } from "@/lib/library";
 import { updateAppearance } from "@/lib/theme";
 import { createTranslator, resolveLocale, type Translator } from "@/i18n";
 import { createContext } from "react";
@@ -56,6 +57,11 @@ export function AppProvider({
   const setUpdate = useAppStore((state) => state.setUpdate);
   const appearance = useAppStore((state) => state.appearance);
   const setAppearance = useAppStore((state) => state.setAppearance);
+  const uiPrefs = useAppStore((state) => state.uiPrefs);
+  const uiPrefsLoaded = useAppStore((state) => state.uiPrefsLoaded);
+  const setUiPrefs = useAppStore((state) => state.setUiPrefs);
+  const hydrateUiPrefs = useAppStore((state) => state.hydrateUiPrefs);
+  const libraryBrowse = useAppStore((state) => state.libraryBrowse);
   const libraryLoaded = useAppStore((state) => state.libraryLoaded);
   const bootError = useAppStore((state) => state.libraryError);
 
@@ -89,13 +95,18 @@ export function AppProvider({
 
     const boot = async (): Promise<void> => {
       try {
-        const [loadedPrefs, platform] = await Promise.all([
+        const [loadedPrefs, platform, loadedUiPrefs] = await Promise.all([
           api.getPrefs().catch(() => null),
           api.platformInfo().catch(() => null),
+          typeof api.uiPrefsGet === "function"
+            ? api.uiPrefsGet().catch(() => null)
+            : Promise.resolve(null),
         ]);
         if (cancelled) return;
         if (loadedPrefs) setPrefs(loadedPrefs);
         else useAppStore.setState({ prefsLoaded: true });
+        if (loadedUiPrefs) hydrateUiPrefs(loadedUiPrefs);
+        else useAppStore.setState({ uiPrefsLoaded: true });
         if (platform) setPlatform(platform);
         if (companionWindow) return;
 
@@ -279,6 +290,28 @@ export function AppProvider({
     // Only on first resolution of prefs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (companionWindow || !uiPrefsLoaded || !uiPrefs?.library_remember_browse) return;
+    if (typeof api.uiPrefsSet !== "function") return;
+    const next = toSavedLibraryBrowse(libraryBrowse);
+    const saved = uiPrefs.library_saved_browse;
+    if (saved && savedBrowseEqual(next, saved)) return;
+    const timer = window.setTimeout(() => {
+      void api
+        .uiPrefsSet({ library_saved_browse: next })
+        .then(setUiPrefs)
+        .catch(() => undefined);
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [
+    companionWindow,
+    uiPrefsLoaded,
+    uiPrefs?.library_remember_browse,
+    uiPrefs?.library_saved_browse,
+    libraryBrowse,
+    setUiPrefs,
+  ]);
 
   const value = useMemo<AppContextValue>(
     () => ({ t, locale, ready: companionWindow || libraryLoaded, bootError }),

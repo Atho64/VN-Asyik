@@ -1478,3 +1478,58 @@ export const walkthroughViewSchema = z.object({
   characterGlossary: z.record(z.string(), z.string()),
 });
 export type WalkthroughView = z.infer<typeof walkthroughViewSchema>;
+
+export const librarySortKeySchema = z.enum([
+  "recent",
+  "title",
+  "rating",
+  "playtime",
+  "started",
+]);
+export type LibrarySortKey = z.infer<typeof librarySortKeySchema>;
+
+export const libraryViewModeSchema = z.enum(["grid", "list", "shelf"]);
+export type LibraryViewMode = z.infer<typeof libraryViewModeSchema>;
+
+export const savedLibraryBrowseSchema = z.object({
+  statuses: gameStatusSchema.array(),
+  rated_only: z.boolean(),
+  view: libraryViewModeSchema,
+  sort: librarySortKeySchema,
+});
+export type SavedLibraryBrowse = z.infer<typeof savedLibraryBrowseSchema>;
+
+export const uiPrefsSchema = z.object({
+  sidebar_compact: z.boolean().default(false),
+  library_remember_browse: z.boolean().default(false),
+  library_default_sort: librarySortKeySchema.default("recent"),
+  library_saved_browse: savedLibraryBrowseSchema.nullable().default(null),
+});
+export type UiPrefs = z.infer<typeof uiPrefsSchema>;
+
+export interface UiPrefsPatch {
+  sidebar_compact?: boolean;
+  library_remember_browse?: boolean;
+  library_default_sort?: LibrarySortKey;
+  library_saved_browse?: SavedLibraryBrowse;
+}
+
+export const windowLaunchModeSchema = z.enum(["centered", "customized"]);
+export type WindowLaunchMode = z.infer<typeof windowLaunchModeSchema>;
+
+export const windowLaunchViewSchema = z.object({
+  mode: windowLaunchModeSchema,
+  x: z.number().nullable(),
+  y: z.number().nullable(),
+  current_x: z.number().nullable(),
+  current_y: z.number().nullable(),
+  supported: z.boolean(),
+});
+export type WindowLaunchView = z.infer<typeof windowLaunchViewSchema>;
+
+export interface WindowLaunchInput {
+  mode: WindowLaunchMode;
+  x?: number | null;
+  y?: number | null;
+  apply_now?: boolean;
+}

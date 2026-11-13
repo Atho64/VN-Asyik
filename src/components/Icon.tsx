@@ -38,7 +38,8 @@ export type IconName =
   | "screen"
   | "trash"
   | "sync"
-  | "external";
+  | "external"
+  | "sidebar";
 
 interface IconProps {
   name: IconName;
@@ -184,6 +185,12 @@ const paths: Record<IconName, ReactNode> = {
       <path d="M14.5 4.5H19.5V9.5" />
       <path d="M19.5 4.5L11 13" />
       <path d="M17.5 13.5v6H4.5V6.5H10" />
+    </>
+  ),
+  sidebar: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M9.5 4.5v15" />
     </>
   ),
 };

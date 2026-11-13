@@ -10,6 +10,10 @@ import { ChatPanel } from "@/features/settings/ChatPanel";
 import { LocalePanel } from "@/features/settings/LocalePanel";
 import { LunaPanel } from "@/features/settings/LunaPanel";
 import { TitleParsingPanel } from "@/features/settings/TitleParsingPanel";
+import {
+  LibraryLaunchSection,
+  WindowLaunchSection,
+} from "@/features/settings/LaunchPrefsPanel";
 import { TrackingScreen } from "@/features/tracking/TrackingScreen";
 import { UpdatePanel } from "@/features/update/UpdatePanel";
 import { SyncScreen } from "@/features/sync/SyncScreen";
@@ -322,6 +326,8 @@ export default function SettingsScreen({
             <UpdatePanel />
           </section>
 
+          <LibraryLaunchSection />
+          {platform?.kind === "desktop" ? <WindowLaunchSection /> : null}
 
           <section className="settings__group">
             <h2 className="settings__group-title">{t("settings.languageTools")}</h2>

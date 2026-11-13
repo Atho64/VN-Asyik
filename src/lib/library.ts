@@ -303,3 +303,58 @@ export function needsReveal(game: Game, mode: string): boolean {
   if (mode === "show") return false;
   return isExplicit(game) && Boolean(game.cover_url);
 }
+
+/** Extract the persistable browse fields (excluding transient search query). */
+export function toSavedLibraryBrowse(
+  browse: Pick<LibraryBrowse, "statuses" | "ratedOnly" | "view" | "sort">,
+): {
+  statuses: GameStatus[];
+  rated_only: boolean;
+  view: LibraryView;
+  sort: SortKey;
+} {
+  return {
+    statuses: Array.from(new Set(browse.statuses)),
+    rated_only: browse.ratedOnly,
+    view: browse.view,
+    sort: browse.sort,
+  };
+}
+
+/** True when two persisted library browse snapshots represent the same choice. */
+export function savedBrowseEqual(
+  a: { statuses: GameStatus[]; rated_only: boolean; view: LibraryView; sort: SortKey },
+  b: { statuses: GameStatus[]; rated_only: boolean; view: LibraryView; sort: SortKey },
+): boolean {
+  if (a.rated_only !== b.rated_only || a.view !== b.view || a.sort !== b.sort) {
+    return false;
+  }
+  if (a.statuses.length !== b.statuses.length) return false;
+  return a.statuses.every((status, index) => b.statuses[index] === status);
+}
+
+/** Resolve the launch-time library browse state from persisted UI preferences. */
+export function resolveInitialLibraryBrowse(uiPrefs: {
+  library_remember_browse: boolean;
+  library_default_sort: SortKey;
+  library_saved_browse: {
+    statuses: GameStatus[];
+    rated_only: boolean;
+    view: LibraryView;
+    sort: SortKey;
+  } | null;
+}): LibraryBrowse {
+  if (uiPrefs.library_remember_browse && uiPrefs.library_saved_browse) {
+    return {
+      query: "",
+      statuses: Array.from(new Set(uiPrefs.library_saved_browse.statuses)),
+      ratedOnly: uiPrefs.library_saved_browse.rated_only,
+      view: uiPrefs.library_saved_browse.view,
+      sort: uiPrefs.library_saved_browse.sort,
+    };
+  }
+  return {
+    ...initialLibraryBrowse,
+    sort: uiPrefs.library_default_sort,
+  };
+}

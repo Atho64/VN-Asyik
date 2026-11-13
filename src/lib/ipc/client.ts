@@ -14,6 +14,12 @@ import {
   walkthroughIndexEntrySchema,
   type WalkthroughView,
   type WalkthroughIndexEntry,
+  uiPrefsSchema,
+  windowLaunchViewSchema,
+  type UiPrefs,
+  type UiPrefsPatch,
+  type WindowLaunchView,
+  type WindowLaunchInput,
   androidAppSchema,
   androidSessionViewSchema,
   type AndroidApp,
@@ -503,6 +509,11 @@ export interface Api {
   toggleWindow(): Promise<boolean>;
   quitApp(): Promise<void>;
   traySetLabels(show: string, hide: string, quit: string): Promise<void>;
+  uiPrefsGet(): Promise<UiPrefs>;
+  uiPrefsSet(patch: UiPrefsPatch): Promise<UiPrefs>;
+  windowLaunchGet(): Promise<WindowLaunchView>;
+  windowLaunchSet(input: WindowLaunchInput): Promise<WindowLaunchView>;
+  windowLaunchCapture(): Promise<WindowLaunchView>;
 }
 
 /** `void` commands still resolve to `null` over IPC. */
@@ -834,6 +845,11 @@ export const api: Api = {
   quitApp: () => call("quit_app", voidSchema),
   traySetLabels: (show, hide, quit) =>
     call("tray_set_labels", voidSchema, { show, hide, quit }),
+  uiPrefsGet: () => call("ui_prefs_get", uiPrefsSchema),
+  uiPrefsSet: (patch) => call("ui_prefs_set", uiPrefsSchema, { patch }),
+  windowLaunchGet: () => call("window_launch_get", windowLaunchViewSchema),
+  windowLaunchSet: (input) => call("window_launch_set", windowLaunchViewSchema, { input }),
+  windowLaunchCapture: () => call("window_launch_capture", windowLaunchViewSchema),
 };
 
 /** True when running inside the Tauri shell. */

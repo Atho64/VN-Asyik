@@ -30,8 +30,10 @@ pub mod taste;
 pub mod time_fmt;
 pub mod title_settings;
 pub mod tracker;
+pub mod ui_prefs;
 pub mod usage;
 pub mod walkthrough;
+pub mod window;
 pub mod window_title;
 
 mod width;

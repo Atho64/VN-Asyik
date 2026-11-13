@@ -15,8 +15,11 @@ import {
   needsReveal,
   normalizeTitle,
   rankGames,
+  resolveInitialLibraryBrowse,
+  savedBrowseEqual,
   sortCards,
   statusOrder,
+  toSavedLibraryBrowse,
 } from "./library";
 import type { Game, GameCard } from "./ipc/types";
 
@@ -343,5 +346,78 @@ describe("title search", () => {
   it("returns the input untouched for an empty query", () => {
     const games = [game("B"), game("A")];
     expect(rankGames(games, "   ")).toBe(games);
+  });
+});
+
+describe("library startup browse preferences", () => {
+  it("uses default sort when remembering filters across launches is disabled", () => {
+    const resolved = resolveInitialLibraryBrowse({
+      library_remember_browse: false,
+      library_default_sort: "playtime",
+      library_saved_browse: {
+        statuses: ["completed"],
+        rated_only: true,
+        view: "list",
+        sort: "title",
+      },
+    });
+    expect(resolved).toEqual({
+      query: "",
+      statuses: [],
+      ratedOnly: false,
+      view: "grid",
+      sort: "playtime",
+    });
+  });
+
+  it("restores saved statuses, view, rated flag, and sort when remember is enabled", () => {
+    const resolved = resolveInitialLibraryBrowse({
+      library_remember_browse: true,
+      library_default_sort: "recent",
+      library_saved_browse: {
+        statuses: ["playing", "wishlist", "playing"],
+        rated_only: true,
+        view: "shelf",
+        sort: "rating",
+      },
+    });
+    expect(resolved).toEqual({
+      query: "",
+      statuses: ["playing", "wishlist"],
+      ratedOnly: true,
+      view: "shelf",
+      sort: "rating",
+    });
+  });
+
+  it("extracts persistable browse state without search query and compares equality", () => {
+    const saved = toSavedLibraryBrowse({
+      statuses: ["playing", "playing", "completed"],
+      ratedOnly: false,
+      view: "list",
+      sort: "started",
+    });
+    expect(saved).toEqual({
+      statuses: ["playing", "completed"],
+      rated_only: false,
+      view: "list",
+      sort: "started",
+    });
+    expect(
+      savedBrowseEqual(saved, {
+        statuses: ["playing", "completed"],
+        rated_only: false,
+        view: "list",
+        sort: "started",
+      }),
+    ).toBe(true);
+    expect(
+      savedBrowseEqual(saved, {
+        statuses: ["playing"],
+        rated_only: false,
+        view: "list",
+        sort: "started",
+      }),
+    ).toBe(false);
   });
 });

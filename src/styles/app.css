@@ -32,7 +32,7 @@
   overflow-x: hidden;
   overscroll-behavior-y: contain;
   scroll-padding-block: var(--space-5);
-  padding: var(--space-5) var(--space-5) var(--space-7);
+  padding: var(--space-5) var(--space-5) var(--space-6);
 }
 
 /* desktop rail */
@@ -50,11 +50,19 @@
   flex-shrink: 0;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--space-5) var(--space-3);
   border-right: 1px solid var(--border);
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  transition: width var(--dur-fast) var(--ease);
+}
+
+.rail--compact {
+  width: var(--rail-width-compact);
+  align-items: center;
+  padding-inline: var(--space-2);
 }
 
 /* Glass is what the blurred artwork needs to stay readable, so it only exists
@@ -69,8 +77,24 @@
 .rail__brand {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  justify-content: space-between;
+  gap: var(--space-2);
   padding: 0 var(--space-2);
+  width: 100%;
+}
+
+.rail__brand-id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.rail--compact .rail__brand {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  padding: 0;
 }
 
 .rail__mark {
@@ -86,10 +110,45 @@
   letter-spacing: -0.01em;
 }
 
+.rail__toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.rail__toggle:hover {
+  background: var(--surface-1);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.rail--compact .rail__toggle {
+  width: var(--touch-target);
+  height: var(--touch-target);
+  border-radius: var(--radius-m);
+}
+
 .rail__nav {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  width: 100%;
+}
+
+.rail--compact .rail__nav {
+  align-items: center;
 }
 
 .rail__item {
@@ -105,6 +164,12 @@
   transition:
     background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease);
+}
+
+.rail--compact .rail__item {
+  width: var(--touch-target);
+  justify-content: center;
+  padding: 0;
 }
 
 .rail__item:hover {
@@ -136,6 +201,24 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: 0 var(--space-2);
+  width: 100%;
+}
+
+.rail--compact .rail__footer {
+  align-items: center;
+  padding: 0;
+}
+
+.rail__search {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.rail__search--compact {
+  justify-content: center;
+  width: var(--touch-target);
+  min-height: var(--touch-target);
+  padding: 0;
 }
 
 /* mobile bottom nav */

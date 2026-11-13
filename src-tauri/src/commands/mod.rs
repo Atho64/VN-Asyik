@@ -20,6 +20,7 @@ pub mod script;
 pub mod sync;
 pub mod system;
 pub mod tracking;
+pub mod ui;
 pub mod update;
 pub mod vndb;
 pub mod vndb_sync;

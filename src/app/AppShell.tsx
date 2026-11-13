@@ -62,6 +62,19 @@ export function AppShell() {
   const paletteOpen = useAppStore((state) => state.paletteOpen);
   const appearance = useAppStore((state) => state.appearance);
   const setPaletteOpen = useAppStore((state) => state.setPaletteOpen);
+  const sidebarCompact = useAppStore((state) => state.sidebarCompact);
+  const setSidebarCompact = useAppStore((state) => state.setSidebarCompact);
+  const setUiPrefs = useAppStore((state) => state.setUiPrefs);
+  const toggleSidebar = (): void => {
+    const next = !sidebarCompact;
+    setSidebarCompact(next);
+    if (typeof api.uiPrefsSet === "function") {
+      void api
+        .uiPrefsSet({ sidebar_compact: next })
+        .then((prefs) => setUiPrefs(prefs))
+        .catch(() => undefined);
+    }
+  };
   const [moreOpen, setMoreOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
@@ -164,41 +177,70 @@ export function AppShell() {
         <Backdrop />
       )}
 
-      <nav className="rail" aria-label={t("app.name")}>
+      <nav
+        className={sidebarCompact ? "rail rail--compact" : "rail"}
+        data-compact={sidebarCompact ? "true" : "false"}
+        aria-label={t("app.name")}
+      >
         <div className="rail__brand">
-          <img className="rail__mark" src={appIcon} alt="" />
-          <span className="rail__name">{t("app.name")}</span>
+          <div className="rail__brand-id">
+            <img className="rail__mark" src={appIcon} alt="" />
+            <span className={sidebarCompact ? "rail__name visually-hidden" : "rail__name"}>
+              {t("app.name")}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="rail__toggle"
+            onClick={toggleSidebar}
+            aria-expanded={!sidebarCompact}
+            aria-label={
+              sidebarCompact ? t("nav.expandSidebar") : t("nav.collapseSidebar")
+            }
+            title={sidebarCompact ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
+          >
+            <Icon name="sidebar" size={16} />
+          </button>
         </div>
         <div className="rail__nav">
-          {visibleEntries.map((entry) => (
-            <NavLink
-              key={entry.to}
-              to={entry.to}
-              end
-              className={({ isActive }) =>
-                `rail__item${
-                  isActive || (entry.to === "/settings" && settingsActive)
-                    ? " active"
-                    : ""
-                }`
-              }
-            >
-              <span className="rail__icon">
-                <Icon name={entry.icon} />
-              </span>
-              {t(entry.labelKey)}
-            </NavLink>
-          ))}
+          {visibleEntries.map((entry) => {
+            const label = t(entry.labelKey);
+            return (
+              <NavLink
+                key={entry.to}
+                to={entry.to}
+                end
+                title={sidebarCompact ? label : undefined}
+                className={({ isActive }) =>
+                  `rail__item${
+                    isActive || (entry.to === "/settings" && settingsActive)
+                      ? " active"
+                      : ""
+                  }`
+                }
+              >
+                <span className="rail__icon">
+                  <Icon name={entry.icon} />
+                </span>
+                <span className={sidebarCompact ? "rail__label visually-hidden" : "rail__label"}>
+                  {label}
+                </span>
+              </NavLink>
+            );
+          })}
         </div>
         <div className="rail__footer">
           <Button
             variant="ghost"
+            className={sidebarCompact ? "rail__search rail__search--compact" : "rail__search"}
             onClick={() => setPaletteOpen(true)}
             aria-keyshortcuts="Control+K Meta+K"
-            style={{ justifyContent: "flex-start" }}
+            title={sidebarCompact ? t("library.search") : undefined}
           >
             <Icon name="search" />
-            {t("library.search")}
+            <span className={sidebarCompact ? "rail__label visually-hidden" : "rail__label"}>
+              {t("library.search")}
+            </span>
           </Button>
         </div>
       </nav>

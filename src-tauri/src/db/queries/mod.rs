@@ -972,3 +972,63 @@ where
     .await?;
     Ok(())
 }
+
+const WINDOW_LAUNCH_PREF_KEY: &str = "window_launch";
+const UI_PREFS_KEY: &str = "ui_prefs";
+
+async fn load_json_pref<T>(pool: &SqlitePool, key: &str) -> Result<T, DbError>
+where
+    T: serde::de::DeserializeOwned + Default,
+{
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM local_prefs WHERE key = ?")
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
+    match row {
+        Some((json,)) => {
+            serde_json::from_str(&json).map_err(|err| DbError::Corrupt(err.to_string()))
+        }
+        None => Ok(T::default()),
+    }
+}
+
+async fn save_json_pref<T: serde::Serialize>(
+    pool: &SqlitePool,
+    key: &str,
+    value: &T,
+) -> Result<(), DbError> {
+    let json = serde_json::to_string(value).map_err(|err| DbError::Corrupt(err.to_string()))?;
+    set_pref(pool, key, &json).await
+}
+
+/// Load the device-local desktop window launch preference.
+pub async fn load_window_launch_prefs(
+    pool: &SqlitePool,
+) -> Result<vn_core::window::WindowLaunchPrefs, DbError> {
+    load_json_pref(pool, WINDOW_LAUNCH_PREF_KEY).await
+}
+
+/// Persist the device-local desktop window launch preference.
+pub async fn save_window_launch_prefs(
+    pool: &SqlitePool,
+    prefs: &vn_core::window::WindowLaunchPrefs,
+) -> Result<(), DbError> {
+    save_json_pref(pool, WINDOW_LAUNCH_PREF_KEY, prefs).await
+}
+
+/// Load the device-local UI shell and library startup preferences.
+pub async fn load_ui_prefs(pool: &SqlitePool) -> Result<vn_core::ui_prefs::UiPrefs, DbError> {
+    let mut prefs: vn_core::ui_prefs::UiPrefs = load_json_pref(pool, UI_PREFS_KEY).await?;
+    prefs.normalize();
+    Ok(prefs)
+}
+
+/// Persist the device-local UI shell and library startup preferences.
+pub async fn save_ui_prefs(
+    pool: &SqlitePool,
+    prefs: &vn_core::ui_prefs::UiPrefs,
+) -> Result<(), DbError> {
+    let mut normalized = prefs.clone();
+    normalized.normalize();
+    save_json_pref(pool, UI_PREFS_KEY, &normalized).await
+}
