@@ -17,9 +17,9 @@ one, and changing that setting conceals them again.
 
 **Playtime.** Start a game from the app and it records how long you actually
 read. Time counts only while the game is in front of you; breaks longer than a
-configurable threshold are filed as away time instead of playtime, and stored
-separately so you can see both. Sessions are written every 20 seconds, so a
-crash or a forced reboot costs you seconds, not an evening.
+configurable threshold are filed separately as away time so you can see both.
+Sessions are written every 20 seconds, so a crash or a forced reboot loses at
+most 20 seconds of tracking.
 
 **Reading journal.** **Where did I leave off?** on the game page shows the latest
 recorded reading session and its known chapter/route. Add, edit or delete session
@@ -38,30 +38,29 @@ cover group is rendered. Open it from the library or with Ctrl+Shift+B.
 **Chapters and endings.** Routes are yours: you name them, and endings hang off
 them. Chapter detection reads the game's window caption where the engine writes
 one (see [Chapters from the window title](#chapters-from-the-window-title)) and
-falls back to game-level attribution where it does not, which is the honest
-answer for a game that reports nothing.
+falls back to game-level attribution when no chapter caption is reported.
 
 **Stats.** Playtime by game, route and month, from the sessions themselves. A
 play-day heatmap with current and longest reading streaks, and a year-in-review
 card that sums up any recorded year: time read, days read, endings reached,
 journal entries, games started, continued and finished, the longest sitting and
 streak, the first game of the year, the busiest month and day, the longest
-route, and the five games you spent the most time in. A weekday and hour breakdown shows when the reading
-actually happened. Any year with recorded time can be shared as a 1080 x 1350
-post or a 1080 x 1920 story, generated on the device and saved or sent through
-the system share sheet. An all-time wrapped card sums up the whole library and
-shares the same way.
+route, and the five games you spent the most time in. A weekday and hour breakdown
+shows when reading happened. Any year with recorded time can be shared as a
+1080 x 1350 post or a 1080 x 1920 story, generated on the device and saved or sent
+through the system share sheet. An all-time recap card sums up the whole library
+and shares the same way.
 
-**Timeline.** Your reading journey across every game in one feed: sessions,
+**Timeline.** Your reading log across every game in one feed: sessions,
 journal notes, endings reached and finished games, newest first, grouped by
 day. Covers follow the same content setting as the library, and every row
 opens the game page. A second tab holds your screenshots.
 
 **Screenshots.** One button captures the game you are reading: the game window on
 Windows, the whole screen on Android. On Windows it is also bound to
-`Ctrl+Shift+S`, so you can shoot without leaving the game. Captures are grouped by
-game, open full size, and can be deleted. They stay on the device, but a library
-export carries them so a backup does not lose the pictures.
+`Ctrl+Shift+S`, so you can capture without leaving the game. Captures are grouped by
+game, open full size, and can be deleted. They stay on the device, and a library
+export carries them so a backup keeps your pictures.
 
 **Themes.** Beyond the accent colour, a theme sets the surfaces, text, corners,
 density and glass strength. Four presets ship (Nord, Sepia, Slate, High contrast),
@@ -71,44 +70,42 @@ interface, or you can turn that off.
 
 **Discord Rich Presence.** Optional, off by default. Shows what you are reading,
 rotating through whatever fields you configure. Explicit cover art is blurred
-before it is ever sent anywhere, if you opt into an image host at all.
+before upload if you opt into an image host.
 
 **Walkthroughs.** Pull route choices directly from the Seiya-Saiga index.
 Step-by-step choices, route branches, and ending badges are organized into
-clean tabs, backed by normalized Japanese title search and inline translation
+route tabs, backed by normalized Japanese title search and inline translation
 options.
 
-**Recommendations.** Discover has two tabs. **Ask** uses Tavily and your selected
+**Recommendations.** Recommendations has two tabs. **Ask** uses Tavily and your selected
 chat provider, with links to its sources. **For you** matches VNDB entries against
 your library's tags, studios, writers, illustrators and voice actors, without a
-model or API key. Played and rated games drive the profile — higher ratings (up
-to 10.0) count most strongly, dropped and unrated wishlist games stay out — while
-rare themes carry more weight than widespread tags, shared creators match rare-tag
-scale, and Voices balances across favoured actors instead of repeating one. Each
-card names its matching evidence and a related library game. Taste orders up to
-50 merged matches locally; other sorts follow VNDB. Results form a grid on wider
-windows and one column on narrow screens. Filters cover length, rating, release
-date, language and vote count.
+model or API key. Played and rated games build your profile: higher ratings (up
+to 10.0) carry the most weight, while dropped and unrated wishlist entries stay out.
+Rare themes outweigh broad tags, shared creators match rare-tag scale, and
+Voices spreads matches across favoured actors. Each card names its matching
+evidence and a related library game. Taste orders up to 50 merged matches locally;
+other sorts follow VNDB. Results form a grid on wider windows and one column on
+narrow screens. Filters cover length, rating, release date, language and vote count.
 
 **Sync and backups.** Sync libraries and sessions across devices over a shared
-folder on your local network (LAN) without third-party servers. Or export your
-entire collection into a single `.vn-asyik-library` file with transparent
-conflict review on import.
+folder on your local network (LAN) without third-party servers, or export your
+collection into a single `.vn-asyik-library` file with conflict review on import.
 
 **Command palette.** Press `Ctrl+K` (or `Cmd+K`) anywhere for quick keyboard
-navigation: jump across screens, find any title in your library instantly, and
-trigger common actions.
+navigation: jump across screens, find any title in your library, and trigger
+common actions.
 
 **Background operation & System Tray.** On desktop, hide VN Asyik into the taskbar
 notification area (system tray) using the sidebar button, `Ctrl+Shift+H`, the Command
-Palette, or simply by closing the window ('X'). Playtime tracking and LunaTranslator
+Palette, or by closing the window ('X'). Playtime tracking and LunaTranslator
 text hooking continue in the background while you read your visual novel,
-and the window can be instantly restored by clicking the tray icon.
+and the window returns when you click the tray icon.
 
 **Android.** Playtime comes from `UsageStats` foreground events, which needs the
 Usage Access permission, whether running games natively or inside emulators.
-Android cannot see inside another app's windows, so chapters there are set by
-hand and the app says so rather than guessing.
+Android cannot inspect another app's window, so chapters there are set manually
+and the app states that limit clearly.
 
 While a game stays in the foreground, each periodic check updates one local
 checkpoint. History receives a completed session when that reading stretch ends,
@@ -118,7 +115,7 @@ such as when switching apps, locking the screen, or pressing Stop. Older
 ## Chapters from the window title
 
 On desktop, chapters come from what the game writes in its own window caption:
-no injection, no memory reading, nothing that a game update can break. Siglus
+no injection, no memory reading, and updates to the game do not break it. Siglus
 puts its progress there, and these shapes are verified:
 
 ```text
@@ -128,9 +125,9 @@ anemoi アネモイ Ｃｈａｐｔｅｒ ０１            route アネモイ, 
 ```
 
 Full-width characters are folded before matching, so `Ｄａｙ １` and `Day 1` read
-the same. A caption with no marker (the title screen, a menu) attributes
-nothing rather than inventing a chapter, a bare number is not a chapter, and a
-caption that does not name the game you track is ignored.
+the same. A caption with no marker (the title screen or a menu) records no
+chapter, a bare number is ignored, and a caption that does not name the game
+you track is ignored.
 
 ### Custom pattern
 
@@ -163,16 +160,16 @@ What to know before saving:
 
 - The pattern is not anchored: it matches anywhere in the caption unless you
   write `^` and `$` yourself.
-- A match whose group captured nothing is treated as no match: an empty chapter
-  name is worse than none.
+- A match whose group captured nothing counts as no match, keeping empty chapter
+  names out.
 - Custom patterns do **not** fold full-width characters: `Day` never matches
   `Ｄａｙ`, because they are different characters. For a caption written that way,
   either put those characters in the pattern or leave the source on **Siglus**,
   which folds them.
 - **Test** runs the pattern against the sample caption, prefilled from whichever
   window was in front when the panel opened; edit it to try another. Test
-  before saving: a pattern that never matches looks exactly like a game that
-  writes no chapter, and nothing else in the app can tell them apart.
+  before saving: a pattern that never matches behaves identically to a game that
+  writes no chapter, so only the test step distinguishes them.
 
 **Off** stops reading captions. The choice is stored locally on this device.
 Android never reads captions (the OS does not allow it), so chapters there are
@@ -180,7 +177,7 @@ set by hand.
 
 ## Beta features
 
-Companion, Discover (VN search with an API key), and VN Chat are hidden by
+Companion, Recommendations (VN search with an API key), and VN Chat are hidden by
 default. Enable **Settings → General → Beta features** to show them and their
 setup tools. This choice is local to each device; library imports do not enable it.
 Turning it off pauses the companion, clears window capture, cancels chat replies,
@@ -254,12 +251,11 @@ clear capture. Watching never restarts at app launch. Images stay in memory only
 history retains text labelled as visual inference and minimal source metadata.
 Windows SDR capture is supported; HDR and other platforms report unavailable.
 
-This includes text sessions, friend identities, durable memory, and vision
+This covers text sessions, friend identities, durable memory, and vision
 with occasional reactions. Voice remains planned. Android does
 not guarantee background operation; keep the app open there.
 
-The chat is not a general assistant bolted onto a library. It can read two
-things and cite them:
+VN Chat works from your library context and cites its sources:
 
 - **Live text.** Text LunaTranslator extracted from the game you are playing
   right now.
@@ -270,8 +266,8 @@ things and cite them:
 Compaction is a map-reduce over the script split into byte-budgeted chunks. Up
 to 10 agents summarize contiguous segments in parallel, each carrying the tail
 of its own previous outline for continuity, then their segment digests merge
-into one. Progress is saved per chunk, so closing the app mid-run and coming
-back resumes where it stopped instead of starting over.
+into one. Progress is saved per chunk, so closing the app mid-run and returning
+later resumes from the last saved chunk.
 
 Digests are withheld unless the chat's spoiler level is set to _All_. Ordinary
 chat can read live text at every spoiler level; companion sessions additionally
@@ -279,11 +275,11 @@ withhold captured dialogue in **Metadata only** mode.
 
 ### Providers
 
-Settings keeps a list of saved providers rather than one endpoint: a name, an
-OpenAI-compatible base URL and a model each. The keys live in the OS credential
-store, one slot per provider, never in the database or a config file, and
-switching provider does not mean retyping a key. The one setting that existed
-before this list is migrated into a profile on first run, key included.
+Settings stores a list of saved providers: a name, an OpenAI-compatible base URL
+and a model each. The keys live in the OS credential store, one slot per provider,
+never in the database or a config file, so switching provider avoids retyping a
+key. Any single-endpoint config from earlier versions migrates into a profile on
+first run, key included.
 
 Two endpoints are known to work through the compatibility layer:
 
@@ -297,17 +293,17 @@ the key in clear text.
 
 ## What it will not do
 
-Some of this is a platform limit and some is a decision, but either way the app
-tells you rather than pretending.
+Some of this is a platform limit and some is a design decision; either way, the app
+states those limits directly.
 
 - **No chapter detection on Android.** The OS does not let one app inspect
   another's window. Chapter and route are manual there.
 - **No automatic tracking on a pure Wayland session.** Wayland does not let one
   app see another's windows, so focus and window titles are out of reach. Visual
-  novels that run through XWayland are tracked normally; a native Wayland window
-  is not. The app says which case you are in instead of quietly counting nothing.
+  novels that run through XWayland are tracked normally; native Wayland windows
+  are not, and the app tells you when that happens.
 - **Screenshots on Android need a screen-casting permission.** Android captures
-  the whole screen, not one window, and asks you to allow it first.
+  the whole display and asks you to allow it first.
 - **The app never writes to a running game.** It does not patch files, re-inject
   translated text, or touch DRM.
 - **No telemetry.** No analytics, no crash reporting, no phone-home. The only
@@ -387,8 +383,7 @@ that in commands, storage and platform adapters. `src/` is the React frontend an
 talks to the backend only through `src/lib/ipc`.
 
 Comments in the code explain _why_ a rule exists where the rule is not obvious,
-so the reasoning travels with the code rather than living in a separate
-document.
+keeping the reasoning next to the implementation.
 
 ## Prior art and attribution
 
@@ -406,8 +401,8 @@ executable, and its upload of cover art without a separate opt-in.
 
 **[dead8309/Kizzy](https://github.com/dead8309/Kizzy)** (GPL-3.0, inspiration).
 The reference for talking to Discord on Android, where the desktop IPC socket
-does not exist. The Android presence path connects to the Discord Gateway
-directly instead, which is the approach Kizzy demonstrated. No code is shared.
+does not exist. The Android presence path connects directly to the Discord Gateway,
+matching the approach Kizzy demonstrated. No code is shared.
 
 **[Yukin0a/KireiBox](https://github.com/Yukin0a/KireiBox)** (GPL-3.0, inspiration).
 A reference for how Android VN launchers approach externally installed engines.

@@ -6,119 +6,112 @@ Rust dan Tauri di sisi belakang, React di sisi depan.
 
 [English](README.md) · **Bahasa Indonesia**
 
-![Kisi pustaka, menampilkan gim yang sudah diimpor beserta kover dan waktu bacanya](src/assets/guide/library.jpg)
+![Kisi pustaka, menampilkan game yang sudah diimpor beserta kover dan waktu bacanya](src/assets/guide/library.jpg)
 
 ## Yang bisa dilakukan
 
-**Pustaka.** Cari di VNDB lalu impor gim lengkap dengan kover, tag, rating, dan
+**Pustaka.** Cari di VNDB lalu impor game lengkap dengan kover, tag, rating, dan
 galeri tangkapan layarnya. Tampilan bisa kisi, daftar, atau rak; ketiganya
 divirtualisasi supaya tetap ringan. Kover eksplisit tetap tertutup di balik
 permukaan netral sampai kamu minta melihatnya, dan mengubah pengaturan itu
 menutupnya kembali.
 
-**Waktu baca.** Jalankan gim dari aplikasi dan waktu bacamu dicatat. Waktu hanya
-dianggap berjalan selama jendela gim ada di depanmu; jeda yang melewati ambang
-tertentu dicatat terpisah sebagai waktu pergi, bukan waktu baca, dan keduanya
-bisa kamu lihat sendiri-sendiri. Sesi ditulis tiap 20 detik, jadi crash atau
-reboot paksa kehilangan hitungan detik, bukan sepanjang malam.
+**Waktu baca.** Jalankan game dari aplikasi untuk mencatat durasi bacamu. Waktu
+hanya dihitung selama jendela game ada di depan; jeda yang melewati ambang
+tertentu dicatat terpisah sebagai waktu pergi, dan keduanya bisa kamu lihat
+masing-masing. Sesi ditulis tiap 20 detik, sehingga crash atau reboot paksa
+paling banyak kehilangan hitungan 20 detik.
 
-**Jurnal baca.** Kartu **Terakhir sampai mana?** di halaman gim menampilkan sesi
+**Jurnal baca.** Kartu **Terakhir sampai mana?** di halaman game menampilkan sesi
 baca terakhir dan posisi bab/rute yang tercatat. Simpan catatan per sesi serta
-penanda save slot manual, edit atau hapus entri, serta akses pintasan ke panduan.
+penanda save slot manual, edit atau hapus entri, dan buka pintasan ke panduan.
 Buka sesi mana pun di riwayat untuk melihat waktu, rute/bab yang tercatat, dan
-semua penandanya, atau menambahkan catatan ke sesi lama tersebut. Tombol sesi
+semua penandanya, atau tambahkan catatan ke sesi lama tersebut. Tombol sesi
 lebih lama/baru membuka seluruh riwayat per 50 sesi, dengan cuplikan catatan pada setiap sesi.
 Jurnal ikut backup dan sinkronisasi pustaka. Save slot hanya pengingat; aplikasi
 tidak memuat atau mengubah save game.
 
-**Big Picture.** Peluncur layar penuh dengan judul dan artwork gim terpilih serta
+**Big Picture.** Peluncur layar penuh dengan judul dan artwork game terpilih serta
 deretan kover yang ringkas. Klik kover untuk memilih, lalu Mainkan atau Enter
 untuk meluncurkan. Keyboard dan stik menjangkau seluruh koleksi; hanya kelompok
-kover yang terlihat yang dirender. Buka dari library atau dengan Ctrl+Shift+B.
+kover yang terlihat yang dirender. Buka dari pustaka atau dengan Ctrl+Shift+B.
 
 **Rute dan ending.** Rute sepenuhnya milikmu: kamu yang memberi nama, dan ending
 menggantung padanya. Deteksi bab membaca judul jendela game saat engine-nya
 menuliskannya (lihat [Bab dari judul jendela](#bab-dari-judul-jendela)), dan
-jatuh ke atribusi tingkat gim saat tidak ada, jawaban yang jujur untuk gim yang
-tidak melaporkan apa pun.
+memakai atribusi tingkat game saat judul jendela tidak melaporkan bab.
 
-**Statistik.** Waktu baca per gim, per rute, dan per bulan, dihitung dari
+**Statistik.** Waktu baca per game, per rute, dan per bulan, dihitung dari
 sesinya sendiri. Peta panas hari baca dengan streak baca saat ini dan
 terpanjang, plus kartu rekap tahunan yang merangkum tahun mana pun yang punya
-catatan: waktu membaca, hari membaca, akhir yang dicapai, catatan jurnal, gim
-yang dimulai, dilanjutkan, dan diselesaikan, sesi dan streak terpanjang, gim
-pertama tahun itu, bulan dan hari tersibuk, rute terlama, dan lima gim dengan
-waktu terbanyak. Rincian
-hari dan jam menunjukkan kapan bacaan itu benar-benar terjadi. Tahun mana pun
-yang punya catatan bisa dibagikan sebagai postingan 1080 x 1350 atau story
-1080 x 1920, dibuat di perangkat lalu disimpan atau dikirim lewat lembar
+catatan: waktu membaca, hari membaca, akhir yang dicapai, catatan jurnal, game
+yang dimulai, dilanjutkan, dan diselesaikan, sesi dan streak terpanjang, game
+pertama tahun itu, bulan dan hari tersibuk, rute terlama, dan lima game dengan
+waktu terbanyak. Rincian hari dan jam menunjukkan kapan kamu membaca. Tahun
+mana pun yang punya catatan bisa dibagikan sebagai postingan 1080 x 1350 atau
+story 1080 x 1920, dibuat di perangkat lalu disimpan atau dikirim lewat lembar
 berbagi sistem. Kartu rekap sepanjang masa merangkum seluruh koleksi dan
 dibagikan dengan cara yang sama.
 
-**Lini Masa.** Perjalanan membaca dari semua gim dalam satu aliran: sesi,
-catatan jurnal, akhir yang dicapai, dan gim yang selesai, terbaru dulu,
+**Lini Masa.** Log membaca dari semua game dalam satu aliran: sesi,
+catatan jurnal, akhir yang dicapai, dan game yang selesai, terbaru dulu,
 dikelompokkan per hari. Kover mengikuti pengaturan konten yang sama dengan
-koleksi, dan setiap baris membuka halaman gim. Tab kedua berisi screenshot Anda.
+koleksi, dan setiap baris membuka halaman game. Tab kedua berisi screenshot kamu.
 
-**Screenshot.** Satu tombol merekam gim yang sedang dibaca: jendela gim di
+**Screenshot.** Satu tombol merekam game yang sedang dibaca: jendela game di
 Windows, seluruh layar di Android. Di Windows juga terikat ke `Ctrl+Shift+S`,
-jadi kamu bisa merekam tanpa keluar dari gim. Hasilnya dikelompokkan per gim,
-bisa dibuka penuh dan dihapus. Semuanya tetap di perangkat ini, tetapi ekspor
-pustaka membawanya agar cadangan tidak kehilangan gambarnya.
+sehingga kamu bisa merekam tanpa keluar dari game. Hasilnya dikelompokkan per game,
+bisa dibuka penuh, dan bisa dihapus. Semuanya tetap di perangkat ini, dan ekspor
+pustaka menyertakannya agar cadangan tetap menyimpan gambarmu.
 
 **Tema.** Selain warna aksen, tema menentukan permukaan, teks, sudut, kerapatan,
 dan kekuatan kaca. Ada empat preset (Nord, Sepia, Slate, High contrast), atau
 buat sendiri dengan pembacaan kontras langsung yang menjaga teks isi tetap AA.
-Tema bisa diekspor dan diimpor sebagai file JSON kecil. Gim yang sedang dibuka
-masih bisa mewarnai antarmuka, atau kamu matikan.
+Tema bisa diekspor dan diimpor sebagai file JSON kecil. Game yang sedang dibuka
+masih bisa mewarnai antarmuka, atau bisa dimatikan.
 
 **Discord Rich Presence.** Opsional, mati secara bawaan. Menampilkan apa yang
 sedang kamu baca, bergiliran sesuai kolom yang kamu atur. Kover eksplisit
-diblur dulu sebelum dikirim ke mana pun, kalau kamu memang mengaktifkan host
-gambar.
+diblur sebelum diunggah kalau kamu mengaktifkan host gambar.
 
 **Panduan rute.** Ambil panduan pilihan rute langsung dari indeks
-Seiya-Saiga. Langkah pilihan, rute, dan lencana ending disajikan rapi per
-tab, lengkap dengan pencarian judul Jepang yang dinormalisasi dan opsi
+Seiya-Saiga. Langkah pilihan, rute, dan lencana ending disajikan per
+tab rute, lengkap dengan pencarian judul Jepang yang dinormalisasi dan opsi
 terjemahan.
 
-**Rekomendasi bacaan.** Discover punya dua tab. **Tanya** memakai Tavily dan
+**Rekomendasi bacaan.** Layar **Rekomendasi** punya dua tab. **Tanya** memakai Tavily dan
 penyedia chat pilihanmu, lengkap dengan tautan sumber. **Untukmu** mencocokkan
-entri VNDB dengan tag, studio, penulis, ilustrator dan pengisi suara dari
-pustakamu, tanpa model atau kunci API. Gim yang dimainkan dan diberi nilai tinggi
-(hingga 10,0) berpengaruh paling besar, gim dropped maupun wishlist tanpa nilai
-diabaikan, tema spesifik serta kreator yang sama berbobot lebih besar daripada tag
-umum, dan tab Seiyuu menyeimbangkan berbagai aktor favorit agar tidak didominasi
-satu nama. Setiap kartu menyebut bukti kecocokan dan gim pustaka yang terkait.
-Urutan Selera merangking maksimal 50 kandidat gabungan secara lokal; urutan lainnya
-mengikuti VNDB. Kartu tampil beberapa per baris di jendela lebar dan satu kolom di
-layar sempit. Filter mencakup durasi, nilai, tanggal rilis, bahasa dan jumlah
-suara.
+entri VNDB dengan tag, studio, penulis, ilustrator, dan pengisi suara dari
+pustakamu, tanpa model atau kunci API. Game yang dimainkan dan diberi nilai tinggi
+(hingga 10,0) berpengaruh paling besar, sementara game dropped maupun wishlist tanpa
+nilai diabaikan. Tema spesifik dan kreator yang sama berbobot lebih besar daripada
+tag umum, dan tab Seiyuu menyeimbangkan berbagai aktor favorit. Setiap kartu menyebut
+bukti kecocokan serta game pustaka terkait. Urutan Selera merangking maksimal 50 kandidat
+gabungan secara lokal; urutan lainnya mengikuti VNDB. Kartu tampil dalam kisi pada
+jendela lebar dan satu kolom di layar sempit. Filter mencakup durasi, nilai, tanggal
+rilis, bahasa, dan jumlah suara.
 
 **Sinkronisasi dan cadangan.** Selaraskan pustaka dan sesi baca antarperangkat
-lewat folder bersama di jaringan lokal (LAN) tanpa bergantung pada server pihak
-ketiga. Pustaka lengkap juga bisa diekspor ke satu berkas `.vn-asyik-library`
-untuk dipindahkan atau dipulihkan kapan saja dengan penanganan konflik yang
-transparan.
+lewat folder bersama di jaringan lokal (LAN) tanpa server pihak ketiga, atau
+ekspor seluruh pustaka ke satu berkas `.vn-asyik-library` dengan peninjauan
+konflik saat impor.
 
 **Akses cepat.** Tekan `Ctrl+K` (atau `Cmd+K`) kapan saja untuk membuka palet
 perintah: cari judul di pustaka seketika, pindah layar, atau kendalikan pelacakan
-tanpa menyentuh mouse.
+dengan keyboard.
 
 **Latar belakang & System Tray.** Di desktop, jendela VN Asyik dapat disembunyikan
 ke taskbar notification area (system tray) lewat tombol samping, pintasan
-`Ctrl+Shift+H`, Command Palette, atau dengan menutup jendela ('X'). Pelacakan
-waktu bermain dan text hook LunaTranslator tetap berjalan di latar belakang tanpa
-mengganggu visual novel yang sedang dibaca, dan jendela dapat dipanggil kembali
-dengan sekali klik pada ikon tray.
+`Ctrl+Shift+H`, Command Palette, atau menutup jendela ('X'). Pelacakan
+waktu bermain dan text hook LunaTranslator tetap berjalan di latar belakang selama
+kamu membaca, dan jendela dapat dibuka kembali dengan mengklik ikon tray.
 
 **Android.** Waktu baca diambil dari event foreground `UsageStats`, yang butuh
-izin Usage Access, baik untuk gim langsung maupun yang dijalankan lewat
-emulator. Android tidak bisa melihat isi jendela aplikasi lain, jadi bab di
-sana diatur manual dan aplikasi mengatakannya terang-terangan alih-alih
-menebak.
+izin Usage Access, baik untuk game langsung maupun yang dijalankan lewat
+emulator. Android tidak bisa melihat isi jendela aplikasi lain, sehingga bab
+diatur manual dan aplikasi menyampaikan batasan tersebut secara langsung.
 
-Selama gim tetap di depan, pemeriksaan berkala memperbarui satu checkpoint lokal.
+Selama game tetap di depan, pemeriksaan berkala memperbarui satu checkpoint lokal.
 Riwayat mendapat satu sesi selesai ketika rentang baca berakhir, misalnya saat
 berpindah aplikasi, mengunci layar, atau menekan Stop. Potongan riwayat 15 detik
 yang sudah tersimpan tetap dipertahankan; perbaikan berlaku untuk rekaman baru.
@@ -126,7 +119,7 @@ yang sudah tersimpan tetap dipertahankan; perbaikan berlaku untuk rekaman baru.
 ## Bab dari judul jendela
 
 Di desktop, bab diambil dari apa yang ditulis game di judul jendelanya sendiri:
-tanpa injeksi, tanpa membaca memori, dan tidak rusak saat game di-update. Siglus
+tanpa injeksi, tanpa membaca memori, dan pembaruan game tidak merusaknya. Siglus
 menaruh progresnya di sana, dan bentuk-bentuk ini sudah terverifikasi:
 
 ```text
@@ -136,9 +129,9 @@ anemoi アネモイ Ｃｈａｐｔｅｒ ０１            rute アネモイ, b
 ```
 
 Karakter full-width dilipat dulu sebelum dicocokkan, jadi `Ｄａｙ １` dan
-`Day 1` dibaca sama. Judul tanpa penanda (layar judul, menu) tidak
-menghasilkan apa pun daripada mengarang bab; angka telanjang bukan bab; dan
-judul yang tidak menyebut nama game yang sedang dilacak diabaikan.
+`Day 1` dibaca sama. Judul tanpa penanda (layar judul atau menu) tidak mencatat
+bab apa pun, angka telanjang diabaikan, dan judul yang tidak menyebut nama game
+yang sedang dilacak ikut diabaikan.
 
 ### Pola khusus
 
@@ -171,17 +164,17 @@ Yang perlu diketahui sebelum menyimpan:
 
 - Pola tidak di-anchor: pola itu cocok di mana pun dalam judul kecuali kamu
   menulis `^` dan `$` sendiri.
-- Kecocokan yang grupnya menangkap string kosong dianggap tidak cocok, nama bab
-  kosong lebih buruk daripada tidak ada bab.
+- Kecocokan yang grupnya menangkap string kosong dianggap tidak cocok, sehingga
+  nama bab kosong tidak pernah tersimpan.
 - Pola khusus **tidak** melipat karakter full-width: `Day` tidak pernah cocok
   dengan `Ｄａｙ`, karena keduanya karakter berbeda. Untuk caption yang ditulis
   begitu, tulis karakter tersebut di polanya, atau biarkan sumbernya di
   **Siglus** yang melipatnya.
 - **Uji** menjalankan pola pada judul contoh, yang sudah terisi dari jendela
   yang ada di depan saat panel dibuka; ubah isinya untuk mencoba judul lain.
-  Uji dulu sebelum menyimpan: pola yang tidak pernah cocok terlihat persis
-  seperti game yang tidak menulis bab, dan tidak ada bagian lain di app yang
-  bisa membedakannya.
+  Uji dulu sebelum menyimpan: pola yang tidak pernah cocok berperilaku persis
+  sama seperti game yang tidak menulis bab, sehingga hanya pengujian yang dapat
+  membedakannya.
 
 **Mati** berhenti membaca judul sama sekali. Pilihannya disimpan lokal di
 perangkat ini. Android tidak pernah membaca judul jendela (OS tidak
@@ -189,7 +182,7 @@ mengizinkannya), jadi bab di sana diisi manual.
 
 ## Fitur Beta
 
-Teman baca, Temukan (pencarian VN dengan kunci API), dan Chat VN tersembunyi secara
+Teman baca, Rekomendasi (pencarian VN dengan kunci API), dan Chat VN tersembunyi secara
 bawaan. Aktifkan **Pengaturan → Umum → Fitur Beta** untuk menampilkan fitur dan
 alat pengaturannya. Pilihan ini berlaku lokal per perangkat; impor pustaka tidak
 mengaktifkannya. Menonaktifkannya menjeda teman baca, menghentikan tangkapan
@@ -275,10 +268,9 @@ Ini mencakup sesi teks, identitas teman, ingatan berkelanjutan, serta
 penglihatan dan reaksi sesekali. Suara masih direncanakan. Android tidak
 menjamin proses tetap berjalan di latar belakang; biarkan aplikasi terbuka di sana.
 
-Obrolan ini bukan asisten umum yang ditempel ke pustaka. Ia bisa membaca dua hal
-dan menyebut sumbernya:
+Chat VN bekerja langsung dari konteks pustakamu dan mencantumkan sumbernya:
 
-- **Teks langsung.** Teks yang diekstrak LunaTranslator dari gim yang sedang
+- **Teks langsung.** Teks yang diekstrak LunaTranslator dari game yang sedang
   kamu mainkan.
 - **Skrip hasil impor.** Masukkan skrip yang kamu ekstrak sendiri: teks biasa,
   array JSON nama/pesan, atau format JSON Asyik. Aplikasi merangkumnya
@@ -287,8 +279,8 @@ dan menyebut sumbernya:
 Perangkuman berjalan sebagai map-reduce atas skrip yang dipecah per anggaran
 byte. Sampai 10 agen merangkum segmen berurutan secara paralel, masing-masing
 membawa ekor ringkasan sebelumnya sebagai konteks, lalu digest tiap segmen
-digabung jadi satu. Kemajuannya disimpan per potongan, jadi menutup aplikasi di
-tengah jalan lalu kembali lagi akan melanjutkan, bukan mengulang dari nol.
+digabung jadi satu. Kemajuannya disimpan per potongan, sehingga menutup aplikasi
+di tengah jalan akan melanjutkan dari potongan terakhir yang tersimpan.
 
 Digest ditahan kecuali tingkat spoiler obrolan disetel ke _All_. Chat biasa
 dapat membaca teks langsung pada semua tingkat spoiler; sesi teman baca juga
@@ -296,12 +288,12 @@ menahan dialog tangkapan dalam mode **Metadata saja**.
 
 ### Penyedia
 
-Pengaturan menyimpan daftar penyedia, bukan satu endpoint saja: masing-masing
-berisi nama, base URL yang kompatibel dengan OpenAI, dan model. Kuncinya tinggal
-di credential store sistem, satu slot per penyedia, tidak pernah di database atau
-file konfigurasi, dan berpindah penyedia tidak berarti mengetik ulang kunci.
-Setelan tunggal yang ada sebelum daftar ini otomatis jadi satu profil saat
-pertama dijalankan, lengkap dengan kuncinya.
+Pengaturan menyimpan daftar beberapa penyedia: masing-masing berisi nama, base URL
+yang kompatibel dengan OpenAI, dan model. Kuncinya disimpan di credential store
+sistem (satu slot per penyedia, tanpa disimpan di database atau file konfigurasi),
+sehingga berpindah penyedia tidak meminta pengetikan ulang kunci. Setelan tunggal
+dari versi lama otomatis dipindahkan menjadi satu profil saat pertama dijalankan,
+lengkap dengan kuncinya.
 
 Dua endpoint yang sudah terbukti jalan lewat lapisan kompatibilitas:
 
@@ -315,23 +307,23 @@ terkirim tanpa enkripsi.
 
 ## Yang tidak akan dilakukan
 
-Sebagian karena batas platform, sebagian karena memang diputuskan begitu; tapi
-apa pun alasannya, aplikasi mengatakannya, bukan berpura-pura.
+Sebagian berasal dari batasan platform dan sebagian merupakan keputusan desain;
+keduanya ditampilkan apa adanya oleh aplikasi.
 
 - **Tidak ada pelacakan otomatis di sesi Wayland murni.** Wayland tidak
   mengizinkan satu aplikasi melihat jendela aplikasi lain, jadi fokus dan judul
   jendela tidak terjangkau. Visual novel yang berjalan lewat XWayland tetap
-  terlacak normal; jendela Wayland asli tidak. Aplikasi menyebutkan kamu di
-  kasus yang mana, bukan diam-diam tidak menghitung apa pun.
+  terlacak normal, sedangkan jendela Wayland asli tidak, dan aplikasi akan memberi
+  tahu kondisinya.
 - **Screenshot di Android butuh izin pencerminan layar.** Android merekam
-  seluruh layar, bukan satu jendela, dan meminta izin dulu.
+  seluruh layar lalu meminta izin lebih dulu.
 - **Tidak ada deteksi bab di Android.** Sistem operasi tidak mengizinkan satu
   aplikasi memeriksa jendela aplikasi lain. Bab dan rute diatur manual.
-- **Aplikasi tidak pernah menulis ke gim yang sedang berjalan.** Tidak menambal
+- **Aplikasi tidak pernah menulis ke game yang sedang berjalan.** Tidak menambal
   berkas, tidak menyuntik ulang teks terjemahan, tidak menyentuh DRM.
 - **Tanpa telemetri.** Tidak ada analitik, tidak ada pelaporan crash, tidak ada
-  laporan pulang ke siapa pun. Koneksi jaringan hanya yang kamu nyalakan sendiri:
-  VNDB, Discord, penyedia obrolan pilihanmu, dan Tavily kalau kamu minta
+  pengiriman data latar belakang. Koneksi jaringan hanya yang kamu nyalakan
+  sendiri: VNDB, Discord, penyedia obrolan pilihanmu, dan Tavily kalau kamu minta
   rekomendasi yang butuh internet terbuka.
 
 ## Pemasangan
@@ -370,7 +362,7 @@ sebagai aplikasi lain: ia terpasang di samping yang lama dengan pustaka kosong.
   impor di build ini.
 - **Windows:** pustakanya ada di `%APPDATA%\com.atho.vnasyik\`. Salin foldernya
   dari `%APPDATA%\app.vntracker.desktop\` sebelum menjalankan yang baru, dan
-  gim, sesi, serta pengaturannya ikut pindah.
+  game, sesi, serta pengaturannya ikut pindah.
 
 ## Pengembangan
 
@@ -407,9 +399,9 @@ tanpa panggilan OS, jadi bisa dites dengan `cargo test` biasa. `src-tauri/src`
 membungkusnya jadi command, penyimpanan, dan adapter platform. `src/` adalah
 frontend React yang hanya bicara ke backend lewat `src/lib/ipc`.
 
-Komentar di kode menjelaskan _kenapa_ sebuah aturan ada, di tempat yang tidak
-jelas dengan sendirinya, supaya alasannya ikut bersama kodenya alih-alih pindah
-ke dokumen terpisah.
+Komentar di kode menjelaskan _kenapa_ sebuah aturan ada di tempat yang tidak
+jelas dengan sendirinya, agar penjelasannya menyatu langsung di dekat kode
+implementasinya.
 
 ## Karya yang mendahului dan atribusi
 
@@ -428,8 +420,8 @@ kover tanpa persetujuan tersendiri.
 
 **[dead8309/Kizzy](https://github.com/dead8309/Kizzy)** (GPL-3.0, inspirasi).
 Rujukan untuk bicara ke Discord di Android, tempat soket IPC desktop tidak ada.
-Jalur presence Android langsung terhubung ke Discord Gateway, pendekatan yang
-ditunjukkan Kizzy. Tidak ada kode yang dipakai bersama.
+Jalur presence Android langsung terhubung ke Discord Gateway, sesuai pendekatan
+yang ditunjukkan Kizzy. Tidak ada kode yang dipakai bersama.
 
 **[Yukin0a/KireiBox](https://github.com/Yukin0a/KireiBox)** (GPL-3.0, inspirasi).
 Rujukan bagaimana peluncur VN Android menyikapi mesin yang terpasang terpisah.
@@ -438,7 +430,7 @@ yang dipasang sendiri; VN Asyik mengambil jalur kedua dan tidak membundel apa pu
 
 **[LunaTranslator](https://github.com/HIllya51/LunaTranslator)** (GPL-3.0, terintegrasi).
 Tersambung lewat layanan jaringannya yang terdokumentasi: endpoint websocket
-mengalirkan teks hasil ekstraksi sebagai frame teks biasa, yang dikonsumsi
+mengirimkan teks hasil ekstraksi sebagai frame teks biasa, yang dikonsumsi
 aplikasi ini. Tidak ada kode yang disalin; integrasinya adalah klien untuk API
 yang terdokumentasi.
 
