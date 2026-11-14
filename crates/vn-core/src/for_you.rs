@@ -1,16 +1,11 @@
 //! "For you": ranking VNDB candidates against the library's own taste.
 //!
-//! Deterministic like [`crate::taste`]: no model, no network in here, and
-//! every score is a sum a user could redo by hand. The seeds describe the
-//! library — which themes, studios, people and voices recur across its games —
-//! and the candidates are what VNDB returned for a filter built from those
-//! seeds. This module only ever counts overlaps; it never invents one.
+//! Deterministic like [`crate::taste`]: every score sums library seed overlaps
+//! (recurring themes, studios, staff, voices) against VNDB query candidates.
 //!
 //! # Spoilers
 //!
-//! As in [`crate::taste`], spoiler tags are excluded, and so are candidates
-//! matched *only* by a spoiler tag: a recommendation may name the themes a
-//! library repeats, never the twist it spoiled.
+//! Spoiler tags are excluded, as are candidates matched *only* by a spoiler tag.
 
 use serde::{Deserialize, Serialize};
 
@@ -18,10 +13,7 @@ use crate::taste::{
     BOILERPLATE_BELOW, MINIMUM_COUNT, NamedEntity, ProfiledGame, StaffCredit, TagWeight,
 };
 
-/// A game rated at least this high (8.0 on the 10-point scale the library
-/// stores as decivotes) begins scaling up its seed weight. "Liked" is the claim
-/// the panel makes, and the user's own rating is the only evidence of liking
-/// there is.
+/// Minimum rating (8.0 on the decivote scale) where a game scales up its seed weight.
 pub(crate) const LIKED_RATING: u8 = 80;
 /// Rating (9.0 on the 10-point scale) where standout favourites unlock higher
 /// weights and can carry single-game studio/theme seeds.
@@ -39,8 +31,7 @@ const CREATOR_SCORE_FACTOR: f32 = 3.0;
 /// gets a spotlight before one prolific actor repeats.
 const VOICE_REPEAT_PENALTY: f32 = 1.0;
 
-/// Seeds below this many usable games do not query VNDB at all. Three is the
-/// smallest set from which "on several games" can mean more than "once".
+/// Seeds below this many usable games do not query VNDB at all (minimum for "several games").
 pub(crate) const MINIMUM_SEEDS: usize = 3;
 
 /// How many seeds of each kind to keep, strongest first.
@@ -49,44 +40,28 @@ const MAX_DEVELOPER_SEEDS: usize = 10;
 const MAX_STAFF_SEEDS: usize = 20;
 const MAX_VOICE_SEEDS: usize = 16;
 
-/// The staff roles that seed the query: who wrote the game and who drew it.
-///
-/// A director or composer credit recurs across a studio's whole output and
-/// would pull in everything they shipped; the reader asked for authors and
-/// illustrators. All roles stay stored so a future signal needs no re-fetch.
+/// Staff roles that seed the query (writers and artists; directors/composers span whole catalogues).
+/// All roles stay stored so future signals need no re-fetch.
 pub(crate) const SEED_STAFF_ROLES: [&str; 2] = ["scenario", "art"];
 
-/// VNs in VNDB's catalogue, measured 2026-11-13 with a `count: true` query
-/// (67,911). The exact figure drifts daily; the log scale below does not care.
+/// Approximate VNDB catalogue size (measured 2026-11-13: 67,911) used on log scale.
 pub(crate) const CATALOGUE_VNS: f64 = 68_000.0;
 
-/// The assumed tag breadth when the catalogue lookup was unavailable. A
-/// middle-of-the-road guess (neither rare nor universal), not a claim.
+/// Fallback tag breadth when the catalogue lookup is unavailable.
 pub(crate) const UNKNOWN_TAG_COUNT: f64 = 3_000.0;
 
-/// Tags carried by at least this many VNs are catalogue plumbing, not taste:
-/// measured on a real seed set, `ADV` (36,329), `Male Protagonist` (23,226)
-/// and `Romance` (20,367) sit on a third of the catalogue and or-ing them
-/// into the VNDB filter made the results read as "the most-voted VNs". They
-/// may still score a little and appear in the panel, but they do not drive
-/// the query.
+/// Tags on >= this many VNs (e.g. `ADV` 36,329, `Male Protagonist` 23,226, `Romance` 20,367)
+/// still score lightly in-panel but do not drive the VNDB query filter.
 pub(crate) const FILTER_SATURATION: u64 = 10_000;
 
-/// How much harder a shared person explains a match than a shared theme,
-/// in the "Because you liked X" arithmetic alone. A shared studio or writer
-/// is a direct line from the candidate to one game; a shared theme is a
-/// weaker, more replaceable link.
+/// Extra weight for a shared studio/writer in "Because you liked X" (direct links beat themes).
 pub(crate) const CREATOR_EXPLANATION_BOOST: f32 = 2.0;
 
-/// Which seed categories may score a candidate.
-///
-/// The VNDB `staff` filter matches voice-acting credits too, so without a
-/// scope a candidate could land in the Staff tab purely because someone in
-/// it *voiced* a seed game — a match the card could not even explain. Each
-/// tab scores only its own evidence and drops candidates it cannot explain.
+/// Restricts scoring to one tab's categories and drops unexplainable matches
+/// (e.g. VNDB's `staff` filter also returns voice credits, which belong in Voices only).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RankScope {
-    /// Tags, developers and staff — the default "Combined" view.
+    /// Tags, developers, and staff (default "Combined" view).
     Combined,
     /// Tags only.
     Tags,
@@ -136,12 +111,14 @@ pub struct SeedSignal {
     pub name: String,
     /// Summed seed weight of the games carrying it.
     pub weight: f32,
-    /// How many distinct games carry it — the number the panel shows.
+    /// Distinct games carrying this signal (shown in the panel).
     pub count: usize,
-    /// For tags: how many VNs in the whole catalogue carry the tag. Filled by
-    /// the caller from a batched `POST /tag` lookup; `None` only when the
-    /// lookup was unavailable, which falls back to a neutral middle weight
-    /// rather than pretending the tag is rare or universal.
+    /// Capped titles behind `count` so claims match the shelf (after collapsing
+    /// duplicate works, matching `crate::taste::Theme::examples`).
+    #[serde(default)]
+    pub examples: Vec<String>,
+    /// Catalogue-wide VN count for tags from `POST /tag`; `None` falls back to
+    /// a neutral middle weight when the lookup was unavailable.
     #[serde(default)]
     pub vn_count: Option<u64>,
 }
@@ -215,7 +192,7 @@ pub struct Candidate {
 pub struct Ranked {
     /// VN id, mirroring the candidate's, so a card can be joined back.
     pub id: String,
-    /// Summed match weight. A count, not a probability — higher is stronger.
+    /// Summed match weight (a weighted count, not a probability; higher is stronger).
     pub score: f32,
     /// The seed game this candidate overlaps most, for "Because you liked X".
     pub because: Option<String>,
@@ -261,13 +238,8 @@ fn usable_staff(credit: &StaffCredit) -> bool {
     SEED_STAFF_ROLES.contains(&credit.role.as_str())
 }
 
-/// Build the seeds from the library.
-///
-/// Duplicate entries for one work collapse exactly as [`crate::taste::profile`]
-/// collapses them: two titles for one game must not double a signal. A game
-/// with no usable signal at all contributes nothing, but is not silently
-/// hidden — `considered` counts only what actually contributed, and the
-/// caller can compare it against the library size.
+/// Builds library seeds after collapsing duplicate works like [`crate::taste::profile`];
+/// `considered` counts only games that contributed at least one usable signal.
 #[must_use]
 pub fn for_you_seeds(games: &[ProfiledGame]) -> ForYouSeeds {
     // Collapse duplicate works, keeping the first entry, like taste does.
@@ -318,39 +290,48 @@ struct SeedTallies {
     voices: Tally,
 }
 
-/// One signal's evidence: id, display name, summed seed weight, and how many
-/// distinct games carry it.
-type Tally = Vec<(String, String, f32, usize)>;
+/// One signal's evidence: id, display name, summed seed weight, how many
+/// distinct games carry it, and up to [`MAX_SIGNAL_EXAMPLES`] of those games'
+/// titles.
+type Tally = Vec<(String, String, f32, usize, Vec<String>)>;
+
+/// How many example titles a seed signal keeps, as
+/// `crate::taste::Theme::examples` does for themes.
+const MAX_SIGNAL_EXAMPLES: usize = 3;
 
 /// Record one game's weight behind a signal. One game counts once per signal
 /// id even if its row lists a credit twice.
-fn tally(tally: &mut Tally, id: &str, name: &str, weight: f32) {
+fn tally(tally: &mut Tally, id: &str, name: &str, weight: f32, title: &str) {
     match tally.iter_mut().find(|(existing, ..)| existing == id) {
-        Some((_, _, sum, count)) => {
+        Some((_, _, sum, count, examples)) => {
             *sum += weight;
             *count += 1;
+            if examples.len() < MAX_SIGNAL_EXAMPLES {
+                examples.push(title.to_owned());
+            }
         }
-        None => tally.push((id.to_owned(), name.to_owned(), weight, 1)),
+        None => tally.push((
+            id.to_owned(),
+            name.to_owned(),
+            weight,
+            1,
+            vec![title.to_owned()],
+        )),
     }
 }
 
-/// Reduce a tally to seed signals, strongest first: summed weight, then
-/// distinct-game count, then name, so the output is stable between runs
-/// exactly as taste's themes are. A signal one game carries is a coincidence,
-/// not a pattern — the same rule as `MINIMUM_COUNT` in taste.
-/// Order seeds by accumulated weight descending, then distinct-game count, then
-/// name, so the output is stable between runs. Recurring signals (`count >= 2`)
-/// always qualify; standout favourites (`9.0+`, weight >= [`STANDOUT_SOLO_WEIGHT`])
-/// may also contribute a single-game studio or theme seed so unique top
-/// favourites are never silent.
+/// Orders seeds by summed weight, distinct-game count, then name for stable runs.
+/// Keeps recurring signals (`count >= MINIMUM_COUNT`) and, when `allow_standout_solo`
+/// is set, single-game `9.0+` favourites (`weight >= STANDOUT_SOLO_WEIGHT`).
 fn ordered(tally: Tally, cap: usize, allow_standout_solo: bool) -> Vec<SeedSignal> {
     let mut signals: Vec<SeedSignal> = tally
         .into_iter()
-        .map(|(id, name, weight, count)| SeedSignal {
+        .map(|(id, name, weight, count, examples)| SeedSignal {
             id,
             name,
             weight,
             count,
+            examples,
             // Filled by the caller from the catalogue lookup, where known.
             vn_count: None,
         })
@@ -408,16 +389,34 @@ fn seed_game(game: &ProfiledGame, tallies: &mut SeedTallies) -> Option<SeedGame>
             .find(|tag| tag.id.as_deref() == Some(id.as_str()))
             .map(|tag| tag.name.clone())
             .unwrap_or_default();
-        tally(&mut tallies.tags, id, &name, weight);
+        tally(&mut tallies.tags, id, &name, weight, &game.title);
     }
     for entity in &game.developers {
-        tally(&mut tallies.developers, &entity.id, &entity.name, weight);
+        tally(
+            &mut tallies.developers,
+            &entity.id,
+            &entity.name,
+            weight,
+            &game.title,
+        );
     }
     for credit in game.staff.iter().filter(|credit| usable_staff(credit)) {
-        tally(&mut tallies.staff, &credit.id, &credit.name, weight);
+        tally(
+            &mut tallies.staff,
+            &credit.id,
+            &credit.name,
+            weight,
+            &game.title,
+        );
     }
     for entity in &game.voices {
-        tally(&mut tallies.voices, &entity.id, &entity.name, weight);
+        tally(
+            &mut tallies.voices,
+            &entity.id,
+            &entity.name,
+            weight,
+            &game.title,
+        );
     }
 
     Some(SeedGame {
@@ -431,14 +430,9 @@ fn seed_game(game: &ProfiledGame, tallies: &mut SeedTallies) -> Option<SeedGame>
     })
 }
 
-/// How much a tag's catalogue breadth discounts its match.
-///
-/// Inverse document frequency against the catalogue: `ln(total / carried)`.
-/// Measured on a real seed set — Cherry Blossom (85 VNs) scores 6.7, Nakige
-/// (410) 5.1, Kinetic Novel (4,652) 2.7, Romance (20,367) 1.2, ADV (36,329)
-/// 0.6 — so a theme the catalogue treats as defining outweighs one it treats
-/// as a default setting. Without a lookup the count falls back to a middle
-/// assumption rather than pretending the tag is rare or universal.
+/// Inverse-document-frequency tag discount: `ln(total / carried)`.
+/// (e.g. Cherry Blossom 85 -> 6.7, Nakige 410 -> 5.1, Romance 20,367 -> 1.2, ADV 36,329 -> 0.6;
+/// missing count falls back to `UNKNOWN_TAG_COUNT`).
 #[allow(
     clippy::cast_possible_truncation, // a log of a bounded count, far inside f32
     clippy::cast_precision_loss // catalogue counts are thousands, far inside f64's exact range
@@ -528,13 +522,9 @@ fn collect_matches(seeds: &ForYouSeeds, candidate: &Candidate) -> Vec<Match> {
     matched
 }
 
-/// The seed game sharing the most weighted evidence explains the match: the
-/// score's own arithmetic, regrouped per game. A shared person counts double
-/// a shared theme here, and when the score includes a creator match the
-/// explanation must come from a game carrying that creator — a seed game
-/// always exists for it (that is why the creator is a seed) — so "Creators
-/// you like: Yuzusoft" can never sit beside "Because you liked <a CIRCUS
-/// game>" however highly the user rated the theme-only game.
+/// Picks the seed game sharing the most weighted evidence for "Because you liked X".
+/// Shared creators carry double weight and constrain the choice so a creator match
+/// is never paired with an explanation game that lacks that creator.
 fn explanation_for<'a>(games: &'a [SeedGame], scoring: &[&Match]) -> Option<(&'a SeedGame, f32)> {
     let boost = |m: &Match| {
         if matches!(m.category, Category::Developer | Category::Staff) {
@@ -579,17 +569,6 @@ fn explanation_for<'a>(games: &'a [SeedGame], scoring: &[&Match]) -> Option<(&'a
     best
 }
 
-/// Rank candidates against the seeds, in one scope.
-///
-/// Only the scope's own categories score, and a candidate the scope cannot
-/// explain is dropped rather than ranked at zero: the Staff tab keeps VNs
-/// written or drawn by the library's people, not VNs where one of them
-/// happened to voice a character — the documented `staff` filter matches
-/// voice-acting credits too, so without this the tab filled with matches its
-/// own cards could not explain.
-///
-/// Tags are weighted by rarity (see [`rarity`]), so a candidate matching a
-/// catalogue-universal theme cannot outrank one matching a defining one.
 struct VoiceEntry {
     ranked: Ranked,
     rating: Option<f32>,
@@ -654,6 +633,8 @@ fn diversify_voices(mut entries: Vec<VoiceEntry>) -> Vec<Ranked> {
     out
 }
 
+/// Ranks candidates against `seeds` within `scope`, dropping unexplainable matches
+/// (e.g. voice-only matches from VNDB's `staff` filter) and weighting tags by [`rarity`].
 #[must_use]
 pub fn rank_candidates(
     seeds: &ForYouSeeds,
@@ -849,7 +830,7 @@ mod tests {
         let seeds = for_you_seeds(&[first, second]);
         assert_eq!(seeds.considered, 1);
         // One work is a single data point: below the pattern threshold, so no
-        // seed comes out of it — the same rule taste applies to one game.
+        // seed comes out of it (same rule taste applies to one game).
         assert!(seeds.tags.is_empty(), "got {:?}", seeds.tags);
     }
 
@@ -918,9 +899,75 @@ mod tests {
                     .collect();
                 game(&index.to_string(), &format!("G{index}"), tags)
             })
-            .collect();
+            .collect::<Vec<_>>();
         let seeds = for_you_seeds(&games);
         assert_eq!(seeds.tags.len(), 24);
+    }
+
+    #[test]
+    fn examples_name_the_games_behind_the_count() {
+        // The taste panel shows counts a user must be able to check against
+        // their shelf; the seed signal carries the same evidence.
+        let games = vec![
+            game("1", "A", vec![tag("g1", "Nakige", 2.98)]),
+            game("2", "B", vec![tag("g1", "Nakige", 2.96)]),
+        ];
+        let seeds = for_you_seeds(&games);
+        assert_eq!(seeds.tags[0].examples, vec!["A", "B"]);
+    }
+
+    #[test]
+    fn examples_are_capped() {
+        // Five games carry one tag: three titles survive, the count stays five.
+        let games: Vec<ProfiledGame> = (0..5)
+            .map(|index| {
+                game(
+                    &index.to_string(),
+                    &format!("G{index}"),
+                    vec![tag("g1", "Shared", 2.9)],
+                )
+            })
+            .collect();
+        let seeds = for_you_seeds(&games);
+        assert_eq!(seeds.tags[0].count, 5);
+        assert_eq!(seeds.tags[0].examples.len(), 3);
+        assert_eq!(seeds.tags[0].examples, vec!["G0", "G1", "G2"]);
+    }
+
+    #[test]
+    fn examples_follow_the_work_collapse() {
+        // Two entries for one work must not put the same story in examples twice;
+        // work collapse runs before any tally.
+        let mut first = game("1", "Umineko", vec![tag("g1", "Battle of Wits", 2.97)]);
+        first.work_id = Some("v24".to_owned());
+        let mut second = game("2", "うみねこ", vec![tag("g1", "Battle of Wits", 2.97)]);
+        second.work_id = Some("v24".to_owned());
+        let third = game("3", "CLANNAD", vec![tag("g1", "Battle of Wits", 2.9)]);
+        let seeds = for_you_seeds(&[first, second, third]);
+        assert_eq!(seeds.tags[0].examples, vec!["Umineko", "CLANNAD"]);
+        assert!(!seeds.tags[0].examples.contains(&"うみねこ".to_owned()));
+    }
+
+    #[test]
+    fn creator_examples_carry_their_games() {
+        // Studios, staff and voices expose the same checkable evidence as tags.
+        let mut liked = game("1", "Summer Pockets", Vec::new());
+        liked.rating = Some(90);
+        liked.developers = vec![entity("p1", "Key")];
+        liked.staff = vec![credit("s1", "Na-Ga", "art")];
+        liked.voices = vec![entity("va1", "Water Summit")];
+        let mut second = game("2", "CLANNAD", Vec::new());
+        second.developers = vec![entity("p1", "Key")];
+        second.staff = vec![credit("s1", "Na-Ga", "art")];
+        second.voices = vec![entity("va1", "Water Summit")];
+        let third = game("3", "Air", Vec::new());
+        let seeds = for_you_seeds(&[liked, second, third]);
+        assert_eq!(
+            seeds.developers[0].examples,
+            vec!["Summer Pockets", "CLANNAD"]
+        );
+        assert_eq!(seeds.staff[0].examples, vec!["Summer Pockets", "CLANNAD"]);
+        assert_eq!(seeds.voices[0].examples, vec!["Summer Pockets", "CLANNAD"]);
     }
 
     /// Three games sharing Nakige, with Key/Na-Ga/one VA across two of them,
@@ -1042,6 +1089,7 @@ mod tests {
             name: "T".to_owned(),
             weight: 1.0,
             count: 2,
+            examples: Vec::new(),
             vn_count: count,
         };
         assert!(!filter_worthy(&signal(Some(20_367))), "Romance is plumbing");

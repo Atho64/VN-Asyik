@@ -13,29 +13,22 @@ use crate::model::GameStatus;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LibraryViewMode {
-    /// Cover grid cards.
     #[default]
     Grid,
-    /// Dense tabular rows.
     List,
-    /// Spine/shelf rows.
     Shelf,
 }
 
 /// Snapshot of library category filters, view mode, and sort key persisted across launches.
 ///
-/// Search text (`query`) is intentionally excluded so a forgotten search string
-/// from a prior session never hides the library on fresh startup.
+/// Search text (`query`) is excluded so a prior session's query never hides the library on startup.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SavedLibraryBrowse {
     /// Selected status filter chips (empty = all).
     pub statuses: Vec<GameStatus>,
-    /// Rated-only chip toggle.
     pub rated_only: bool,
-    /// Active library layout (`grid`, `list`, `shelf`).
     pub view: LibraryViewMode,
-    /// Active sort order (`recent`, `title`, `rating`, `playtime`, `started`).
     pub sort: SortKey,
 }
 
@@ -58,37 +51,82 @@ impl SavedLibraryBrowse {
 pub struct UiPrefs {
     /// Desktop navigation rail collapsed into compact icon-only mode.
     pub sidebar_compact: bool,
-    /// When `true`, restore the last selected library filters/view/sort on launch.
     pub library_remember_browse: bool,
-    /// Default sort key applied on launch when `library_remember_browse` is `false`.
     pub library_default_sort: SortKey,
-    /// Last persisted library browse state (restored when `library_remember_browse` is `true`).
     pub library_saved_browse: Option<SavedLibraryBrowse>,
+}
+
+/// What the app does with its window on launch.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StartupMode {
+    /// Show the normal window at the saved position.
+    #[default]
+    Manual,
+    /// Open into Big Picture, fullscreen.
+    BigPicture,
+    /// Stay hidden in the tray until opened by the user.
+    Tray,
+}
+
+/// Device-local window behaviour: launch presentation and close action.
+///
+/// Autostart is OS state (a Run-key entry), not a stored pref; the toggle
+/// calls the OS directly so the two cannot disagree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StartupPrefs {
+    pub startup_mode: StartupMode,
+    /// Hide to the tray on close instead of quitting.
+    pub close_to_tray: bool,
+}
+
+impl Default for StartupPrefs {
+    fn default() -> Self {
+        Self {
+            startup_mode: StartupMode::Manual,
+            // Preserve hide-to-tray when a row is missing or partial.
+            close_to_tray: true,
+        }
+    }
+}
+
+/// Partial update applied to [`StartupPrefs`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StartupPrefsPatch {
+    pub startup_mode: Option<StartupMode>,
+    pub close_to_tray: Option<bool>,
+}
+
+impl StartupPrefs {
+    pub fn apply_patch(&mut self, patch: StartupPrefsPatch) {
+        if let Some(mode) = patch.startup_mode {
+            self.startup_mode = mode;
+        }
+        if let Some(tray) = patch.close_to_tray {
+            self.close_to_tray = tray;
+        }
+    }
 }
 
 /// Partial update applied to [`UiPrefs`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiPrefsPatch {
-    /// Toggle desktop sidebar compact icon mode.
     pub sidebar_compact: Option<bool>,
-    /// Toggle remembering library filters/view/sort across launches.
     pub library_remember_browse: Option<bool>,
-    /// Change the default startup library sort key.
     pub library_default_sort: Option<SortKey>,
-    /// Persist the current library filters/view/sort snapshot.
     pub library_saved_browse: Option<SavedLibraryBrowse>,
 }
 
 impl UiPrefs {
-    /// Normalize nested fields in place.
     pub fn normalize(&mut self) {
         if let Some(browse) = &mut self.library_saved_browse {
             browse.normalize();
         }
     }
 
-    /// Merge a partial update and normalize the resulting preferences.
     pub fn apply_patch(&mut self, patch: UiPrefsPatch) {
         if let Some(compact) = patch.sidebar_compact {
             self.sidebar_compact = compact;
@@ -106,7 +144,7 @@ impl UiPrefs {
         self.normalize();
     }
 
-    /// Compute the library browse state that should be active on app launch.
+    /// Active library browse state on app launch.
     #[must_use]
     pub fn effective_library_browse(&self) -> SavedLibraryBrowse {
         if self.library_remember_browse
@@ -205,5 +243,51 @@ mod tests {
         assert!(!prefs.sidebar_compact);
         assert!(prefs.library_remember_browse);
         assert_eq!(prefs.library_default_sort, SortKey::Title);
+    }
+
+    #[test]
+    fn startup_defaults_preserve_today_behavior() {
+        // Manual launch, close hides to the tray: the settings may exist, but
+        // turning nothing on must not change what the app already did.
+        let prefs = StartupPrefs::default();
+        assert_eq!(prefs.startup_mode, StartupMode::Manual);
+        assert!(prefs.close_to_tray);
+    }
+
+    #[test]
+    fn startup_wire_format_is_snake_case() {
+        // The frontend parses these keys directly; a camelCase rename would
+        // arrive as undefined and silently reset the mode.
+        let text = serde_json::to_string(&StartupPrefs {
+            startup_mode: StartupMode::BigPicture,
+            close_to_tray: false,
+        })
+        .expect("serialise");
+        assert!(
+            text.contains("\"startup_mode\":\"big_picture\""),
+            "got {text}"
+        );
+        assert!(text.contains("\"close_to_tray\":false"), "got {text}");
+    }
+
+    #[test]
+    fn a_startup_row_from_before_the_fields_existed_decodes_to_defaults() {
+        let old_row = "{}";
+        let decoded: StartupPrefs = serde_json::from_str(old_row).expect("decode");
+        assert_eq!(decoded, StartupPrefs::default());
+    }
+
+    #[test]
+    fn startup_patch_changes_only_what_it_names() {
+        let mut prefs = StartupPrefs {
+            startup_mode: StartupMode::Tray,
+            close_to_tray: true,
+        };
+        prefs.apply_patch(StartupPrefsPatch {
+            close_to_tray: Some(false),
+            ..Default::default()
+        });
+        assert_eq!(prefs.startup_mode, StartupMode::Tray);
+        assert!(!prefs.close_to_tray);
     }
 }

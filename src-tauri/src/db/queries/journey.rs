@@ -1,15 +1,8 @@
-//! Cross-game journey reads: the Timeline feed and the Year in Review.
+//! Cross-game journey reads: Timeline feed and Year in Review.
 //!
-//! Both are read-only aggregates over child tables, so every branch joins live
-//! `games` — the orphan rule (`AGENTS.md` §5): `PRAGMA foreign_keys` is per
-//! connection and hard-deleted parents leave orphan children behind, which once
-//! reported 8.8 hours of playtime from games that no longer existed.
-//!
-//! Bucketing follows the `playtime_by_day` convention, not `stats_derived`'s:
-//! these figures describe the calendar the reader experienced, so `SQLite`'s
-//! `'localtime'` modifier buckets by the machine's calendar day/year. The two
-//! conventions differ near midnight and on DST boundaries; this page sits next
-//! to the heatmap, so it keeps the heatmap's unit.
+//! Every query joins live `games` (AGENTS.md §5 orphan rule: `PRAGMA foreign_keys` is
+//! per connection and hard-deleted parents leave orphan children). Calendar bucketing
+//! uses `SQLite` `'localtime'` to match `playtime_by_day` and the heatmap.
 
 use std::collections::HashMap;
 
@@ -74,27 +67,25 @@ pub(crate) async fn games_by_ids(
         .map_err(|err| corrupt(err.to_string()))
 }
 
-/// Cross-game Timeline feed, newest first, in bounded keyset pages.
+/// Shared SQL expression for a game's finish timestamp over `alias` (AGENTS.md §5).
+/// Kept in one helper so timeline, year review, and finished-day marks agree.
+fn finish_ts_sql(alias: &str) -> String {
+    format!(
+        "COALESCE({alias}.finished_at, \
+         (SELECT MIN(en.achieved_at) FROM endings en \
+          WHERE en.game_id = {alias}.id AND en.deleted = 0 AND en.achieved = 1 \
+            AND en.achieved_at IS NOT NULL))"
+    )
+}
+
+/// Cross-game Timeline feed, newest first, in 50-row keyset pages.
 ///
-/// The page is one `UNION ALL` over four event sources, each joining live
-/// `games` so a deleted game's history cannot surface:
-///
-/// - `session` — a reading sitting. Zero-time sessions are the game page's
-///   business: the latest-reading card already hides them, and a feed full of
-///   "opened the menu for a minute" rows is noise, not a journey.
-/// - `journal` — a reading entry; route/chapter names are historical snapshots,
-///   kept exactly as they were written (0029).
-/// - `ending` — an achieved ending with a date ("'Achieved' is a date, not a
-///   flag" is enforced on write).
-/// - `finished` — one per live game, dated by `finished_at` or, because that
-///   column is written only by VNDB sync, by the first achieved ending.
-///
-/// The note preview is capped at the same 240 chars + ellipsis the session
-/// history uses; the full note lives on the game page.
+/// Unions four live-game-joined event sources (`session` with `counted_ms > 0`,
+/// `journal` snapshot, dated `ending`, and `finished` via [`finish_ts_sql`]), with
+/// note previews capped at 240 chars.
 ///
 /// # Errors
-/// `db_error` when a query fails, `corrupt` for an unknown event kind or an
-/// unparseable id.
+/// `db_error` when a query fails, `corrupt` for an unknown event kind or invalid id.
 pub async fn timeline_page(
     pool: &SqlitePool,
     before: Option<TimelineCursor>,
@@ -104,7 +95,12 @@ pub async fn timeline_page(
     const PAGE_PLUS_ONE: i64 = 51;
     let before_ts = before.as_ref().map(|cursor| cursor.ts);
     let before_id = before.map(|cursor| cursor.id.to_string());
-    let rows: Vec<EventRow> = sqlx::query_as(
+    // The finish-date rule is interpolated twice: once to date the event,
+    // once to filter games that have one. The interpolation is a fixed
+    // developer-authored expression (no user data enters the string), which
+    // is what the AssertSqlSafe audit attests to.
+    let finish_ts = finish_ts_sql("g");
+    let rows: Vec<EventRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT ts, event_id, kind, game_id, counted_ms, afk_ms, source, note, route_name, \
                 chapter_name, ending_name \
          FROM ( \
@@ -134,23 +130,17 @@ pub async fn timeline_page(
              FROM endings en JOIN games g ON g.id = en.game_id AND g.deleted = 0 \
              WHERE en.deleted = 0 AND en.achieved = 1 AND en.achieved_at IS NOT NULL \
              UNION ALL \
-             SELECT COALESCE(g.finished_at, \
-                             (SELECT MIN(en.achieved_at) FROM endings en \
-                              WHERE en.game_id = g.id AND en.deleted = 0 AND en.achieved = 1 \
-                                AND en.achieved_at IS NOT NULL)), \
+             SELECT {finish_ts}, \
                     g.id, 'finished', \
                     g.id, NULL, NULL, NULL, NULL, NULL, NULL, NULL \
              FROM games g \
              WHERE g.deleted = 0 \
-               AND COALESCE(g.finished_at, \
-                            (SELECT MIN(en.achieved_at) FROM endings en \
-                             WHERE en.game_id = g.id AND en.deleted = 0 AND en.achieved = 1 \
-                               AND en.achieved_at IS NOT NULL)) IS NOT NULL \
+               AND {finish_ts} IS NOT NULL \
          ) \
          WHERE (? IS NULL OR ts < ? OR (ts = ? AND event_id < ?)) \
          ORDER BY ts DESC, event_id DESC \
-         LIMIT ?",
-    )
+         LIMIT ?"
+    )))
     .bind(before_ts)
     .bind(before_ts)
     .bind(before_ts)
@@ -201,10 +191,7 @@ pub async fn timeline_page(
     Ok(TimelinePage { events, has_more })
 }
 
-/// How many memories "On this day" returns at most.
-///
-/// A card on the Stats page, not a feed: ten rows is already more than anyone
-/// reads there, and the Timeline is where the whole history lives.
+/// Maximum memories returned for "On this day".
 pub const ON_THIS_DAY_LIMIT: i64 = 10;
 
 /// One past moment that shares today's month and day.
@@ -221,20 +208,11 @@ struct MemoryRow {
     years_ago: i64,
 }
 
-/// Moments from earlier years that happened on today's date.
-///
-/// Two sources, both of which carry something worth re-reading: a journal
-/// checkpoint and an achieved ending. Sessions are deliberately absent — a card
-/// that resurfaces "you read for 40 minutes" says nothing, while "you wrote this"
-/// is the point of the feature.
-///
-/// The match is on the reader's local month and day (`'localtime'`, the heatmap's
-/// calendar), and today's own rows are excluded: this is a memory, not a second
-/// view of the present. `years_ago` is computed in `SQLite` from the same
-/// calendar, so a checkpoint written at 00:30 local is not credited to yesterday.
+/// Journal checkpoints and achieved endings from prior years matching today's local month/day.
+/// Excludes sessions and same-year entries; uses `SQLite` `'localtime'` to match the heatmap.
 ///
 /// # Errors
-/// `db_error` when a query fails, `corrupt` for an unknown kind or a bad id.
+/// `db_error` when a query fails, `corrupt` for an unknown kind or invalid id.
 pub async fn on_this_day(pool: &SqlitePool) -> Result<Vec<MemoryEvent>, DbError> {
     let rows: Vec<MemoryRow> = sqlx::query_as(
         "SELECT ts, event_id, kind, game_id, note, route_name, chapter_name, ending_name, \
@@ -693,9 +671,7 @@ async fn record_figures(
     .fetch_one(pool)
     .await?;
 
-    // A game "starts" when its first session does — `games.started_at` is
-    // sparse (written by VNDB sync only), while sessions exist for every
-    // tracked game and are the same dated source the timeline uses.
+    // Start year comes from the first session because `games.started_at` is sparse (VNDB sync only).
     let (games_started,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM ( \
              SELECT MIN(ps.started_at) AS first_at \
@@ -709,28 +685,23 @@ async fn record_figures(
     .fetch_one(pool)
     .await?;
 
-    // Finished and average rating in one pass over the same derived finish
-    // date, so counting and rating describe the same set of games: a separate
-    // rating query could pair "9 finished" with an average over 5 of them.
-    // `AVG` skips NULL ratings on its own, and is NULL when no finished game
-    // carries one.
-    let (games_finished, avg_rating): (i64, Option<f64>) = sqlx::query_as(
-        "SELECT COUNT(*), AVG(g.rating) \
+    // Count and average rating over the same derived finish-date set (`AVG` ignores NULL ratings).
+    let (games_finished, avg_rating): (i64, Option<f64>) =
+        sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "SELECT COUNT(*), AVG(g.rating) \
          FROM games g \
          JOIN ( \
              SELECT g2.id AS id, \
-                    COALESCE(g2.finished_at, \
-                             (SELECT MIN(en.achieved_at) FROM endings en \
-                              WHERE en.game_id = g2.id AND en.deleted = 0 AND en.achieved = 1 \
-                                AND en.achieved_at IS NOT NULL)) AS finish_ts \
+                    {} AS finish_ts \
              FROM games g2 WHERE g2.deleted = 0 \
          ) f ON f.id = g.id \
          WHERE f.finish_ts IS NOT NULL \
            AND strftime('%Y', f.finish_ts / 1000, 'unixepoch', 'localtime') = ?",
-    )
-    .bind(year_text)
-    .fetch_one(pool)
-    .await?;
+            finish_ts_sql("g2")
+        )))
+        .bind(year_text)
+        .fetch_one(pool)
+        .await?;
     // Rounding a mean to a whole decivote is the point; the fractional part it
     // can carry is not displayable here.
     #[allow(
@@ -781,4 +752,29 @@ pub async fn year_review(pool: &SqlitePool, year: i32) -> Result<YearReview, DbE
         weekday_ms: sessions.weekday_ms,
         hour_ms: sessions.hour_ms,
     })
+}
+
+/// Local-day buckets of finished games for the activity heatmap.
+/// Matches `playtime_by_day`'s `'localtime'` day index, including days with no sessions.
+///
+/// # Errors
+/// `db_error` when the query fails.
+pub async fn finished_by_day(pool: &SqlitePool) -> Result<Vec<(i64, i64)>, DbError> {
+    use sqlx::Row as _;
+    let finish_ts = finish_ts_sql("g");
+    // Fixed developer-authored expression matching `timeline_page`; no user data enters the SQL.
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "SELECT CAST(strftime('%s', {finish_ts} / 1000, 'unixepoch', 'localtime', \
+                'start of day') AS INTEGER) / 86400 AS day, \
+                COUNT(*) AS finished \
+         FROM games g \
+         WHERE g.deleted = 0 AND {finish_ts} IS NOT NULL \
+         GROUP BY day ORDER BY day ASC"
+    )))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("day"), row.get("finished")))
+        .collect())
 }

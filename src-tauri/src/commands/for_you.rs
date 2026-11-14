@@ -1,15 +1,7 @@
-//! "For you" commands: taste seeds from the library, candidates from VNDB.
+//! "For you" commands: library taste seeds queried against VNDB `POST /vn` and ranked locally via `vn_core::for_you`.
 //!
-//! The query goes to the documented `POST /vn` endpoint with filters built
-//! from the library's seeds. The filter shapes were verified against the live
-//! API when this feature was built: `developer` and `staff` take nested id
-//! queries, `tag` takes `[tagId, maxSpoiler, minRating]`, and the `staff`
-//! filter matches voice actors too — which is what the Voices tab runs on.
-//! Ranking is pure `vn_core::for_you` arithmetic over the returned entries;
-//! nothing here invents a score the seeds cannot explain.
-//!
-//! Notes returned to the UI are stable codes (`seeds`, `source`), not
-//! sentences: the frontend translates them, like the screenshot error codes.
+//! Filter shapes (`developer`/`staff` nested IDs, `tag` `[id, maxSpoiler, minRating]`, `staff` matching VAs)
+//! match live VNDB Kana v2; returned `notes` are stable i18n keys (`seeds`, `source`).
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -22,10 +14,7 @@ use crate::state::AppState;
 use crate::vndb::cache;
 use crate::vndb::dto::{Vn, VnQuery};
 
-/// How long a result page is reused before VNDB is asked again. Long enough
-/// that flipping filters does not spend the rate limiter, short enough that a
-/// library change (and therefore a seeds change) misses the cache anyway —
-/// the cache key hashes the seeds.
+/// Cache TTL for a For-you result page (24h; seed changes already bust the hashed cache key).
 const RESULT_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 
 /// How long the tag-breadth lookup is reused. A tag's catalogue breadth
@@ -125,6 +114,27 @@ pub struct SignalView {
     pub name: String,
     /// Distinct games carrying it.
     pub count: usize,
+    /// Titles of the games behind the count, so a claim can be checked
+    /// against the shelf. The For-you header ignores it; the taste panel
+    /// shows it on hover.
+    pub examples: Vec<String>,
+}
+
+/// The library's seeds, shared by the For-you header and the taste panel:
+/// the same weighted categories the recommendations rank with.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeedSummaryView {
+    /// Whether the library is large enough to query VNDB.
+    pub ready: bool,
+    /// Distinct works that contributed at least one signal.
+    pub considered: usize,
+    pub tags: Vec<SignalView>,
+    pub developers: Vec<SignalView>,
+    pub staff: Vec<SignalView>,
+    pub voices: Vec<SignalView>,
+    /// Strongest seed games, titles only.
+    pub top_games: Vec<String>,
 }
 
 /// The library's seeds, for the panel header and chips.
@@ -228,9 +238,7 @@ pub async fn for_you_search(
     }
 
     let page = request.page.unwrap_or(1).max(1);
-    // The key carries the ranking version: when the arithmetic changes (it
-    // did once already — rarity and scopes), pages cached under the old
-    // arithmetic must not serve for another day.
+    // Include `RANKING_VERSION` so ranking changes invalidate older cached pages immediately.
     let cache_key = format!(
         "for_you:{}:{}:{}:{page}",
         RANKING_VERSION,
@@ -243,10 +251,7 @@ pub async fn for_you_search(
         return Ok(cached);
     }
 
-    // Tag breadth — how many VNs in the whole catalogue carry each seed tag —
-    // is what separates a defining theme from catalogue plumbing. One batched
-    // lookup per fresh page, itself cached for a week: a tag's breadth drifts
-    // on the scale of months, not hours.
+    // Batch-fetch catalogue tag breadth (how many VNs carry each seed tag, cached 7 days) so ranking separates defining themes from common tags.
     let mut seeds = seeds;
     if let Ok(breadth) = tag_breadth(&state, &seed_tag_ids(&seeds)).await {
         for signal in &mut seeds.tags {
@@ -493,9 +498,7 @@ fn underrepresented_voice_ids(voices: &[SeedSignal], unowned_vns: &[Vn]) -> Vec<
         .collect()
 }
 
-/// The field list for one result page: everything a card renders, and the
-/// signals ranking reads (tags, staff, voice actors), plus the description
-/// for the excerpt. Kept lean — see `PAGE_RESULTS`.
+/// Field list per result page (cards, taste signals, descriptions); kept lean for `PAGE_RESULTS`.
 const FIELDS: &str = "title,alttitle,released,image.url,image.sexual,image.violence,length,length_minutes,rating,votecount,devstatus,description,tags.id,tags.name,tags.rating,tags.spoiler,developers.id,developers.name,staff.id,staff.name,staff.role,va.staff.id,va.staff.name";
 
 /// Join candidate metadata with its evidence, then apply the requested order.
@@ -535,9 +538,7 @@ fn sort_key(sort: Option<ForYouSort>) -> &'static str {
         Some(ForYouSort::Rating) => "rating",
         Some(ForYouSort::Released) => "released",
         Some(ForYouSort::Title) => "title",
-        // Votes and taste share the remote pre-order: the remote sort only
-        // has to be stable so pagination is correct — taste is applied here,
-        // on top of whatever VNDB sent.
+        // Votes and taste share `votecount` pre-ordering so remote pagination stays stable while taste re-ranks locally.
         Some(ForYouSort::Votes | ForYouSort::Taste) | None => "votecount",
     }
 }
@@ -672,10 +673,7 @@ fn affinity_filter(seeds: &ForYouSeeds, request: &ForYouRequest) -> Option<serde
     or_refined(signals, request)
 }
 
-/// Build the documented filter JSON for one sub-tab.
-///
-/// `None` when that category has no seeds — a query with an empty `or` is not
-/// "everything", it is a bug, so the caller reports it instead of asking.
+/// Build the documented filter JSON for one sub-tab (`None` when that category has no seeds, avoiding an empty `or`).
 fn build_filter(
     source: ForYouSource,
     seeds: &ForYouSeeds,
@@ -722,9 +720,7 @@ fn refine(signal: serde_json::Value, request: &ForYouRequest) -> serde_json::Val
     if extra.is_empty() {
         return signal;
     }
-    // `["and", signal, …narrowing predicates]` — the first element is the
-    // literal "and", and the signal stays one operand rather than being
-    // flattened into the narrowing predicates.
+    // Keep the whole `signal` expression as one operand under `"and"` instead of flattening predicates.
     let mut predicates = vec![serde_json::Value::String("and".to_owned()), signal];
     predicates.extend(extra);
     serde_json::Value::Array(predicates)
@@ -842,7 +838,10 @@ fn card_from_vn(vn: &Vn, rank: &Ranked) -> ForYouCard {
     }
 }
 
-fn view_from_seeds(seeds: &ForYouSeeds) -> ForYouProfileView {
+/// Build the shared seed summary: one view of the library's taste for both
+/// consumers, so a panel and the recommendations beside it can never describe
+/// two different tastes.
+pub(crate) fn seed_summary(seeds: &ForYouSeeds) -> SeedSummaryView {
     let signals = |list: &[SeedSignal], limit: usize| {
         list.iter()
             .take(limit)
@@ -850,12 +849,13 @@ fn view_from_seeds(seeds: &ForYouSeeds) -> ForYouProfileView {
                 id: signal.id.clone(),
                 name: signal.name.clone(),
                 count: signal.count,
+                examples: signal.examples.clone(),
             })
             .collect()
     };
-    ForYouProfileView {
-        considered: seeds.considered,
+    SeedSummaryView {
         ready: seeds.ready,
+        considered: seeds.considered,
         tags: signals(&seeds.tags, MAX_DISPLAY_TAGS),
         developers: signals(&seeds.developers, seeds.developers.len()),
         staff: signals(&seeds.staff, seeds.staff.len()),
@@ -866,6 +866,19 @@ fn view_from_seeds(seeds: &ForYouSeeds) -> ForYouProfileView {
             .take(5)
             .map(|game| game.title.clone())
             .collect(),
+    }
+}
+
+fn view_from_seeds(seeds: &ForYouSeeds) -> ForYouProfileView {
+    let summary = seed_summary(seeds);
+    ForYouProfileView {
+        considered: summary.considered,
+        ready: summary.ready,
+        tags: summary.tags,
+        developers: summary.developers,
+        staff: summary.staff,
+        voices: summary.voices,
+        top_games: summary.top_games,
     }
 }
 
@@ -885,6 +898,7 @@ mod tests {
                     name: "Cherry Blossom".to_owned(),
                     weight: 3.0,
                     count: 3,
+                    examples: Vec::new(),
                     vn_count: None,
                 },
                 SeedSignal {
@@ -892,6 +906,7 @@ mod tests {
                     name: "Island".to_owned(),
                     weight: 2.0,
                     count: 2,
+                    examples: Vec::new(),
                     vn_count: None,
                 },
             ],
@@ -900,6 +915,7 @@ mod tests {
                 name: "KID".to_owned(),
                 weight: 2.0,
                 count: 2,
+                examples: Vec::new(),
                 vn_count: None,
             }],
             staff: vec![SeedSignal {
@@ -907,6 +923,7 @@ mod tests {
                 name: "Nakazawa Takumi".to_owned(),
                 weight: 2.0,
                 count: 2,
+                examples: Vec::new(),
                 vn_count: None,
             }],
             voices: vec![SeedSignal {
@@ -914,6 +931,7 @@ mod tests {
                 name: "Suzumura Kenichi".to_owned(),
                 weight: 2.0,
                 count: 2,
+                examples: Vec::new(),
                 vn_count: None,
             }],
         }
@@ -1177,6 +1195,7 @@ mod tests {
             name: id.to_owned(),
             weight: 10.0,
             count: 2,
+            examples: Vec::new(),
             vn_count: None,
         };
         let seeds = vec![make_va("va1"), make_va("va2"), make_va("va3")];

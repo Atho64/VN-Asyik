@@ -146,9 +146,11 @@ pub async fn update_game(
         title.trim().clone_into(&mut game.title);
     }
     if let Some(status) = input.status {
-        game.status = GameStatus::parse(&status).map_err(|_| {
+        let parsed = GameStatus::parse(&status).map_err(|_| {
             CommandError::new("invalid_status", format!("unknown status: {status}"))
         })?;
+        // `mark_status` fills `finished_at` if empty so local completions reach the timeline and year review.
+        game.mark_status(parsed, now()?);
     }
     if let Some(rating) = input.rating {
         game.set_rating(rating)?;
@@ -157,12 +159,7 @@ pub async fn update_game(
         game.set_notes(notes)?;
     }
     if let Some(ms) = input.manual_playtime_ms {
-        if ms < 0 {
-            return Err(CommandError::new(
-                "invalid",
-                "manual playtime must not be negative",
-            ));
-        }
+        // Negative offsets are allowed; display totals floor at zero (`Game::total_playtime_ms`).
         game.manual_playtime_ms = ms;
     }
     if let Some(vndb) = input.vndb_id {
@@ -230,11 +227,7 @@ pub struct GameSessionsPage {
     pub afk_ms: i64,
 }
 
-/// Newest sessions for the game page.
-///
-/// The page used to load every session a game had, which is unbounded for a
-/// long-lived visual novel. The list is bounded and the totals are computed in
-/// one aggregate, so "122 sessions, 3:41" still describes the whole history.
+/// Bounded newest session page for the game view alongside a single aggregate for whole-game totals.
 #[tauri::command]
 pub async fn list_game_sessions(
     state: State<'_, AppState>,
@@ -397,9 +390,7 @@ pub async fn status_breakdown(state: State<'_, AppState>) -> CommandResult<Statu
     Ok(queries::status_breakdown(state.db().pool()).await?)
 }
 
-/// Tracked time per local calendar day, as `(day_index, counted_ms)` — day
-/// indexes are days since 1970-01-01 of the local date, the unit the heatmap
-/// grid walks. Newest last.
+/// Tracked time per local calendar day as `(day_index, counted_ms)` (days since 1970-01-01, newest last).
 #[tauri::command]
 pub async fn playtime_by_day(state: State<'_, AppState>) -> CommandResult<Vec<(i64, i64)>> {
     Ok(queries::playtime_by_day(state.db().pool()).await?)
@@ -705,15 +696,10 @@ pub async fn rename_route(
     Ok(())
 }
 
-/// Merge one route into another.
-///
-/// The source row is kept with a `merged_into` pointer rather than deleted: folder
-/// sync merges by id, so a delete could be resurrected by a device that had not seen
-/// it, while a pointer travels with the row and both devices converge.
+/// Merge one route into another by setting `merged_into` (kept instead of deleting so sync peers converge by ID).
 ///
 /// # Errors
-/// `invalid` when the ids match, either route is deleted or already merged, or they
-/// belong to different games; `not_found` for an unknown id; or a database failure.
+/// `invalid` for self-merge, deleted/already-merged/cross-game routes, `not_found`, or DB failure.
 #[tauri::command]
 pub async fn merge_routes(
     state: State<'_, AppState>,
@@ -832,14 +818,10 @@ pub struct LocalArt {
     pub backdrop_data_url: Option<String>,
 }
 
-/// Read a game's own artwork as data URLs.
-///
-/// Returns empty art rather than an error when the files are missing: folder sync and
-/// backup carry sync rows only, so a peer resolves no custom art and has to fall back
-/// instead of failing the screen.
+/// Read a game's custom cover and backdrop as `data:` URLs (returns `None` fields if missing on a synced peer).
 ///
 /// # Errors
-/// `invalid` for a malformed id, or a database failure.
+/// `invalid` for a malformed ID, or a database failure.
 #[tauri::command]
 pub async fn game_custom_art(state: State<'_, AppState>, id: String) -> CommandResult<LocalArt> {
     let game_id = EntityId::parse(&id)?;
@@ -867,17 +849,11 @@ pub async fn game_custom_art(state: State<'_, AppState>, id: String) -> CommandR
     Ok(art)
 }
 
-/// Import an image file as this game's cover.
-///
-/// The file is re-encoded rather than copied, so a non-image is rejected here instead
-/// of becoming a broken cover the webview cannot paint. On Android the picker
-/// returns a `content://` URI; it is copied through the content resolver into
-/// a cache file, read, and deleted (AGENTS.md §9).
+/// Import and re-encode an image file as this game's custom cover (rejecting non-images up front).
+/// On Android, copies picked `content://` URIs via the content resolver into a temp file before decoding (`AGENTS.md` §9).
 ///
 /// # Errors
-/// `invalid` for a malformed id or an undecodable file, `document` for a file
-/// that cannot be read (including an Android document that cannot be copied),
-/// `not_found` for an unknown game, or a database failure.
+/// `invalid` for malformed IDs or undecodable images, `document` on unreadable files/URIs, `not_found`, or DB failure.
 #[tauri::command]
 pub async fn set_game_custom_cover(
     state: State<'_, AppState>,

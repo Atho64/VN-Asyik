@@ -65,6 +65,16 @@ discord-rich-presence = "1.1.0"
 # not expose. Pinned to the same major as tauri-runtime-wry so there is one copy.
 webview2-com = "0.39"
 
+# "Launch at PC startup": the official Tauri plugin, writing the per-OS
+# registration (Windows Run key, macOS LaunchAgent, XDG autostart). The crate
+# itself only supports desktop and is target-scoped here exactly as its docs
+# prescribe; every call site is `#[cfg(desktop)]`-gated, and the CI Android job
+# enforces that. Used from Rust only, so no webview capability is granted.
+# Version check: actively maintained under the tauri-apps org (verified
+# 2026-11-14).
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+tauri-plugin-autostart = "2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # X11 process tracking: the active window, its `_NET_WM_PID`, its title and the
 # XScreenSaver idle timer. `x11rb` is a pure-Rust implementation of the protocol,

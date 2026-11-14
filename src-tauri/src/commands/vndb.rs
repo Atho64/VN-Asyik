@@ -143,13 +143,7 @@ async fn fetch_detail(state: &State<'_, AppState>, vn_id: &str) -> CommandResult
 
     match client(state).get_vn(vn_id, DETAIL_FIELDS).await {
         Ok(Some(mut vn)) => {
-            // The cast needs a second request: `/vn` only reaches characters
-            // through `va` and omits their role. Cached with the rest, so a
-            // refresh is what repopulates a row stored as `[]`.
-            // The cast needs a second request: `/vn` reaches characters only
-            // through `va`, and `va` omits the role. Failures are logged rather
-            // than swallowed: `unwrap_or_default()` here once stored `[]` for
-            // every game and the only symptom was a card that never appeared.
+            // Cast requires a second request because `/vn` omits character roles via `va`; log failures instead of silently caching `[]`.
             match client(state).get_vn_cast(vn_id, &vn.va).await {
                 Ok(cast) => vn.characters = cast,
                 Err(err) => eprintln!("vndb cast for {vn_id} failed: {err}"),
@@ -193,16 +187,8 @@ async fn cached_or_gone(
     Err(CommandError::new("not_found", message))
 }
 
-/// Fetch a VN from VNDB itself, ignoring a fresh cache entry.
-///
-/// Deliberately a separate function rather than a `force` flag on [`fetch_detail`]:
-/// the cache-first path is the default everywhere else, and a boolean that flips its
-/// meaning is the kind of parameter that gets passed wrong once and then nobody
-/// notices. Nothing in this app could re-fetch metadata after import, so a cached
-/// row was frozen forever and new fields never arrived.
-///
-/// A network failure still falls back to the cached copy, so refreshing while
-/// offline reports stale data rather than failing.
+/// Fetch a VN directly from VNDB, bypassing fresh cache (falls back to stale cache if offline).
+/// Kept separate from [`fetch_detail`] instead of adding a boolean flag so cache-first callers cannot flip it by mistake.
 async fn fetch_detail_fresh(state: &State<'_, AppState>, vn_id: &str) -> CommandResult<(Vn, bool)> {
     let pool = state.db().pool();
     let cache_key = format!("vn:{vn_id}");
@@ -210,13 +196,7 @@ async fn fetch_detail_fresh(state: &State<'_, AppState>, vn_id: &str) -> Command
 
     match client(state).get_vn(vn_id, DETAIL_FIELDS).await {
         Ok(Some(mut vn)) => {
-            // The cast needs a second request: `/vn` only reaches characters
-            // through `va` and omits their role. Cached with the rest, so a
-            // refresh is what repopulates a row stored as `[]`.
-            // The cast needs a second request: `/vn` reaches characters only
-            // through `va`, and `va` omits the role. Failures are logged rather
-            // than swallowed: `unwrap_or_default()` here once stored `[]` for
-            // every game and the only symptom was a card that never appeared.
+            // Cast requires a second request because `/vn` omits character roles via `va`; log failures instead of silently caching `[]`.
             match client(state).get_vn_cast(vn_id, &vn.va).await {
                 Ok(cast) => vn.characters = cast,
                 Err(err) => eprintln!("vndb cast for {vn_id} failed: {err}"),
@@ -298,20 +278,8 @@ pub struct RefreshAllOutcome {
     pub failed: Vec<String>,
 }
 
-/// Re-fetch VNDB metadata for every game that has a VN id.
-///
-/// Same shape as [`vndb_import_many`]: one call per game through the ordinary
-/// fetch-and-store path, the client's rate limiter applies to every request, and
-/// failures are collected rather than thrown so `39 updated, 2 failed` is
-/// reportable instead of failing the whole run.
-///
-/// Never touches the game row. Status, rating, notes, playtime and dates are the
-/// user's, and a metadata refresh that overwrote them would be a data-loss bug, not
-/// a convenience.
-///
-/// Writes progress to `sync_state` every few games. The run is slow on a large
-/// library (one request per game), so the index is persisted to let a later
-/// invocation continue where a closed window left off.
+/// Refresh VNDB metadata for every library entry with a VNDB ID (rate-limited, collecting per-entry errors).
+/// Preserves all user fields on `games` and checkpoints progress to `sync_state` every 5 attempts for resume.
 ///
 /// # Errors
 /// Only when the database cannot be read or written at all.
@@ -543,10 +511,7 @@ pub(crate) async fn store_detail(
     .bind(json(&|| encode_list(&payload.screenshots)))
     .bind(json(&|| encode_list(&payload.developers)))
     .bind(json(&|| encode_list(&payload.extlinks)))
-    // `DetailPayload` does not carry staff or the voice cast — the detail
-    // screen does not render them yet — so these bind straight from the `Vn`.
-    // They exist for the "For you" seeds: who wrote and drew the games the
-    // user rates highly, and who voices them.
+    // Persist raw staff and deduplicated VA credits separately from `DetailPayload` so For-you taste seeds can read them.
     .bind(json(&|| encode_list(&vn.staff)))
     .bind(json(&|| encode_list(&voice_credits(vn))))
     .bind(timestamp.as_millis())
@@ -555,12 +520,7 @@ pub(crate) async fn store_detail(
     Ok(())
 }
 
-/// The voice cast as the recommendation seeds need it: one entry per actor,
-/// deduplicated by staff id.
-///
-/// `vn.va` is a character×actor matrix — the same character appears once per
-/// voice actor — so storing it whole would bloat every detail row with
-/// character payloads the seeds never read.
+/// Deduplicated voice actor credits by staff ID for recommendation seeds (avoids storing the full `character x actor` `va` matrix).
 pub(crate) fn voice_credits(vn: &Vn) -> Vec<crate::vndb::dto::StaffCredit> {
     let mut seen = std::collections::HashSet::new();
     let mut credits = Vec::new();
@@ -739,20 +699,8 @@ pub struct MissingEntry {
     pub finished_at: Option<i64>,
 }
 
-/// Import the entries the pull reported as missing, keeping the user's own data.
-///
-/// A game created from VNDB alone would land as an unrated `wishlist` entry, and
-/// the next pull would then report every status, rating, note and date as a
-/// conflict — 74 decisions for 35 games, which is worse than not importing. So
-/// the list state travels with each entry and is written in the same pass.
-///
-/// One call per entry, through the same path as a single import, so covers,
-/// details and the cache behave identically. The client's rate limiter applies to
-/// every request, so this cannot exceed the documented limits however many ids it
-/// is given.
-///
-/// Failures are collected rather than thrown: importing 40 of 41 and reporting the
-/// one that failed is more useful than importing none.
+/// Import missing entries returned by pull sync while applying user list state (status, rating, notes, dates) in the same pass.
+/// Runs through the standard rate-limited single-import pipeline and collects per-entry errors instead of aborting.
 ///
 /// # Errors
 /// Only when the database cannot be written at all.
@@ -856,18 +804,7 @@ async fn apply_list_state(
     crate::db::queries::upsert_game(pool, &game).await
 }
 
-// Screenshots
-
-/// Download one batch of screenshots and report whether that batch was complete.
-///
-/// Batched rather than all-at-once because 30 images at VNDB's observed ~2 s each is
-/// a minute of work: blocking the whole response on it left the gallery blank until
-/// the last file landed, which reads as "screenshots are missing". The caller asks
-/// again while `pending` is non-zero, so tiles appear in waves.
-///
-/// The batch being short is **not** a failure. `complete` only goes false when an
-/// image inside the batch actually failed, so a partially downloaded gallery is never
-/// reported as broken.
+/// Download one batch of screenshots (`pending` drives incremental waves) and return whether every attempted item succeeded.
 async fn fetch_batch(
     state: &State<'_, AppState>,
     vn_id: &str,
@@ -905,26 +842,11 @@ async fn fetch_batch(
     }
 }
 
-/// How many screenshots one call will download before returning.
-///
-/// Six is roughly twelve seconds at VNDB's observed ~2 s per image, which keeps a
-/// single IPC round trip under the frontend's patience while still making visible
-/// progress. The rest are fetched on the next call, and every call re-reads what is
-/// on disk first, so the gallery grows rather than restarting.
+/// Screenshots downloaded per IPC call (~12 s at ~2 s/image) so galleries grow incrementally without timing out.
 const DOWNLOADS_PER_CALL: usize = 6;
 
-/// One screenshot as the detail gallery uses it.
-///
-/// `src` is a resolved data URL and is what the tile paints; `blurred_src` is the
-/// pre-blurred copy of the same image. Both are handed over and the decision between
-/// them belongs to the caller, exactly as it does for a cover: the webview already
-/// holds the blur for an explicit cover (`LocalArt::backdrop_data_url`) and picks a
-/// file at paint time, so keeping the sharp bytes in the payload costs nothing there
-/// and lets a reveal paint instantly instead of waiting for a second IPC round trip.
-///
-/// `src` is always the **sharp** file. A screenshot without a cached sharp copy falls
-/// back to the blur and says so through `sharp: false`, so a caller must never label a
-/// soft image as the real thing.
+/// Screenshot gallery item pairing the `src` data URL with an optional `blurred_src` (`useArtwork` picks at paint time).
+/// `src` is the sharp copy whenever available; when missing, it falls back to the blur and marks `sharp: false`.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScreenshotView {
     /// VNDB image id, e.g. `sf190`.
@@ -964,18 +886,9 @@ pub struct ScreenshotGallery {
     pub pending: usize,
 }
 
-/// Build the payload for one cached screenshot.
-///
-/// This resolves **no content policy**. It reports what is on disk — the sharp copy
-/// and the pre-blurred copy — and whether the community rated the image explicit. The
-/// choice between the two is made by the surface that paints it, which is what a cover
-/// already does: `vndb_local_art` hands over the sharp cover and its pre-blurred
-/// backdrop together and `useArtwork` decides. Two policies (`show`/`blur`/`hide` for
-/// covers, a narrower one for screenshots) meant the same preference could be honoured
-/// one way in the library and another in the gallery; there is now one.
-///
-/// Returns `None` when no file is on disk for this image, so a stale row cannot
-/// produce a tile that paints nothing.
+/// Build the payload for one cached screenshot without resolving content policy.
+/// Both sharp and pre-blurred bytes sit alongside `explicit` so the UI applies the same `useArtwork` policy
+/// used for covers; returns `None` if no backing file exists on disk.
 async fn view_for(cached: &cache::CachedScreenshot, size: ShotSize) -> Option<ScreenshotView> {
     let explicit = cached.is_explicit();
     // Nearest available group of files: the requested size, then the other one. A
@@ -1095,12 +1008,8 @@ pub async fn vndb_screenshots(
             .unwrap_or_default()
     };
 
-    // The cached row may predate the current `DETAIL_FIELDS`: `screenshots.id` was
-    // added after some rows were already stored, and those come back with `"id": null`.
-    // A row like that cannot be diffed against the cache (there is nothing to match on),
-    // and the honest fix is to fetch the VN again once and store it, rather than either
-    // skipping every tile or downloading the same ten images on every visit. A fetch
-    // failure is not fatal: whatever is on disk still renders.
+    // Cached rows predating `screenshots.id` in `DETAIL_FIELDS` decode with `"id": null`;
+    // re-fetch once to populate real IDs so diffing works, falling back to disk if offline.
     if !reported.is_empty()
         && reported.iter().all(|image| image.id.is_none())
         && let Ok(detail) =
@@ -1112,18 +1021,11 @@ pub async fn vndb_screenshots(
 
     let cached_now = cache::get_screenshots(pool, &vn_id).await?;
     let mut complete = true;
-    // Only fetch what is not already on disk: `cache_all` is idempotent but walks
-    // every entry, and a gallery that opens instantly should not re-parse 30 files.
-    //
-    // "Already on disk" also has to mean "at this build's size". A row recorded at a
-    // different width came from an older pipeline and is re-rendered, which is the
-    // only way a resolution or blur fix reaches someone who already opened the
-    // gallery once.
+    // Download only entries missing from disk or built under an older pipeline width.
     let missing: Vec<crate::vndb::dto::Image> = reported
         .iter()
         .filter(|image| {
-            // An entry with no id is matched by URL instead, since its cache key is
-            // recovered from that URL.
+            // Fall back to matching by URL when `image.id` is missing (same key recovered on write).
             let row = match image.id.as_deref().filter(|id| !id.is_empty()) {
                 Some(id) => cached_now.iter().find(|row| row.image_id == id),
                 None => image
@@ -1134,9 +1036,7 @@ pub async fn vndb_screenshots(
             let Some(row) = row else {
                 return true;
             };
-            // "Already on disk" means "at this build's size", asked of the same
-            // function the pipeline uses to decide what to regenerate. A second copy
-            // of this rule reported a permanent failure for rows it never rebuilt.
+            // Reuse `screenshots::needs_rebuild` so staleness checks never diverge from cache writes.
             let store = ScreenshotStore::new(state.data_dir());
             let image_id = row.image_id.clone();
             screenshots::needs_rebuild(
@@ -1400,6 +1300,7 @@ mod detail_storage_tests {
                 name: Some("Matsunaga Sara".to_owned()),
                 original: Some("松永 沙羅".to_owned()),
                 role: Some("primary".to_owned()),
+                spoiler: Some(0),
                 image: Some(Image {
                     url: Some("https://t.vndb.org/ch/90/119990.jpg".to_owned()),
                     ..Image::default()
@@ -1469,11 +1370,7 @@ mod detail_storage_tests {
             "the link the UI opens comes from here"
         );
         assert_eq!(payload.screenshots[0].id.as_deref(), Some("sf190"));
-        // The cast is fetched by a second request and stored in its own column.
-        // It sat as a hardcoded `"[]"` literal for every import ever made: the
-        // column existed, the struct carried the data, and the card never
-        // appeared. Asserting the payload alone would not have caught it, because
-        // `from_vn` reads the struct, not the row -- so the column is read too.
+        // Assert the persisted column too, since `from_vn` reads the struct directly rather than the stored JSON.
         assert_eq!(payload.characters.len(), 1);
         assert_eq!(
             payload.characters[0].name.as_deref(),

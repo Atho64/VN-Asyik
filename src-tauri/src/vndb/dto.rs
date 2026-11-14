@@ -281,8 +281,7 @@ pub struct TagCount {
     pub id: Option<String>,
     /// Tag name.
     pub name: Option<String>,
-    /// How many VNs in the catalogue carry the tag — the rarity signal the
-    /// "For you" weighting is built on.
+    /// How many VNs in the catalogue carry the tag (used as the "For you" rarity signal).
     pub vn_count: Option<u64>,
 }
 
@@ -335,6 +334,11 @@ pub struct Character {
     pub original: Option<String>,
     /// Role in this VN: `main`, `primary`, `side` or `appears`.
     pub role: Option<String>,
+    /// VNDB spoiler level for this VN's entry: 0 safe, 1 mild, 2 major. The
+    /// character itself may be a plot twist; absent means 0, so rows cached
+    /// before the field existed stay safe.
+    #[serde(default)]
+    pub spoiler: Option<i64>,
     /// Portrait image.
     pub image: Option<Image>,
     /// Traits, filtered for spoilers at display time.
@@ -357,11 +361,7 @@ pub struct Character {
     pub voiced_by: Option<String>,
 }
 
-/// One trait applied to a character.
-///
-/// A character carries dozens — CLANNAD's cast totals 1 138 rows — so they are
-/// stored whole and filtered at display time rather than pruned here. `spoiler`
-/// is the field that matters: level 0 is safe, 1 and 2 reveal plot.
+/// One trait applied to a character (stored unpruned, e.g. 1,138 rows for CLANNAD's cast; filtered by `spoiler` at display time).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CharacterTrait {
     /// Trait id, e.g. `i5`.
@@ -385,6 +385,10 @@ pub struct CharacterVnRole {
     pub id: Option<String>,
     /// `main`, `primary`, `side` or `appears`, for this VN.
     pub role: Option<String>,
+    /// Spoiler level for this VN's entry: 0 safe, 1 mild, 2 major. A secret
+    /// character carries 1 or 2 here; absent means 0.
+    #[serde(default)]
+    pub spoiler: Option<i64>,
 }
 
 /// A character entry from `POST /character`.
@@ -443,12 +447,7 @@ pub struct CharacterQueryResult {
     pub more: bool,
 }
 
-/// One voice-actor relation on a VN.
-///
-/// `POST /vn` has no top-level `characters` field — verified against the live
-/// API, which rejects it with "Field 'characters' not found". Characters are only
-/// reachable through `va`, one entry per voice actor, so the *same* character
-/// appears several times when it was voiced by several people.
+/// One voice-actor relation on `POST /vn` (the only way `POST /vn` exposes characters, duplicated per actor).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct VoiceActor {
     /// The character being voiced.
@@ -468,13 +467,8 @@ pub struct StaffCredit {
     pub original: Option<String>,
 }
 
-/// A production staff credit on a VN: scenario writer, artist, composer, …
-///
-/// Distinct from the voice-actor relation (`VoiceActor`): a credit names work
-/// on the VN itself. The staff fields sit flat on the entry next to
-/// `eid`/`role`/`note` — verified against the live API (`v17`), which returns
-/// `{"eid":null,"id":"s545","name":"…","role":"scenario",…}`; there is no
-/// nested person object the way `va.staff` nests one.
+/// Production staff credit on a VN (scenario writer, artist, composer, ...).
+/// Staff fields sit flat beside `eid`/`role`/`note` in the live API (`v17`), with no nested person object.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StaffMember {
     /// Staff id, e.g. `s123`.
@@ -690,6 +684,41 @@ mod tests {
     }
 
     #[test]
+    fn decodes_character_entries_with_their_per_vn_spoiler() {
+        // The cast query asks for `vns.spoiler`: a secret character carries 1
+        // or 2 on its VN entry, and the sheet conceals it. VNDB omits null
+        // fields, so an absent spoiler must decode as None, not fail the row.
+        let json = r#"{
+          "results": [
+            {
+              "id": "c1",
+              "name": "Secret Twin",
+              "vns": [{"id": "v17", "role": "main", "spoiler": 2}]
+            },
+            {
+              "id": "c2",
+              "name": "Everyday Heroine",
+              "vns": [{"id": "v17", "role": "primary"}]
+            }
+          ],
+          "more": false
+        }"#;
+        let parsed: CharacterQueryResult = serde_json::from_str(json).expect("decode");
+        assert_eq!(parsed.results.len(), 2);
+        assert_eq!(parsed.results[0].vns[0].spoiler, Some(2));
+        assert_eq!(parsed.results[1].vns[0].spoiler, None);
+    }
+
+    #[test]
+    fn a_cached_character_row_from_before_the_spoiler_field_stays_safe() {
+        // characters_json rows written before the field existed must decode,
+        // reading as spoiler-free rather than failing the whole payload.
+        let old_row = r#"{"id":"c31","name":"Sara","role":"primary","traits":[]}"#;
+        let decoded: Character = serde_json::from_str(old_row).expect("decode");
+        assert_eq!(decoded.spoiler, None);
+    }
+
+    #[test]
     fn tolerates_unknown_and_missing_fields() {
         let json =
             r#"{"results":[{"id":"v1","title":"X","some_future_field":{"a":1}}],"more":false}"#;
@@ -796,9 +825,7 @@ mod tests {
             "devstatus",
             "image.thumbnail",
             "titles.latin",
-            // The cast card needs these, and a field dropped from the list is a
-            // silently blank row rather than a compile error -- which is exactly
-            // how `characters_json` sat empty for every imported game.
+            // Cast fields must stay in `DETAIL_FIELDS` so `characters_json` never silently saves empty rows.
             "va.character.id",
             "va.character.name",
             "va.character.image.url",
@@ -889,10 +916,7 @@ mod tests {
 
     #[test]
     fn staff_credits_decode_from_the_live_shape() {
-        // Recorded from the API (v17, Ever17) when the staff field was added:
-        // the person's fields sit flat beside eid/role/note — there is no
-        // nested object the way `va.staff` nests one. Decode this shape or
-        // every seed row silently comes back empty.
+        // Recorded from live API v17 (Ever17): staff fields sit flat beside eid/role/note, unlike `va.staff`.
         let json = r#"{
           "results": [{
             "id": "v17",

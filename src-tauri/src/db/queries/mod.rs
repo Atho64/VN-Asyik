@@ -674,12 +674,7 @@ pub async fn list_sessions(
     sessions_from(rows)
 }
 
-/// Sessions for a game, tombstones included, for sync.
-/// The newest `limit` sessions of a game plus exact totals over all of them.
-///
-/// The game page used to load every session, which is unbounded for a
-/// long-lived visual novel. Totals are one aggregate, so the header still
-/// describes the whole history rather than only the visible page.
+/// The newest `limit` sessions of a game plus exact whole-game totals.
 ///
 /// # Errors
 /// `db_error` when either query fails.
@@ -875,15 +870,8 @@ pub async fn playtime_by_game(pool: &SqlitePool) -> Result<Vec<(EntityId, i64)>,
         .collect::<Result<Vec<_>, DbError>>()
 }
 
-/// Tracked time per local calendar day, as `(day_index, counted_ms)`.
-///
-/// A day index is days since 1970-01-01 of the *local* date — the same unit the
-/// heatmap grid on the stats page walks when it labels a cell, so a bucket and
-/// a cell can never disagree about units. The `'localtime'` modifier buckets by
-/// the machine's calendar day: a session read between midnight and dawn belongs
-/// to the night the reader experienced, not to the UTC date it happened to
-/// carry. (DST transitions can shift a boundary by an hour; acceptable for a
-/// heatmap, and `SQLite` resolves historical offsets for the timestamps it knows.)
+/// Tracked time per local calendar day as `(day_index, counted_ms)` (days since 1970-01-01).
+/// Uses `SQLite` `'localtime'` to match the stats heatmap's local calendar cells.
 pub async fn playtime_by_day(pool: &SqlitePool) -> Result<Vec<(i64, i64)>, DbError> {
     sqlx::query_as(
         "SELECT CAST(strftime('%s', ps.started_at / 1000, 'unixepoch', 'localtime', 'start of day') AS INTEGER) / 86400 AS day, \
@@ -1031,4 +1019,22 @@ pub async fn save_ui_prefs(
     let mut normalized = prefs.clone();
     normalized.normalize();
     save_json_pref(pool, UI_PREFS_KEY, &normalized).await
+}
+
+const STARTUP_PREFS_KEY: &str = "startup_prefs";
+
+/// Load device-local startup mode and close-action preferences.
+/// Autostart state is queried directly from the OS rather than stored here.
+pub async fn load_startup_prefs(
+    pool: &SqlitePool,
+) -> Result<vn_core::ui_prefs::StartupPrefs, DbError> {
+    load_json_pref(pool, STARTUP_PREFS_KEY).await
+}
+
+/// Persist the device-local window-behaviour prefs.
+pub async fn save_startup_prefs(
+    pool: &SqlitePool,
+    prefs: &vn_core::ui_prefs::StartupPrefs,
+) -> Result<(), DbError> {
+    save_json_pref(pool, STARTUP_PREFS_KEY, prefs).await
 }

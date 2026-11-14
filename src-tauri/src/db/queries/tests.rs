@@ -622,10 +622,7 @@ async fn playtime_buckets_one_local_day_together_and_reports_day_indexes() {
     let game = Game::new(&device, now(), "Hoshi Memo", GameStatus::Playing).unwrap();
     upsert_game(db.pool(), &game).await.expect("insert");
 
-    // 2023-11-14 06:00Z and 06:30Z: inside one local calendar day for every
-    // real timezone (offsets run −12..+14, so no local midnight falls between
-    // the two), which keeps this assertion deterministic without pinning the
-    // test machine's timezone.
+    // 06:00Z and 06:30Z fall on one local calendar day in all real timezones (-12..+14).
     for (start, counted) in [
         (1_699_941_600_000_i64, 40_000_i64),
         (1_699_943_400_000_i64, 20_000),
@@ -655,8 +652,6 @@ async fn playtime_buckets_one_local_day_together_and_reports_day_indexes() {
         "a 2023-11-14 session is day index ~19675, got {day}"
     );
 }
-
-// Routes
 
 #[tokio::test]
 async fn routes_round_trip_and_sort_with_nulls_last() {
@@ -884,8 +879,6 @@ async fn a_vndb_refresh_does_not_replace_a_user_chosen_cover() {
     );
 }
 
-// Timeline (journey)
-
 fn journal_entry(
     device: &DeviceId,
     game: EntityId,
@@ -1050,10 +1043,8 @@ async fn timeline_hides_a_deleted_games_history() {
         "a deleted game's history must not surface: {page:?}"
     );
 
-    // An orphan inserted the way one really appears: `PRAGMA foreign_keys` is
-    // per connection, so the insert needs its own connection. Both timeline
-    // queries must still decline it — a sum over unjoined children once
-    // reported 8.8 hours of playtime from games that did not exist.
+    // Insert an orphan via a dedicated connection (`PRAGMA foreign_keys` is per connection)
+    // and assert both timeline queries exclude it.
     let mut conn = db.pool().acquire().await.expect("connection");
     sqlx::query("PRAGMA foreign_keys = OFF")
         .execute(&mut *conn)
@@ -1114,11 +1105,11 @@ async fn a_finished_falls_back_to_the_first_achieved_ending() {
     reached.achieved_at = Some(Timestamp::from_millis(7_000));
     upsert_ending(db.pool(), &reached).await.expect("ending");
 
-    // `finished_at` stays unset: it is written only by VNDB sync, so a
-    // manually completed game would otherwise never reach the timeline. The
-    // fallback dates the finish by the first achieved ending, so the day
-    // legitimately carries both events: the ending reached, and the game it
-    // completed.
+    // `finished_at` stays unset on this fixture: rows built directly here
+    // bypass `update_game`, which is what records the date on a local
+    // completion. The fallback dates the finish by the first achieved
+    // ending, so the day legitimately carries both events: the ending
+    // reached, and the game it completed.
     let page = journey::timeline_page(db.pool(), None).await.expect("page");
     let kinds: Vec<&str> = page.events.iter().map(|e| e.kind.as_str()).collect();
     assert_eq!(kinds, vec!["ending", "finished"], "{page:?}");
@@ -1263,6 +1254,50 @@ async fn year_review_aggregates_one_local_year() {
     assert!(quiet.longest_session.is_none());
     assert!(quiet.first_game.is_none());
     assert!(quiet.top_games.is_empty());
+}
+
+#[tokio::test]
+async fn finished_by_day_buckets_the_timeline_finish_rule_locally() {
+    let (db, device) = fixture().await;
+
+    // Two games finished at the same instant land in one bucket; the counts,
+    // not the dates, are the assertion, so no timezone is pinned. Both dates
+    // are the "one local calendar day from every real timezone" fixtures the
+    // other journey tests use.
+    let shared_day = 1_700_049_600_000;
+    for (offset, title) in [(0_i64, "First"), (1, "Second")] {
+        let mut game = Game::new(&device, now(), title, GameStatus::Completed).unwrap();
+        game.finished_at = Some(Timestamp::from_millis(shared_day + offset));
+        upsert_game(db.pool(), &game).await.expect("game");
+    }
+
+    // A game whose only finish evidence is its first achieved ending: the
+    // fallback half of the same rule must bucket it too.
+    let fallback = Game::new(&device, now(), "Fallback", GameStatus::Playing).unwrap();
+    upsert_game(db.pool(), &fallback).await.expect("game");
+    let mut ending = Ending::new(&device, now(), fallback.meta.id, "True End").unwrap();
+    ending.achieved = true;
+    ending.achieved_at = Some(Timestamp::from_millis(1_699_941_600_000));
+    upsert_ending(db.pool(), &ending).await.expect("ending");
+
+    // A deleted game's finish must not surface, per the join-everything rule.
+    let mut ghost = Game::new(&device, now(), "Ghost", GameStatus::Completed).unwrap();
+    ghost.finished_at = Some(Timestamp::from_millis(shared_day));
+    upsert_game(db.pool(), &ghost).await.expect("game");
+    ghost.meta.deleted = true;
+    ghost.meta = ghost.meta.touch(now());
+    upsert_game(db.pool(), &ghost).await.expect("delete");
+
+    let buckets = journey::finished_by_day(db.pool()).await.expect("buckets");
+    assert_eq!(buckets.len(), 2, "two distinct days, ghost excluded");
+    assert!(
+        buckets.iter().any(|&(_, count)| count == 2),
+        "two live games share one day: {buckets:?}"
+    );
+    assert!(
+        buckets.iter().any(|&(_, count)| count == 1),
+        "the fallback-ending day is its own bucket: {buckets:?}"
+    );
 }
 
 #[tokio::test]
@@ -1459,8 +1494,6 @@ async fn library_wrapped_aggregates_every_year() {
     assert_eq!(wrapped.hour_ms.iter().sum::<i64>(), 100 * 60_000);
 }
 
-// On this day
-
 /// A timestamp whose *local* date is one year before today, at noon.
 ///
 /// Built by `SQLite` rather than by arithmetic here: the query matches on the
@@ -1574,8 +1607,6 @@ async fn on_this_day_hides_a_deleted_games_memories() {
     );
 }
 
-// Journal export
-
 #[tokio::test]
 async fn the_journal_export_reads_live_entries_in_reading_order() {
     let (db, device) = fixture().await;
@@ -1654,8 +1685,6 @@ async fn a_pinned_photo_survives_the_round_trip_and_a_photo_only_entry_saves() {
     assert_eq!(reloaded[0].photo_image_id, "");
     assert_eq!(reloaded[0].note, "caption instead");
 }
-
-// Journal search
 
 #[tokio::test]
 async fn journal_search_matches_note_route_and_chapter_newest_first() {

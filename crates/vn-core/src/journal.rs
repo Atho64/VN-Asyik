@@ -1,27 +1,20 @@
 //! Readable journal documents: one game's reading checkpoints as Markdown or HTML.
 //!
-//! This is deliberately *not* the library export. `commands::backup` and
-//! `commands::data` carry sync rows so another device can restore them; this
-//! renders the same checkpoints as prose a person reads, prints or keeps. The two
-//! must not be merged: a document that also contains tombstones and device ids is
-//! not a diary, and a diary cannot restore a library.
+//! Deliberately separate from library sync exports (`commands::backup`,
+//! `commands::data`), which carry tombstones and device ids for restoration.
 //!
-//! Everything here is pure. Dates arrive pre-formatted from the caller because
-//! the local calendar belongs to `SQLite`'s `'localtime'` modifier, the same
-//! authority `playtime_by_day` and the heatmap use — `vn-core` has no timezone
-//! and must not grow one.
+//! Dates arrive pre-formatted because the local calendar belongs to `SQLite`'s
+//! `'localtime'` modifier (same authority as `playtime_by_day` and the heatmap);
+//! `vn-core` has no timezone and must not grow one.
 //!
-//! ## What the document promises
+//! ## Promises
 //!
-//! * **Self-contained.** A photo is embedded as a `data:` URI, never linked. The
-//!   app is offline-first (`AGENTS.md` §2.6), so a journal that needs VNDB to show
-//!   its own photos would be a document that breaks when the network does.
-//! * **The content setting holds.** A photo the app would blur is embedded as the
-//!   pre-blurred copy; a photo the app would hide is not embedded at all. The
-//!   caller resolves that policy — this module only renders what it is handed, so
-//!   there is no second place where the threshold could drift (`AGENTS.md` §6).
-//! * **The user's text is text.** Notes are escaped, never interpreted: a note
-//!   containing `*` or `<script>` must read back exactly as typed.
+//! * **Self-contained.** Photos embed as `data:` URIs, never links, because the
+//!   app is offline-first (`AGENTS.md` §2.6).
+//! * **Content setting holds.** Blurred photos embed their pre-blurred copy;
+//!   hidden photos are omitted. The caller resolves that policy so the threshold
+//!   cannot drift here (`AGENTS.md` §6).
+//! * **User text is literal.** Notes are escaped so `*` or `<script>` render verbatim.
 
 use std::fmt::Write as _;
 
@@ -132,7 +125,6 @@ pub struct JournalDocument {
 }
 
 impl JournalDocument {
-    /// Render the document in `format`.
     #[must_use]
     pub fn render(&self, format: JournalFormat) -> String {
         match format {
@@ -141,11 +133,8 @@ impl JournalDocument {
         }
     }
 
-    /// Suggested file name, without a directory.
-    ///
-    /// The title is reduced to something every filesystem accepts: the same rule
-    /// the backup export needs, because a Windows path cannot contain `:` and a
-    /// Japanese title is fine but a `/` is not.
+    /// Suggested file name without a directory, sanitized identically to backup
+    /// exports (preserving Unicode letters while stripping path separators and `:`).
     #[must_use]
     pub fn file_stem(&self) -> String {
         let mut stem = String::with_capacity(self.title.len());
@@ -155,8 +144,7 @@ impl JournalDocument {
             } else if ch.is_whitespace() {
                 '-'
             } else {
-                // Anything else is dropped rather than replaced: a title of
-                // punctuation would otherwise become a run of dashes.
+                // Dropped rather than dashed so punctuation-only titles don't become "---".
                 continue;
             });
         }
@@ -173,13 +161,11 @@ impl JournalDocument {
         }
     }
 
-    /// File name for `format`.
     #[must_use]
     pub fn file_name(&self, format: JournalFormat) -> String {
         format!("{}-journal.{}", self.file_stem(), format.extension())
     }
 
-    /// The document as Markdown.
     fn to_markdown(&self) -> String {
         let mut out = String::new();
         write_markdown_head(&mut out, self);
@@ -194,12 +180,7 @@ impl JournalDocument {
         out
     }
 
-    /// The document as a standalone HTML file.
-    ///
-    /// The stylesheet is inline and the palette is the app's dark surface, because
-    /// a file that renders as unstyled black-on-white text is a file the user has
-    /// to fix before they can read it. Print styles are included: a diary is the
-    /// one export somebody actually prints.
+    /// Standalone dark-surface HTML with inline screen and print styles.
     fn to_html(&self) -> String {
         let mut out = String::with_capacity(4096 + self.entries.len() * 512);
         write_html_head(&mut out, self);
@@ -329,7 +310,7 @@ fn write_html_head(out: &mut String, document: &JournalDocument) {
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>",
     );
     out.push_str(&escape_html(&document.title));
-    out.push_str(" — journal</title>\n<style>\n");
+    out.push_str(" - journal</title>\n<style>\n");
     out.push_str(HTML_STYLE);
     out.push_str("</style>\n</head>\n<body>\n<main class=\"journal\">\n");
     out.push_str("<header class=\"journal__head\">\n<h1>");
@@ -465,11 +446,7 @@ fn position_line(entry: &JournalEntryView) -> String {
     parts.join(" · ")
 }
 
-/// Escape the characters that could start inline Markdown formatting.
-///
-/// Backslash escapes are `CommonMark`, so the rendered text is byte-identical
-/// to what the user typed. `<` and `>` are escaped because raw HTML is allowed
-/// in `CommonMark` and a note is not a place to inject it.
+/// Escapes `CommonMark` inline punctuation and raw HTML (`<`, `>`) so notes render verbatim.
 fn escape_markdown_inline(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for ch in text.chars() {
@@ -484,10 +461,7 @@ fn escape_markdown_inline(text: &str) -> String {
     out
 }
 
-/// Escape a whole line, including the block markers that only matter at its start.
-///
-/// `# Heading`, `- item`, `> quote` and `1. list` are block syntax; a note line
-/// that happens to begin with one must stay a line of prose.
+/// Escapes inline syntax plus block-start markers (`#`, `-`, `>`, `1.`) so prose stays prose.
 fn escape_markdown_line(line: &str) -> String {
     let escaped = escape_markdown_inline(line);
     let trimmed = line.trim_start();
@@ -513,7 +487,7 @@ fn ordered_list_marker(line: &str) -> bool {
     matches!(line[digits.len()..].chars().next(), Some('.' | ')'))
 }
 
-/// Escape a Markdown link destination.
+/// Strips whitespace and control characters from a Markdown link destination.
 fn escape_markdown_url(url: &str) -> String {
     url.chars()
         .filter(|ch| !ch.is_whitespace() && !ch.is_control())
@@ -536,10 +510,7 @@ fn escape_html(text: &str) -> String {
     out
 }
 
-/// Escape a value for an HTML attribute.
-///
-/// Same set as [`escape_html`]; kept separate because an attribute also has to
-/// survive a `data:` URI, which contains no quotes but does contain `+` and `/`.
+/// Same escaping as [`escape_html`], kept separate for attribute boundaries (`data:` URIs).
 fn escape_html_attr(text: &str) -> String {
     escape_html(text)
 }

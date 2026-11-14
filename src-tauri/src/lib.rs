@@ -12,6 +12,7 @@ pub mod presence;
 pub mod screenshots;
 pub mod script;
 pub mod secrets;
+pub mod startup;
 pub mod state;
 pub mod sync;
 pub mod tracking;
@@ -38,14 +39,7 @@ fn android_usage_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     }
 }
 
-/// Build and run the Tauri application.
-///
-/// # Panics
-/// Panics only if Tauri itself fails to start, which is unrecoverable.
 /// Every command the frontend may call, registered in one place.
-// `generate_handler!` takes one flat list, so this cannot be split into modules
-// the way the commands themselves are. The length is the IPC surface, not
-// tangled logic.
 #[allow(
     clippy::too_many_lines,
     reason = "generate_handler! requires every command in one macro invocation"
@@ -62,6 +56,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::library::list_game_sessions,
         commands::journey::timeline_page,
         commands::journey::year_review,
+        commands::journey::finished_by_day,
         commands::journey::library_wrapped,
         commands::journey::save_share_card,
         commands::journey::share_share_card,
@@ -280,22 +275,16 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::ui::window_launch_get,
         commands::ui::window_launch_set,
         commands::ui::window_launch_capture,
+        commands::ui::startup_prefs_get,
+        commands::ui::startup_prefs_set,
+        commands::ui::window_set_fullscreen,
     ]
 }
 
-/// The screenshot hotkey, registered from Rust.
+/// Desktop screenshot hotkey; Android uses the notification action instead.
 ///
-/// Desktop only: `tauri-plugin-global-shortcut` has no Android implementation,
-/// and Android reaches the same feature through the notification action.
-///
-/// Registered here rather than from the webview so it works while the game has
-/// focus and the window is behind it, and so the webview is never granted a
-/// global-shortcut permission it does not need.
-///
-/// The handler runs on the plugin's thread and must not block it: the capture is
-/// a blocking COM job, so it is spawned onto the async runtime. The outcome goes
-/// back to the UI as an event, because a shortcut that fails silently is
-/// indistinguishable from one that is not bound.
+/// Registered in Rust so it fires while a game has focus; capture is spawned
+/// onto the async runtime so the plugin thread never blocks on COM.
 #[cfg(not(target_os = "android"))]
 fn screenshot_shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
@@ -324,17 +313,18 @@ fn screenshot_shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
+/// Build and run the Tauri application.
+///
+/// # Panics
+/// Panics only if Tauri itself fails to start, which is unrecoverable.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
-    // Desktop only: the plugin has no Android implementation.
     #[cfg(not(target_os = "android"))]
     let builder = builder.plugin(screenshot_shortcut_plugin());
     builder
-        // Android only: registers the Kotlin usage-stats plugin so playtime can
-        // come from the platform usage log. A no-op builder elsewhere.
         .plugin(android_usage_plugin())
         .plugin(platform::storage::init())
         .plugin(platform::android_presence::init())
@@ -353,6 +343,21 @@ pub fn run() {
                     .unwrap_or_default();
                 let tracker = handle.state::<window_launch::WindowLaunchTracker>();
                 window_launch::apply_startup_position(&handle, &launch_prefs, &tracker);
+                // Register before any command invokes `autolaunch()`.
+                startup::register_autostart(&handle)?;
+            }
+            // Window visibility at boot comes from `startup_prefs`; autostart stays OS state (Run key), never a stored flag.
+            #[cfg(desktop)]
+            {
+                let startup_prefs =
+                    tauri::async_runtime::block_on(crate::db::queries::load_startup_prefs(
+                        handle.state::<state::AppState>().db().pool(),
+                    ))
+                    .unwrap_or_default();
+                handle.manage(startup::CloseBehavior(std::sync::RwLock::new(
+                    startup_prefs.close_to_tray,
+                )));
+                startup::apply_startup_mode(&handle, &startup_prefs);
             }
             let events = handle.clone();
             app.state::<state::AppState>()
@@ -363,12 +368,9 @@ pub fn run() {
                     let _ = events.emit_to(companion::window::LABEL, companion::EVENT, &notice);
                 });
             commands::companion::spawn_monitor(handle.clone());
-            // Start the playtime loop once state exists.
             commands::tracking::spawn_loop(handle.clone());
-            // System tray icon for desktop background operation.
             tray::setup_tray(&handle)?;
-            // Chromium's own right-click menu has no place in a desktop app; the
-            // UI draws its own. No-op on platforms without WebView2.
+            // Suppress Chromium's default right-click menu on WebView2; the UI draws its own.
             #[cfg(windows)]
             platform::context_menu::disable_default_context_menu(&handle);
             Ok(())
@@ -379,8 +381,15 @@ pub fn run() {
             #[cfg(desktop)]
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
-                    api.prevent_close();
-                    let _ = window.hide();
+                    // Synchronous handler: consult the in-memory mirror rather than querying SQLite.
+                    let hides = window
+                        .app_handle()
+                        .try_state::<startup::CloseBehavior>()
+                        .is_none_or(|behavior| behavior.hides_to_tray());
+                    if hides {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
                 }
                 tauri::WindowEvent::Moved(pos) => {
                     window_launch::handle_window_moved(window, pos);

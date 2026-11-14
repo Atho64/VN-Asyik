@@ -1,29 +1,18 @@
-//! System tray icon and window visibility management for desktop.
+//! Desktop system tray icon and window visibility management.
 //!
-//! Provides a system tray icon in the notification area so VN Asyik can run silently
-//! in the background while tracking visual novel playtime and receiving `LunaTranslator`
-//! text hooks.
-//!
-//! The menu labels come from the UI (`tray_set_labels`), not from this file: every
-//! other string in the app goes through the i18n dictionaries, and the tray was the
-//! one place that shipped Indonesian text to an English-first app.
+//! Menu labels come from the frontend (`tray_set_labels`) so the tray follows
+//! the active i18n locale.
 
-/// The labels the tray menu shows, supplied by the frontend in the user's locale.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrayLabels {
-    /// The entry that restores the window.
     pub show: String,
-    /// The entry that hides the window.
     pub hide: String,
-    /// The entry that ends the app.
     pub quit: String,
 }
 
 impl Default for TrayLabels {
     fn default() -> Self {
-        // English, like the app's default locale. This is what the menu reads for
-        // the few milliseconds between the tray existing and the frontend
-        // reporting its language.
+        // Fallback strings shown briefly before the frontend reports its locale.
         Self {
             show: "Show VN Asyik".to_owned(),
             hide: "Hide to tray".to_owned(),
@@ -39,8 +28,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
-/// Id of the tray icon, so the labels can be replaced later without guessing
-/// which tray belongs to this app.
+/// Fixed tray icon ID so `set_labels` can rebuild the menu in place.
 #[cfg(desktop)]
 pub const TRAY_ID: &str = "vn-asyik";
 
@@ -50,7 +38,6 @@ fn get_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
         .or_else(|| app.webview_windows().into_values().next())
 }
 
-/// Build the tray menu with the given labels.
 #[cfg(desktop)]
 fn build_menu(
     app: &tauri::AppHandle,
@@ -63,7 +50,6 @@ fn build_menu(
     Menu::with_items(app, &[&show_i, &hide_i, &sep, &quit_i])
 }
 
-/// Set up the desktop system tray icon with menu and left-click toggle.
 #[cfg(desktop)]
 pub fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let menu = build_menu(app, &TrayLabels::default())?;
@@ -136,7 +122,6 @@ pub fn set_labels(
     Ok(())
 }
 
-/// Fallback for non-desktop targets (e.g. Android).
 #[cfg(not(desktop))]
 pub fn setup_tray(_app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())

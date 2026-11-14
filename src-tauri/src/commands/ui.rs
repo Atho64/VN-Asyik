@@ -2,6 +2,8 @@
 
 use serde::Deserialize;
 use tauri::State;
+#[cfg(desktop)]
+use vn_core::ui_prefs::StartupPrefsPatch;
 use vn_core::ui_prefs::{UiPrefs, UiPrefsPatch};
 #[cfg(desktop)]
 use vn_core::window::{WindowLaunchMode, WindowLaunchPrefs};
@@ -192,5 +194,159 @@ pub async fn window_launch_capture(
             current_y: Some(y),
             supported: true,
         })
+    }
+}
+
+/// One startup-behaviour read: the saved prefs plus whether this platform
+/// acts on them at all.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupPrefsView {
+    /// Launch presentation and close action.
+    pub prefs: vn_core::ui_prefs::StartupPrefs,
+    /// Whether this platform applies startup modes and the autostart toggle.
+    pub supported: bool,
+    /// Whether the OS currently launches this app at login. `None` where the
+    /// answer is unavailable.
+    pub autostart: Option<bool>,
+}
+
+/// Read the startup-mode prefs and the OS autostart registration.
+///
+/// # Errors
+/// `db_error` for the prefs, `unsupported` where the platform has neither.
+#[tauri::command]
+pub async fn startup_prefs_get(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<StartupPrefsView> {
+    let prefs = queries::load_startup_prefs(state.db().pool()).await?;
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        return Ok(StartupPrefsView {
+            prefs,
+            supported: false,
+            autostart: None,
+        });
+    }
+
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_autostart::ManagerExt as _;
+        let autostart = app
+            .autolaunch()
+            .is_enabled()
+            .map_err(|err| CommandError::new("autostart", err.to_string()))?;
+        Ok(StartupPrefsView {
+            prefs,
+            supported: true,
+            autostart: Some(autostart),
+        })
+    }
+}
+
+/// Input payload for the startup-behaviour prefs.
+#[derive(Debug, Deserialize)]
+pub struct StartupPrefsInput {
+    /// Optional launch-mode change.
+    pub startup_mode: Option<vn_core::ui_prefs::StartupMode>,
+    /// Optional close-action change.
+    pub close_to_tray: Option<bool>,
+    /// Optional autostart change; applied to the OS when given.
+    pub autostart: Option<bool>,
+}
+
+/// Update the startup-mode prefs, the close action and the autostart toggle.
+///
+/// # Errors
+/// `db_error` for the prefs, `unsupported` where the platform has neither,
+/// `autostart` when the OS registration fails.
+#[tauri::command]
+pub async fn startup_prefs_set(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: StartupPrefsInput,
+) -> CommandResult<StartupPrefsView> {
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, state, input);
+        // A phone has neither a tray nor an OS autostart to toggle; the
+        // settings section is hidden there and the read reports the same.
+        return Err(CommandError::new(
+            "unsupported",
+            "Startup behaviour is unsupported on this platform.",
+        ));
+    }
+
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_autostart::ManagerExt as _;
+        let pool = state.db().pool();
+        let mut prefs = queries::load_startup_prefs(pool).await?;
+        prefs.apply_patch(StartupPrefsPatch {
+            startup_mode: input.startup_mode,
+            close_to_tray: input.close_to_tray,
+        });
+        queries::save_startup_prefs(pool, &prefs).await?;
+
+        // The close handler is synchronous and reads this mirror instead of
+        // the database.
+        if let Some(tray) = input.close_to_tray
+            && let Some(behavior) = app.try_state::<crate::startup::CloseBehavior>()
+            && let Ok(mut guard) = behavior.0.write()
+        {
+            *guard = tray;
+        }
+
+        let autostart = if let Some(enabled) = input.autostart {
+            let manager = app.autolaunch();
+            let result = if enabled {
+                manager.enable()
+            } else {
+                manager.disable()
+            };
+            result.map_err(|err| CommandError::new("autostart", err.to_string()))?;
+            Some(
+                manager
+                    .is_enabled()
+                    .map_err(|err| CommandError::new("autostart", err.to_string()))?,
+            )
+        } else {
+            None
+        };
+
+        Ok(StartupPrefsView {
+            prefs,
+            supported: true,
+            autostart,
+        })
+    }
+}
+
+/// Toggle the main window's fullscreen state, used to drop the fullscreen the
+/// Big Picture launch mode set once the reader leaves it.
+///
+/// # Errors
+/// `unsupported` on mobile.
+#[tauri::command]
+pub async fn window_set_fullscreen(app: tauri::AppHandle, fullscreen: bool) -> CommandResult<()> {
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, fullscreen);
+        return Err(CommandError::new(
+            "unsupported",
+            "Fullscreen control is unsupported on this platform.",
+        ));
+    }
+
+    #[cfg(desktop)]
+    {
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| CommandError::new("no_window", "Main window is not open."))?;
+        window
+            .set_fullscreen(fullscreen)
+            .map_err(|err| CommandError::new("window", err.to_string()))
     }
 }

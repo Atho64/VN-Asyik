@@ -27,8 +27,7 @@ pub struct TimelineCursor {
 pub struct TimelineEvent {
     /// `"session" | "journal" | "ending" | "finished"`.
     pub kind: String,
-    /// Event timestamp, UTC ms — a session's start, a journal entry's creation,
-    /// an ending's achieved date, a game's finish date.
+    /// Event timestamp in UTC ms (session start, journal creation, achieved ending, or finish date).
     pub ts: i64,
     /// Row id of the event (unique per source table).
     pub id: String,
@@ -263,6 +262,15 @@ pub async fn year_review(state: State<'_, AppState>, year: i32) -> CommandResult
         ));
     }
     Ok(crate::db::queries::journey::year_review(state.db().pool(), year).await?)
+}
+
+/// Local-day buckets of finished games, for the activity heatmap's marks.
+///
+/// # Errors
+/// `db_error` when the query fails.
+#[tauri::command]
+pub async fn finished_by_day(state: State<'_, AppState>) -> CommandResult<Vec<(i64, i64)>> {
+    Ok(crate::db::queries::journey::finished_by_day(state.db().pool()).await?)
 }
 
 /// Library-wide aggregates for the all-time wrapped card.

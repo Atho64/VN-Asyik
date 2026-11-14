@@ -95,13 +95,11 @@ impl<'de> Deserialize<'de> for DeviceTag {
 }
 
 impl DeviceTag {
-    /// Wrap a device id for storage in row metadata.
     #[must_use]
     pub fn new(device: &DeviceId) -> Self {
         Self(std::sync::Arc::new(device.clone()))
     }
 
-    /// The wrapped identifier.
     #[must_use]
     pub fn device(&self) -> &DeviceId {
         &self.0
@@ -109,7 +107,6 @@ impl DeviceTag {
 }
 
 impl SyncMeta {
-    /// Create metadata for a brand new row.
     #[must_use]
     pub fn new(device: &DeviceId, now: Timestamp) -> Self {
         Self {
@@ -120,7 +117,6 @@ impl SyncMeta {
         }
     }
 
-    /// Mark a row as locally modified at `now`.
     #[must_use]
     pub fn touch(&self, now: Timestamp) -> Self {
         Self {
@@ -131,7 +127,6 @@ impl SyncMeta {
         }
     }
 
-    /// Mark a row as deleted (soft delete) at `now`.
     #[must_use]
     pub fn tombstone(&self, now: Timestamp) -> Self {
         Self {
@@ -235,25 +230,14 @@ impl NsfwMode {
     }
 }
 
-/// The minimum VNDB flag level this app conceals.
-///
-/// One constant, because the same number used to be written in four places and three
-/// of them disagreed: covers compared `>= 2`, the screenshot cache compared the
-/// rounded level `>= 1`, and the frontend's `isExplicit` compared raw `>= 1`. A cover
-/// and a screenshot of the same scene could therefore be treated differently by the
-/// same setting.
-///
-/// Level 1, not 2: VNDB's level is a rounding of an average vote, so level 1 already
-/// means the community flagged the image above safe — Sanoba Witch's cover sits at
-/// 0.93 sexual and must be concealed rather than shown.
+/// Minimum VNDB flag level concealed in-app (shared across covers and screenshots).
+/// Level 1 rather than 2 because VNDB votes are averages (`Sanoba Witch`'s cover
+/// sits at 0.93 sexual and rounds to 1, which must be concealed).
 pub const EXPLICIT_FLAG_LEVEL: u8 = 1;
 
-/// Whether one stored flag level counts as explicit.
-///
-/// `None` is **not** explicit here: this is the in-app display policy, and a row that
-/// predates the rating columns must still render. Anything that broadcasts or uploads
-/// art (Discord presence) must fail closed instead and treat `None` as explicit; see
-/// `crate::presence::cover_is_explicit`.
+/// Whether one stored flag level counts as explicit for in-app display (`None` is not
+/// explicit so older cached rows still render; Discord presence fails closed via
+/// `crate::presence::cover_is_explicit`).
 #[must_use]
 pub fn is_explicit_at_level(level: Option<u8>) -> bool {
     level.is_some_and(|level| level >= EXPLICIT_FLAG_LEVEL)
@@ -382,14 +366,21 @@ impl Game {
         Ok(())
     }
 
-    /// True when the art should be treated as explicit under `mode`.
-    ///
-    /// Level 1 or higher, not level 2. VNDB's scale is 0 (safe) / 1 (suggestive) /
-    /// 2 (explicit), and its votes are averages: an image the community clearly reads
-    /// as adult art routinely lands at 1.4 or 1.6, which rounds to level 2 and hides
-    /// correctly, while one at 1.1 rounds to 1 and used to pass as safe. One threshold
-    /// applies to every image in the app — `crate::vndb::dto::flag_level` is the single
-    /// rounding, and `is_explicit_at_level` is the single comparison.
+    /// Sets status and fills `finished_at` only if empty on transition into `Completed`
+    /// (matching VNDB list sync); leaving `Completed` preserves the recorded finish date.
+    pub fn mark_status(&mut self, status: GameStatus, now: Timestamp) {
+        if status == GameStatus::Completed
+            && self.status != GameStatus::Completed
+            && self.finished_at.is_none()
+        {
+            self.finished_at = Some(now);
+        }
+        self.status = status;
+    }
+
+    /// True when the cover should be treated as explicit under `mode`.
+    /// Level >= 1 (not 2) because VNDB votes are averages (`dto::flag_level` +
+    /// `is_explicit_at_level` own the single threshold).
     #[must_use]
     pub fn is_explicit(&self, mode: NsfwMode) -> bool {
         if mode == NsfwMode::Show {
@@ -966,6 +957,46 @@ mod tests {
         assert_eq!(game.total_playtime_ms(1_800_000), 5_400_000);
         game.manual_playtime_ms = -10_000;
         assert_eq!(game.total_playtime_ms(5_000), 0);
+    }
+
+    #[test]
+    fn completing_a_game_records_the_date_when_unknown() {
+        // A completion made in this app must reach the timeline, the year
+        // review and the finished-day marks; without a date none of them can
+        // place it.
+        let mut game = Game::new(&device(), now(), "A", GameStatus::Playing).unwrap();
+        assert!(game.finished_at.is_none());
+        game.mark_status(GameStatus::Completed, Timestamp::from_millis(9_000));
+        assert_eq!(game.finished_at, Some(Timestamp::from_millis(9_000)));
+    }
+
+    #[test]
+    fn completing_a_game_never_overwrites_a_known_date() {
+        // The same fill-if-empty rule the VNDB list sync applies: a finish
+        // date from VNDB's own record is the more accurate one, and re-marking
+        // completed must not move it.
+        let mut game = Game::new(&device(), now(), "A", GameStatus::Playing).unwrap();
+        game.finished_at = Some(Timestamp::from_millis(1_000));
+        game.mark_status(GameStatus::Completed, Timestamp::from_millis(9_000));
+        assert_eq!(game.finished_at, Some(Timestamp::from_millis(1_000)));
+    }
+
+    #[test]
+    fn re_completing_an_already_completed_game_keeps_its_date() {
+        let mut game = Game::new(&device(), now(), "A", GameStatus::Completed).unwrap();
+        assert!(game.finished_at.is_none());
+        game.mark_status(GameStatus::Completed, Timestamp::from_millis(5_000));
+        assert!(game.finished_at.is_none(), "no transition, no new date");
+    }
+
+    #[test]
+    fn leaving_completed_does_not_erase_the_date() {
+        // Like endings.achieved_at: a recorded finish is a historical fact.
+        let mut game = Game::new(&device(), now(), "A", GameStatus::Completed).unwrap();
+        game.finished_at = Some(Timestamp::from_millis(1_000));
+        game.mark_status(GameStatus::Playing, Timestamp::from_millis(9_000));
+        assert_eq!(game.status, GameStatus::Playing);
+        assert_eq!(game.finished_at, Some(Timestamp::from_millis(1_000)));
     }
 
     #[test]

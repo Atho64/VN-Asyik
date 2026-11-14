@@ -25,20 +25,13 @@ const PROGRAMMATIC_MOVE_GRACE_MS: i64 = 600;
 #[cfg(desktop)]
 const MOVE_DEBOUNCE_MS: u64 = 350;
 
-/// View returned to the frontend for the desktop window launch setting.
 #[derive(Debug, Clone, Serialize)]
 pub struct WindowLaunchView {
-    /// Launch mode (`centered` or `customized`).
     pub mode: WindowLaunchMode,
-    /// Saved customized top-left X coordinate (if any).
     pub x: Option<i32>,
-    /// Saved customized top-left Y coordinate (if any).
     pub y: Option<i32>,
-    /// Current live window X coordinate on desktop (or `None` on mobile).
     pub current_x: Option<i32>,
-    /// Current live window Y coordinate on desktop (or `None` on mobile).
     pub current_y: Option<i32>,
-    /// Whether this platform supports explicit window launch placement.
     pub supported: bool,
 }
 
@@ -65,7 +58,6 @@ fn now_unix_ms() -> i64 {
 }
 
 impl WindowLaunchTracker {
-    /// Synchronize in-memory tracking state with persisted preferences.
     pub fn sync_from_prefs(&self, prefs: &WindowLaunchPrefs) {
         if let Ok(mut guard) = self.inner.lock() {
             guard.mode = prefs.mode;
@@ -74,7 +66,6 @@ impl WindowLaunchTracker {
         }
     }
 
-    /// Snapshot the current persisted preference shape known to the tracker.
     #[must_use]
     pub fn snapshot(&self) -> WindowLaunchPrefs {
         self.inner
@@ -95,7 +86,6 @@ impl WindowLaunchTracker {
         }
     }
 
-    /// True while programmatic moves should still be ignored.
     #[must_use]
     pub fn is_suppressed(&self) -> bool {
         self.inner
@@ -103,7 +93,6 @@ impl WindowLaunchTracker {
             .is_ok_and(|guard| now_unix_ms() < guard.suppress_until_ms)
     }
 
-    /// Bump and return a monotonic generation for debounced drag saves.
     #[cfg(desktop)]
     pub fn schedule_moved(&self) -> u64 {
         self.inner.lock().map_or(0, |mut guard| {
@@ -112,7 +101,6 @@ impl WindowLaunchTracker {
         })
     }
 
-    /// Read the active move generation.
     #[cfg(desktop)]
     #[must_use]
     pub fn current_generation(&self) -> u64 {
@@ -120,7 +108,6 @@ impl WindowLaunchTracker {
     }
 }
 
-/// Convert Tauri monitor descriptors into pure `vn_core::window::MonitorRect` slices.
 #[cfg(desktop)]
 #[must_use]
 pub fn monitor_rects(monitors: &[tauri::Monitor]) -> Vec<MonitorRect> {
@@ -139,7 +126,6 @@ pub fn monitor_rects(monitors: &[tauri::Monitor]) -> Vec<MonitorRect> {
         .collect()
 }
 
-/// Apply the startup launch placement to the `main` window during app setup.
 #[cfg(desktop)]
 pub fn apply_startup_position(
     app: &AppHandle,
@@ -170,8 +156,7 @@ pub fn apply_startup_position(
     }
 }
 
-/// Validate coordinates against the main window's available monitors and optionally
-/// move the live window immediately.
+/// Validate coordinates against active monitors and optionally reposition immediately.
 #[cfg(desktop)]
 pub fn apply_window_setting(
     window: &tauri::WebviewWindow,
@@ -215,8 +200,6 @@ pub fn apply_window_setting(
     Ok(())
 }
 
-/// Read the live physical outer position of the `main` window if visible and not
-/// minimized.
 #[cfg(desktop)]
 #[must_use]
 pub fn live_position(window: &tauri::WebviewWindow) -> Option<(i32, i32)> {
@@ -228,7 +211,6 @@ pub fn live_position(window: &tauri::WebviewWindow) -> Option<(i32, i32)> {
         .then_some((pos.x, pos.y))
 }
 
-/// Record user drags of the `main` window when launch mode is `Customized`.
 #[cfg(desktop)]
 pub fn handle_window_moved(window: &tauri::Window, pos: &PhysicalPosition<i32>) {
     if window.label() != "main" {

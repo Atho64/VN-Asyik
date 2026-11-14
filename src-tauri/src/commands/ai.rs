@@ -1,20 +1,14 @@
-//! AI commands: taste and recommendations.
+//! AI commands: offline deterministic taste profiling (`ai_taste_profile`) and Tavily-backed recommendations (`ai_recommend`).
 //!
-//! `ai_taste_profile` counts the VNDB tags the library carries most, entirely
-//! locally and deterministically: a plain list a user can check against their
-//! own games.
-//!
-//! `ai_recommend` reaches the network through Tavily, and is the only one that
-//! spends credits.
-//!
-//! The local embedding index that used to live here was removed on 2026-10-22;
-//! see `docs/archive/local-embeddings/` for what it was and why.
+//! Seeds match `vn_core::for_you` rankings so the taste panel and recommendations never diverge.
 
 use serde::Serialize;
 use tauri::State;
 
+use super::for_you::{SeedSummaryView, seed_summary};
 use super::{CommandError, CommandResult};
 use crate::state::AppState;
+use vn_core::taste::ProfiledGame;
 
 /// The library's taste, computed from its own data.
 ///
@@ -23,8 +17,23 @@ use crate::state::AppState;
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TasteView {
-    /// The computed profile: the tags the library carries most.
+    /// The computed profile: the tags the library carries most. The panel
+    /// keeps `considered` and `undetermined` for the missing-metadata notice.
     pub profile: vn_core::taste::TasteProfile,
+    /// Rating-weighted seeds shared with For-you recommendations (same categories and ordering).
+    pub seeds: SeedSummaryView,
+}
+
+/// Assemble the whole taste view from the library's games.
+///
+/// Free of Tauri state, so it tests with plain data: the plain-count profile
+/// for the missing-metadata notice, and the weighted seeds for everything the
+/// panel displays.
+fn taste_view(games: &[ProfiledGame]) -> TasteView {
+    TasteView {
+        profile: vn_core::taste::profile(games),
+        seeds: seed_summary(&vn_core::for_you::for_you_seeds(games)),
+    }
 }
 
 /// Compute the taste profile.
@@ -37,8 +46,7 @@ pub async fn ai_taste_profile(state: State<'_, AppState>) -> CommandResult<Taste
     let games = crate::db::queries::for_you::seeded_games(pool)
         .await
         .map_err(|err| CommandError::new("db", err.to_string()))?;
-    let profile = vn_core::taste::profile(&games);
-    Ok(TasteView { profile })
+    Ok(taste_view(&games))
 }
 
 /// Whether an `http://` base URL points at this machine.
@@ -563,5 +571,138 @@ mod local_endpoint_tests {
     fn only_the_http_prefix_is_considered() {
         // https:// is accepted elsewhere; this guard is only about plain http.
         assert!(!is_local_endpoint("https://api.openai.com/v1"));
+    }
+}
+
+#[cfg(test)]
+mod taste_view_tests {
+    use super::taste_view;
+    use vn_core::taste::{ProfiledGame, StaffCredit, TagWeight};
+
+    fn tag(id: &str, name: &str, rating: f32) -> TagWeight {
+        TagWeight {
+            id: Some(id.to_owned()),
+            name: name.to_owned(),
+            rating,
+            spoiler: 0,
+        }
+    }
+
+    fn game(id: &str, title: &str, tags: Vec<TagWeight>) -> ProfiledGame {
+        ProfiledGame {
+            id: id.to_owned(),
+            title: title.to_owned(),
+            status: "completed".to_owned(),
+            rating: None,
+            tags,
+            work_id: None,
+            developers: Vec::new(),
+            staff: Vec::new(),
+            voices: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn the_wire_format_is_camel_case() {
+        // The frontend reads camelCase keys directly; snake_case keys would arrive as undefined.
+        let games = vec![
+            game("1", "A", vec![tag("g1", "Nakige", 2.98)]),
+            game("2", "B", vec![tag("g1", "Nakige", 2.96)]),
+            game("3", "C", vec![tag("g1", "Nakige", 2.9)]),
+        ];
+        let text = serde_json::to_string(&taste_view(&games)).expect("serialise");
+        assert!(text.contains("\"profile\""), "got {text}");
+        assert!(text.contains("\"seeds\""), "got {text}");
+        assert!(text.contains("\"topGames\""), "got {text}");
+        assert!(text.contains("\"undetermined\""), "got {text}");
+    }
+
+    #[test]
+    fn the_seeds_carry_the_games_behind_the_counts() {
+        // The taste panel must be able to show which games a claim rests on,
+        // exactly as the For-you header can.
+        let games = vec![
+            game("1", "A", vec![tag("g1", "Nakige", 2.98)]),
+            game("2", "B", vec![tag("g1", "Nakige", 2.96)]),
+            game("3", "C", vec![tag("g1", "Nakige", 2.9)]),
+        ];
+        let view = taste_view(&games);
+        assert_eq!(view.seeds.considered, 3);
+        let nakige = &view.seeds.tags[0];
+        assert_eq!(nakige.count, 3);
+        assert_eq!(nakige.examples, vec!["A", "B", "C"]);
+    }
+
+    #[test]
+    fn an_unrated_library_still_produces_the_plain_profile() {
+        // Seeds want ratings; the plain count does not. The view carries both,
+        // so the panel can fall back to counts when nothing is rated yet.
+        let games = vec![
+            game("1", "A", vec![tag("g1", "Nakige", 2.98)]),
+            game("2", "B", vec![tag("g1", "Nakige", 2.96)]),
+        ];
+        let view = taste_view(&games);
+        assert_eq!(view.profile.considered, 2);
+        assert!(!view.profile.themes.is_empty());
+        assert_eq!(view.seeds.considered, 2);
+        // Below the three-seed minimum the library is not ready to query.
+        assert!(!view.seeds.ready);
+    }
+
+    #[test]
+    fn a_dropped_game_keeps_its_tags_but_not_its_seed() {
+        // The notice counts games with no tags at all; a dropped game with tags
+        // stays in the plain profile but cannot drive recommendations. Both
+        // facts are visible in one view.
+        let mut dropped = game("1", "Dropped", vec![tag("g1", "Nakige", 3.0)]);
+        dropped.status = "dropped".to_owned();
+        let mut fav = game("2", "Favourite", Vec::new());
+        // 8.5 likes the game but is below the 9.0 standout level, so it cannot
+        // carry a single-game studio seed.
+        fav.rating = Some(85);
+        fav.developers = vec![vn_core::taste::NamedEntity {
+            id: "p1".to_owned(),
+            name: "Key".to_owned(),
+        }];
+        let view = taste_view(&[dropped, fav]);
+        // The plain profile counts the tagged game; the seeds count the rated
+        // one. Two different "considered" sets, both visible in one view.
+        assert_eq!(view.profile.considered, 1);
+        assert_eq!(view.profile.undetermined, vec!["Favourite"]);
+        assert_eq!(view.seeds.considered, 1);
+        assert!(
+            view.seeds.developers.is_empty(),
+            "one game is not a pattern"
+        );
+        assert_eq!(view.seeds.top_games, vec!["Favourite"]);
+    }
+
+    #[test]
+    fn staff_roles_reach_the_summary_with_their_examples() {
+        let mut first = game("1", "Written One", Vec::new());
+        first.rating = Some(90);
+        first.staff = vec![StaffCredit {
+            id: "s1".to_owned(),
+            name: "Writer".to_owned(),
+            role: "scenario".to_owned(),
+        }];
+        let mut second = game("2", "Written Two", Vec::new());
+        second.staff = vec![StaffCredit {
+            id: "s1".to_owned(),
+            name: "Writer".to_owned(),
+            role: "scenario".to_owned(),
+        }];
+        let mut third = game("3", "Written Three", Vec::new());
+        third.staff = vec![StaffCredit {
+            id: "s1".to_owned(),
+            name: "Writer".to_owned(),
+            role: "scenario".to_owned(),
+        }];
+        let view = taste_view(&[first, second, third]);
+        assert_eq!(view.seeds.staff[0].count, 3);
+        assert_eq!(
+            view.seeds.staff[0].examples,
+            vec!["Written One", "Written Two", "Written Three"]
+        );
     }
 }
