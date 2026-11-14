@@ -9,7 +9,6 @@ use crate::db::{Db, DbError, queries};
 use crate::tracking::TrackingService;
 use crate::vndb::VndbClient;
 
-/// State handed to every command via `tauri::State`.
 pub struct AppState {
     db: Db,
     device: DeviceId,
@@ -112,7 +111,6 @@ impl AppState {
         })
     }
 
-    /// Borrow the database handle.
     #[must_use]
     pub fn db(&self) -> &Db {
         &self.db
@@ -159,38 +157,32 @@ impl AppState {
         &self.presence
     }
 
-    /// This installation's device id.
     #[must_use]
     pub fn device(&self) -> &DeviceId {
         &self.device
     }
 
-    /// Directory backups and cached art are written here.
+    /// Directory where backups and cached art are stored.
     #[must_use]
     pub fn data_dir(&self) -> &PathBuf {
         &self.data_dir
     }
 
-    /// Playtime tracking service and its probe.
     #[must_use]
     pub fn tracker(&self) -> &TrackingService {
         &self.tracker
     }
 
-    /// Text hook host: captured lines and connection state.
     #[must_use]
     pub fn hook(&self) -> &std::sync::Arc<crate::tracking::hook::HookHost> {
         &self.hook
     }
 
-    /// `LunaTranslator` network-service monitor: settings, connection state and
-    /// the text it feeds into the hook ring.
     #[must_use]
     pub fn luna(&self) -> &std::sync::Arc<crate::tracking::luna::LunaMonitor> {
         &self.luna
     }
 
-    /// Shared VNDB client, with its rate limiter.
     #[must_use]
     pub fn vndb(&self) -> &VndbClient {
         &self.vndb
@@ -202,16 +194,12 @@ impl AppState {
     }
 }
 
-/// Reasons boot can fail.
 #[derive(Debug, thiserror::Error)]
 pub enum BootError {
-    /// Tauri could not resolve a platform path.
     #[error("could not resolve application paths: {0}")]
     Path(#[from] tauri::Error),
-    /// The database layer failed.
     #[error(transparent)]
     Db(#[from] DbError),
-    /// The VNDB HTTP client could not be built.
     #[error("network client could not start: {0}")]
     Vndb(crate::vndb::VndbError),
 }

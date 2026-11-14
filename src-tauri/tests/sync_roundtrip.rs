@@ -1,9 +1,4 @@
-//! Two devices syncing through a shared folder.
-//!
-//! These tests use two real in-memory databases and a real folder on disk, because
-//! the failure modes worth guarding against only appear at that level: a payload
-//! that drops a column, a delete that fails to travel, a merge that never
-//! converges. Unit tests on the merge rules cannot catch any of those.
+//! Integration tests for two-device folder sync roundtrips across real `SQLite` DBs and temp folders.
 
 use std::path::PathBuf;
 

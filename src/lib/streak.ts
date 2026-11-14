@@ -1,10 +1,6 @@
 /**
- * Reading streaks over the per-day playtime list.
- *
- * Input is the same shape `playtime_by_day` returns and the heatmap renders:
- * `[dayIndex, ms]` tuples where a day index is days since epoch of the *local*
- * date. Both functions are pure and take "today" as an argument, so a test can
- * pin the calendar instead of racing the real clock.
+ * Pure reading-streak calculations over `[localDayIndex, ms]` tuples; accepts
+ * `todayIndex` so callers and tests stay deterministic.
  */
 
 /** Day indexes the reader actually recorded time on, ascending. */
@@ -16,9 +12,8 @@ function readDays(days: Array<[number, number]>): number[] {
 }
 
 /**
- * The current streak: consecutive reading days ending today, or yesterday —
- * a streak survives until the day is over, so not having read *yet* today is
- * not the same as having broken it.
+ * Consecutive reading days ending today or yesterday (a streak stays alive
+ * until today finishes without recorded reading).
  */
 export function currentStreak(days: Array<[number, number]>, todayIndex: number): number {
   const read = new Set(readDays(days));

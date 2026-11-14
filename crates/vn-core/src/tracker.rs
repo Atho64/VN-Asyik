@@ -202,7 +202,6 @@ impl OpenSegment {
 }
 
 impl Tracker {
-    /// Build a tracker with the given configuration.
     #[must_use]
     pub fn new(config: TrackerConfig, now: Timestamp) -> Self {
         Self {
@@ -214,32 +213,23 @@ impl Tracker {
         }
     }
 
-    /// Apply a new AFK configuration without disturbing the run in progress.
-    ///
-    /// The classification reads `config.afk` on every tick, so the next tick
-    /// judges idle runs with the new threshold; the open segment, its accrued
-    /// time and the phase all survive. This is what lets a settings change
-    /// reach a tracker that already has a game open.
+    /// Updates the AFK threshold without closing or splitting the open segment.
     pub fn set_afk_config(&mut self, afk: AfkConfig) {
         self.config.afk = afk;
     }
 
-    /// The AFK configuration in force.
-    ///
-    /// The manual timer reads the same threshold, so a hand-timed chapter and
-    /// a detected session classify an idle stretch identically.
+    /// Active AFK config (shared with the manual timer so idle handling matches).
     #[must_use]
     pub fn afk_config(&self) -> AfkConfig {
         self.config.afk
     }
 
-    /// Current phase.
     #[must_use]
     pub const fn phase(&self) -> Phase {
         self.phase
     }
 
-    /// The tracked target, when a run is open or paused.
+    /// Tracked target while a run is open or paused.
     #[must_use]
     pub fn target(&self) -> Option<&TrackTarget> {
         self.target.as_ref()
@@ -380,13 +370,8 @@ impl Tracker {
         self.maybe_checkpoint(now, emitted);
     }
 
-    /// Accrue a tick, attributing the gap to active or away time.
-    ///
-    /// `idle_for_ms` is how long the user had gone without input when this tick
-    /// was taken, measured by the OS. It is not a flag saying the gap was idle:
-    /// after a click half a second ago it reads 500, and that is somebody who is
-    /// present. Only the stretch of the current idle run past the grace threshold
-    /// is away time, so the reading seconds of a break stay credited.
+    /// Accounts a tick using OS `idle_for_ms` (elapsed time since input, not a flag);
+    /// only the portion of the idle run past the grace threshold is away time.
     fn accrue_tick(
         &mut self,
         delta: i64,
@@ -408,7 +393,6 @@ impl Tracker {
         self.maybe_checkpoint(now, emitted);
     }
 
-    /// Emit a snapshot when enough time has passed.
     fn maybe_checkpoint(&mut self, now: Timestamp, emitted: &mut Vec<Segment>) {
         let Some(open) = self.open.as_ref() else {
             return;
@@ -432,7 +416,6 @@ impl Tracker {
         self.open = Some(OpenSegment::new(EntityId::new(), now, None));
     }
 
-    /// Close the open segment, returning it as a final write.
     fn close(&mut self, now: Timestamp) -> Option<Segment> {
         let open = self.open.take()?;
         let game_id = self.target.as_ref()?.game_id;
@@ -443,10 +426,8 @@ impl Tracker {
         Some(open.snapshot(now, game_id, false, self.config.afk))
     }
 
-    /// Force a checkpoint when a run is open, e.g. before a risky operation.
-    ///
-    /// Resets the checkpoint timer, so this is for persistence, not for reading
-    /// status. Use [`Self::peek`] to look at the run without side effects.
+    /// Forces an immediate checkpoint for persistence (resets the interval;
+    /// use [`Self::peek`] to read status without side effects).
     pub fn flush(&mut self, now: Timestamp) -> Option<Segment> {
         let open = self.open.as_ref()?;
         let game_id = self.target.as_ref()?.game_id;
@@ -457,10 +438,7 @@ impl Tracker {
         Some(snapshot)
     }
 
-    /// Read the open run without changing anything.
-    ///
-    /// This is what the UI polls for its live timer; calling `flush` there would
-    /// reset the checkpoint interval and silently stop checkpoints from firing.
+    /// Reads the open run without resetting the checkpoint timer (safe for UI polling).
     #[must_use]
     pub fn peek(&self, now: Timestamp) -> Option<Segment> {
         let open = self.open.as_ref()?;
@@ -469,14 +447,9 @@ impl Tracker {
     }
 }
 
-/// How many of the last `gap_ms` were away from the keyboard.
-///
-/// `idle_for_ms` and `gap_ms` are measured by clocks that agree on "now": the
-/// current idle run began `idle_for_ms` ago and the gap began `gap_ms` ago, so
-/// the away window is the part of the run past the grace threshold. Clamping to
-/// the gap matters in both directions — a run longer than the gap means the whole
-/// gap was idle (a delayed or skipped poll), and a run shorter than the gap means
-/// input arrived inside it and only the tail is away.
+/// Away time within `gap_ms` given `idle_for_ms` since last input.
+/// Clamps to `[0, gap_ms]`: a longer run covers a delayed/skipped poll, while a
+/// shorter run means input arrived mid-gap and only the tail is away.
 pub fn away_ms_in_gap(gap_ms: i64, idle_for_ms: i64, threshold_ms: i64) -> i64 {
     (idle_for_ms.max(0) - threshold_ms.max(0)).clamp(0, gap_ms.max(0))
 }
@@ -739,9 +712,7 @@ mod tests {
         out.extend(tracker.apply(Event::Stop, t(122_000)));
 
         let segment = out.into_iter().next_back().expect("segment");
-        // 2 s active, then a 120 s idle run. The first 60 s of the run is reading
-        // time and the remaining 60 s is away, so the split is exact, not "roughly
-        // 59 s" — a loose bound here would have hidden a change to the boundary.
+        // Exact split (not an approximate bound): 2 s active + 60 s grace + 60 s away.
         assert_eq!(segment.active_ms, 62_000);
         assert_eq!(segment.afk_ms, 60_000);
         assert_eq!(segment.elapsed_ms(), 122_000);

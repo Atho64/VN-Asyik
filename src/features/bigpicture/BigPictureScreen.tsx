@@ -14,17 +14,7 @@ import appIcon from "@/assets/vn-asyik.svg";
 
 import { moveFor, nextIndex, readPad, type PadMove } from "./navigation";
 
-/**
- * Big Picture: the library at television distance.
- *
- * The whole surface is one focused game plus a cover rail that can be walked with
- * arrows, WASD, or a gamepad, so a HTPC or a sofa keyboard never needs a mouse.
- * It is a route rather than an overlay, so leaving it is a normal navigation and
- * the browser back button works.
- *
- * Every action is also a real button: the keyboard path is the fast one, not the
- * only one.
- */
+/** Full-route Big Picture cover rail navigable by mouse, keyboard (arrows/WASD), and gamepad. */
 export function BigPictureScreen() {
   const { t } = useI18n();
   const navigate = useNavigate();

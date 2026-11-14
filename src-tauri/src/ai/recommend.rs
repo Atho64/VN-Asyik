@@ -1,23 +1,7 @@
-//! Recommendations: what to read next, grounded in what people wrote about it.
+//! Recommendations grounded in web search citations.
 //!
-//! # Shape of the pipeline
-//!
-//! 1. Build a query from the taste profile and the user's own words.
-//! 2. Search the web for it, keeping the pages as citations.
-//! 3. Ask the chat model to name candidates using *only* those pages.
-//! 4. Mark anything the user already owns, so a recommendation is not a game
-//!    sitting unplayed in the library.
-//!
-//! # The rule that matters
-//!
-//! A recommendation without a source is a guess with confident wording. Every
-//! candidate here carries the URLs it came from, and the prompt forbids naming a
-//! game absent from the search results. That is enforced by checking output
-//! against the sources rather than by trusting the prompt: see
-//! [`unsupported_candidates`].
-//!
-//! Better still, when nothing usable comes back the caller gets the raw search
-//! results and an explanation, rather than invented titles.
+//! Outputs are checked against sources via [`unsupported_candidates`]; when no
+//! candidate is grounded, the caller receives the raw search results instead.
 
 use serde::Serialize;
 
@@ -25,46 +9,32 @@ use std::fmt::Write as _;
 
 use super::tavily::{SearchOutcome, SearchResult};
 
-/// A game the model suggested, with where it read about it.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Recommendation {
-    /// Title as written in the sources.
     pub title: String,
-    /// Why it was suggested, in one sentence.
     pub why: String,
-    /// Pages this title was seen on.
     pub sources: Vec<Citation>,
-    /// Whether the user already has it, matched case-insensitively on title.
+    /// Case-insensitive match against the local library.
     pub owned: bool,
 }
 
-/// A checkable link.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Citation {
-    /// Page title.
     pub title: String,
-    /// Page address.
     pub url: String,
 }
 
-/// The whole answer for one request.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecommendationOutcome {
-    /// The query that was searched.
     pub query: String,
-    /// Suggested games, best first. Empty is a valid answer.
     pub games: Vec<Recommendation>,
-    /// Provider-written summary, when one came back.
     pub answer: Option<String>,
-    /// Pages considered, shown even when no games were named so the search is
-    /// never a black box.
+    /// Returned even when `games` is empty so search results stay transparent.
     pub sources: Vec<SearchResult>,
-    /// Plain explanation of why the result is what it is.
     pub note: Option<String>,
-    /// Credits spent.
     pub credits: u8,
 }
 
@@ -92,13 +62,9 @@ pub fn build_query(seed: &str, taste: &[String]) -> String {
     parts.join(" ")
 }
 
-/// Titles that appear in the model's output but nowhere in the sources.
+/// Returns suggested titles whose word tokens do not appear in any source.
 ///
-/// A model asked to avoid inventing still occasionally invents. This is the
-/// check that catches it: for each suggested title, at least one word-bearing
-/// token of it must appear in some source's text. It is deliberately loose --
-/// "Little Busters" against a page saying "Little Busters!" passes -- because a
-/// strict match would reject correct answers for punctuation.
+/// Loose token matching tolerates punctuation differences (e.g. "Little Busters" vs "Little Busters!").
 #[must_use]
 pub fn unsupported_candidates(titles: &[String], sources: &[SearchResult]) -> Vec<String> {
     let haystack: String = sources
@@ -206,21 +172,16 @@ pub fn user_prompt(request: &str, owned: &[String], search: &SearchOutcome) -> S
     text
 }
 
-/// A suggested game as the model returns it.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct RawSuggestion {
-    /// Title.
     #[serde(default)]
     pub title: String,
-    /// Reasoning.
     #[serde(default)]
     pub why: String,
 }
 
-/// The model's JSON envelope.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct RawSuggestions {
-    /// Suggested games.
     #[serde(default)]
     pub games: Vec<RawSuggestion>,
 }
@@ -329,7 +290,6 @@ pub fn assemble_excluding(
         .collect()
 }
 
-/// Note shown beside the results.
 #[must_use]
 pub fn note_for(games: usize, sources: usize, owned: usize) -> Option<String> {
     if games == 0 {
@@ -379,9 +339,7 @@ mod tests {
 
     #[test]
     fn the_taste_themes_reach_the_query() {
-        // The command used to call build_query with an empty taste slice, so the
-        // search was the seed title alone and found the game's own store page
-        // instead of what to read next. This is the wiring that was missing.
+        // Guard against passing an empty taste slice (seed title alone).
         let themes = ["Nakige", "Family", "School"]
             .iter()
             .map(|name| vn_core::taste::Theme {

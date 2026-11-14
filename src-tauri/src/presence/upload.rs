@@ -1,14 +1,7 @@
-//! Opt-in upload of presence images to a public image host.
+//! Opt-in upload of presence images to a public image host (ported from `EwE`).
 //!
-//! Ported behaviour from `EwE`'s image-host feature, which uploads a cover and
-//! sends the hosted URL so Discord can render it where it cannot fetch a plain
-//! asset: on the Android Gateway, or for a local custom cover on any platform.
-//!
-//! Two hard rules from `AGENTS.md` §10b hold here: nothing is uploaded while
-//! the host is `None`, and the original bytes of explicit (or unrated) art
-//! never leave the device — the blur is applied locally before any network
-//! call, so what reaches the host is the same concealed image the library
-//! shows under the blur setting.
+//! Enforces `AGENTS.md` §10b: nothing uploads when host is `None`, and explicit or
+//! unrated art is blurred locally before any bytes leave the device.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -17,32 +10,20 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use vn_core::presence::RpcImageHost;
 
-/// An upload that failed is not retried until this much time has passed, so a
-/// dead host does not turn every two-second poll into a network attempt.
+/// Cooldown after a failed upload so two-second polls do not spam a dead host.
 const FAILURE_COOLDOWN: Duration = Duration::from_mins(5);
 
-/// Errors from the upload path.
 #[derive(Debug, thiserror::Error)]
 pub enum UploadError {
-    /// The host never returned a usable URL.
     #[error("image host returned no URL: {0}")]
     NoUrl(String),
-    /// The request itself failed.
     #[error("image host request failed: {0}")]
     Request(String),
-    /// imgbb requires an API key and none is stored.
     #[error("imgbb upload requires an API key")]
     NoApiKey,
 }
 
-/// The HTTP client every presence upload uses.
-///
-/// Separate from [`upload_to_host`] so the request shape can be inspected without
-/// reaching the network. The `User-Agent` is load-bearing, not courtesy: both hosts
-/// sit behind Cloudflare, which refuses a client that does not identify itself. The
-/// app used to send none, so every upload was rejected and the card silently lost
-/// its image — indistinguishable, from the settings screen, from "this does
-/// nothing".
+/// Builds the HTTP client with `User-Agent` required by Cloudflare-fronted image hosts.
 ///
 /// # Errors
 /// Fails when the TLS client cannot be built.
@@ -55,15 +36,10 @@ pub fn upload_client() -> Result<reqwest::Client, UploadError> {
         .map_err(|err| UploadError::Request(err.to_string()))
 }
 
-/// Uploads one image to the configured host, returning its public URL.
-///
-/// Endpoints match `EwE`'s `upload_image_file`: catbox takes a multipart form
-/// and answers with the bare URL; imgbb takes the bytes base64-encoded in a
-/// form and answers with JSON.
+/// Uploads one image to Catbox or `ImgBB` (matching `EwE`'s `upload_image_file`), returning its URL.
 ///
 /// # Errors
-/// Fails on request, decode or host-refusal; never on "host is None" — the
-/// caller decides that before uploading.
+/// Fails on request, decode, or host refusal; callers filter `RpcImageHost::None` beforehand.
 pub async fn upload_to_host(
     host: RpcImageHost,
     api_key: Option<&str>,

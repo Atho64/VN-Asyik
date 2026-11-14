@@ -1,12 +1,6 @@
 import type { TitleVariant } from "@/lib/ipc/types";
 
-/** A name this VN goes by, with what kind of name it is.
- *
- * The old header emitted a bare list of strings, so a reader saw
- * "智代アフター ～It's a Wonderful Life～" and "Tomoyo After" with no way to know
- * which was the Japanese release name, which was the romaji, and which was the
- * official English title. Labelling each one is the whole point.
- */
+/** Role label for an alternate VN title so Japanese, romaji, and official English stay distinguishable. */
 export type TitleRole =
   | "english"
   | "romaji"
@@ -16,13 +10,9 @@ export type TitleRole =
   | "korean"
   | "alias";
 
-/** Which script a string is written in.
- *
- * VNDB aliases carry no language field — "团子大家族" is listed beside
- * "クラナド" with nothing to tell them apart — so the script is detected rather
- * than guessed at. Han characters are reported as Chinese: Japanese names with
- * kanji also use them, but a name made *only* of han is not distinguishable from
- * Chinese without a dictionary, and calling it Japanese would be a worse guess.
+/**
+ * Infers script from Unicode ranges because VNDB aliases carry no language tag.
+ * Pure-han strings report as `"han"` (Chinese) rather than guessing Japanese without a dictionary.
  */
 function scriptOf(text: string): "kana" | "han" | "hangul" | "latin" | "mixed" {
   const seen = new Set<string>();
@@ -47,16 +37,9 @@ export interface ShownTitle {
   text: string;
 }
 
-/** Picks one entry per script, in the order a reader looks for them.
- *
- * - `english`: VNDB's own English title, when it differs from what is shown.
- * - `romaji`: the Latin transliteration of the Japanese title.
- * - `japanese`: the original-script title.
- *
- * Korean and Chinese names are deliberately not surfaced here. They exist on
- * many entries, and a header listing four scripts was the noise the previous
- * implementation was written to avoid — but they were being dropped silently
- * *along with* the useful ones, which is the bug this replaces.
+/**
+ * Selects one non-duplicate title per script in display order (`english`, `romaji`, `japanese`,
+ * then raw aliases). Filters out other locales (e.g. Korean, Chinese) to avoid header clutter.
  */
 export function titledNames(
   primary: string,

@@ -23,9 +23,7 @@ interface TimelineDay {
 const dayPart = (value: number): string => String(value).padStart(2, "0");
 
 /**
- * Group events under the local calendar day the reader experienced them. The
- * backend orders by instant; the grouping is presentation, so it uses the
- * viewer's own day — the same choice `playtime_by_day` makes for the heatmap.
+ * Groups events by local calendar day to match the heatmap's day boundaries.
  */
 function groupByDay(events: TimelineEvent[], locale: string): TimelineDay[] {
   const days: TimelineDay[] = [];
@@ -132,14 +130,8 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
 }
 
 /**
- * The reading journey across every game: sessions, journal entries, reached
- * endings and finished games in one feed, newest first.
- *
- * Pages accumulate downward and each is anchored to the cursor of the page
- * before it, so events that arrive while reading never shift the older ones.
- * The backend bounds a page at 50 rows; there is no virtualizer here for the
- * same reason session history has none — a feed you page through, not a grid
- * that renders ten thousand covers.
+ * Paginated cross-game reading journey newest first, anchored by cursor. Pages stay
+ * capped at 50 rows by the backend so no grid virtualizer is needed.
  */
 export function TimelineScreen() {
   const { t, locale } = useI18n();
@@ -150,14 +142,11 @@ export function TimelineScreen() {
   const searching = query.trim().length > 0;
   const [events, setEvents] = useState<TimelineEvent[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  // The first fetch starts in the mount effect below, so the page opens busy.
+  // Start busy because the mount effect below triggers the initial fetch.
   const [busy, setBusy] = useState(true);
   const [failed, setFailed] = useState(false);
 
-  // The feed loads whenever no search is on screen. The cancelled flag (not a
-  // ref) makes this safe under StrictMode's mount-cleanup-mount: a ref guard
-  // would mark the feed "requested" on the first pass, cancel that fetch in
-  // cleanup, then skip the second pass — leaving the page stuck on skeletons.
+  // Use a per-effect `cancelled` boolean rather than a ref guard so StrictMode remounts cleanly.
   useEffect(() => {
     if (searching) return;
     let cancelled = false;

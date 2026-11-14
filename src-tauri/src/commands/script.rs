@@ -8,11 +8,8 @@ fn error(code: String) -> CommandError {
     CommandError::new("script", code)
 }
 
-/// Import script file(s) for a game as one document. Each file's format is
-/// detected from its content: plain text (the disassemble-it-yourself path),
-/// VNTP name/message JSON (the generic `[{name, message}]` array), or the
-/// Asyik JSON interchange format. Several files are merged in natural
-/// file-name order, so a script extracted as parts imports in one pick.
+/// Import script file(s) for a game, auto-detecting plain text, VNTP `[{name, message}]` JSON, or Asyik JSON.
+/// Multiple files merge in natural filename order so split scripts import in one pick.
 #[tauri::command]
 pub async fn script_import(
     state: State<'_, AppState>,
@@ -39,12 +36,8 @@ pub async fn script_delete(state: State<'_, AppState>, id: String) -> CommandRes
     script::delete(state.db().pool(), &id).await.map_err(error)
 }
 
-/// Summarize up to `max_chunks` pending chunks **per agent** of one script and
-/// reduce them into a digest once all are done. Repeat until
-/// `doneChunks == chunkCount && digest !== null`; progress survives restarts.
-/// `rebuild` throws away stored progress, including a finished digest, so a
-/// digest written by an older pipeline can be replaced instead of resumed.
-/// Uses the shared chat provider settings; local endpoints work keyless.
+/// Summarize up to `max_chunks` pending chunks per agent and reduce into a digest once complete (resumable; `rebuild` clears stored progress).
+/// Uses the shared chat provider settings (local endpoints work without an API key).
 #[tauri::command]
 pub async fn script_compact(
     state: State<'_, AppState>,

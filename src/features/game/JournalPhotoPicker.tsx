@@ -17,18 +17,8 @@ interface JournalPhotoPickerProps {
 }
 
 /**
- * Pick one of the game's cached screenshots to pin to a checkpoint.
- *
- * Deliberately not the gallery component: that one downloads up to thirty images
- * on mount and offers a lightbox, both wrong here. This reads what is already on
- * disk, shows the count still outstanding, and lets the reader ask for more
- * explicitly — pinning a photo is a deliberate act, not a reason to start a
- * twenty-second download behind a form.
- *
- * Tiles obey the same content setting as everywhere else: `blur` paints the
- * pre-blurred copy and `hide` paints the neutral surface. The reader picked the
- * image in the gallery, where it could be revealed, so a concealed tile here still
- * means the image they chose.
+ * Pinned-checkpoint screenshot picker reading already-cached thumbnails so opening
+ * the journal form never triggers an unsolicited batch download.
  */
 export function JournalPhotoPicker({
   vnId,
@@ -45,9 +35,7 @@ export function JournalPhotoPicker({
   }>({ status: "loading", shots: [], pending: 0 });
   const [busy, setBusy] = useState(false);
 
-  // The first read happens in the effect and the "download more" button repeats
-  // it from an event handler. Both settle through the promise, never by setting
-  // state synchronously during render.
+  // Initial load happens in the effect; explicit "download more" reloads run from the click handler.
   useEffect(() => {
     if (!vnId) return undefined;
     let cancelled = false;
@@ -112,10 +100,7 @@ export function JournalPhotoPicker({
     <>
       <ul className="gallery gallery--picker">
         {state.shots.map((shot) => {
-          // The same three-way rule the gallery and the journal card use. There is
-          // no reveal here: a picker is not where art is looked at, and a reveal
-          // that expires with the policy would be a second reveal state to keep
-          // honest.
+          // Apply the shared three-way NSFW rule without maintaining a separate reveal state in the picker.
           const concealed = nsfw !== "show" && shot.explicit;
           const painted = !concealed
             ? shot.src

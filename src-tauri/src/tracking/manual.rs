@@ -1,42 +1,13 @@
-//! Timing a chapter by hand, when the engine cannot be detected.
-//!
-//! # Why this exists
-//!
-//! Detection is not available for every engine. `KiriKiri` keeps no chapter in its
-//! window title and its script engine is statically linked, so there is no
-//! verified way to read the current scene. Showing "no chapter" forever is honest
-//! but useless.
-//!
-//! A manual timer is the fallback that always works: the user says which chapter
-//! they are playing and the app times it exactly as it times everything else. The
-//! output is a normal play session, so reports, sync and exports treat it like any
-//! detected chapter.
-//!
-//! # What it deliberately does not do
-//!
-//! It does not run alongside detection. If a manual timer is running, detected
-//! chapter changes are ignored for that game: two sources writing segments for the
-//! same stretch of time would double-count it.
+//! Manual chapter/route timer for engines without window-title detection (e.g. `KiriKiri`).
+//! Runs exclusively per game: active manual timers ignore detected chapter changes to avoid double-counting.
 
 use serde::{Deserialize, Serialize};
 use vn_core::clock::Timestamp;
 use vn_core::ids::EntityId;
 
-/// A running manual timer.
+/// Active manual timer targeting a single chapter or route (enforced by constructors).
 ///
-/// The target is either a chapter or a route: a user who starts "the Shiroha route"
-/// should not have to invent a chapter to blame the hour on. Exactly one is set,
-/// which the constructors enforce.
-///
-/// # Counting
-///
-/// Time is not wall clock. The timer consumes the same samples the automatic
-/// tracker does — the OS idle duration and, while a game window is being tracked,
-/// whether that window is in front — and splits them with
-/// `vn_core::tracker::away_ms_in_gap`, the exact rule playtime uses. So a manual
-/// chapter, an automatic session and the statistics all describe the same stretch
-/// the same way, and a manual timer left running while the window is behind the
-/// browser does not buy minutes nobody read.
+/// Consumes the same focus/OS-idle samples as automatic tracking via `vn_core::tracker::away_ms_in_gap`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualRun {

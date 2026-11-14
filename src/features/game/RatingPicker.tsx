@@ -19,18 +19,10 @@ export function parseRating(text: string): Parsed {
 }
 
 /**
- * Set a rating from the game screen, typed rather than clicked.
- *
- * A text field instead of a star row: VNDB's scale is 1.0 to 10.0 in tenths, so
- * a clickable version needs a hundred targets and still cannot reach 7.3
- * quickly. Typing "7.3" is one action and every value is reachable.
- *
- * The field keeps whatever is typed while editing and only commits text that
- * parses, so a half-typed "7." does not overwrite a stored 7.5. Empty clears the
- * rating; text that is out of range is reported and then reverted on blur, so a
- * typo never silently discards a rating the user had.
+ * Typed decimal rating control (`1.0`-`10.0` in tenths) that buffers incomplete input
+ * (`"7."`) and reverts out-of-range values on blur instead of overwriting stored scores.
  */
-/** A trailing separator is a step in typing "7.5", not a mistake yet. */
+/** Trailing separator while typing e.g. `"7.5"`, not yet invalid. */
 const INCOMPLETE = /^\d{1,2}[.,]$/;
 
 export function RatingPicker({
@@ -44,9 +36,7 @@ export function RatingPicker({
 }) {
   const { t } = useI18n();
   const stored = value === null ? "" : formatRating(value);
-  // Keyed on the stored value, so a rating arriving from a VNDB sync remounts the
-  // field with the new text. An effect that copied it across would be a
-  // cascading render for the same result.
+  // Caller keys this component on the stored rating so external sync updates reset the draft cleanly.
   const [draft, setDraft] = useState(stored);
   const [invalid, setInvalid] = useState(false);
   // Whether the field is being typed in. Committing a keystroke changes the

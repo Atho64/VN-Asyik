@@ -248,18 +248,9 @@ pub fn custom_cover_is_concealed(game: &Game) -> bool {
     game.is_explicit(vn_core::model::NsfwMode::Blur)
 }
 
-/// The image Discord cannot fetch on its own, hosted so the card can show it.
-///
-/// `EwE` sends hosted URLs for exactly the covers a plain asset cannot cover:
-/// explicit art (uploaded blurred) and user-chosen images. This is the opt-in
-/// port: `RpcImageHost::None` — the default — uploads nothing, and explicit or
-/// unrated art is blurred locally before any bytes leave the device, so what is
-/// published is the same concealed image the library shows.
-///
-/// Returns `None` when nothing needs hosting: a safe VNDB cover already has a
-/// public URL, a game with no local art has nothing to upload, and a failure
-/// (reported to stderr) falls back to the no-image card rather than blocking
-/// the text lines.
+/// Opt-in image hosting for explicit/unrated or custom covers (ported from `EwE`).
+/// `RpcImageHost::None` (default) uploads nothing; explicit or unrated art is blurred
+/// locally before upload so Discord matches in-app concealment. Returns `None` on failure.
 pub async fn ensure_rpc_image(
     data_dir: &std::path::Path,
     game: &Game,
@@ -322,24 +313,8 @@ async fn load_rpc_image_bytes(source: &std::path::Path, blurred: bool) -> Option
     (!image_bytes.is_empty()).then_some(image_bytes)
 }
 
-/// Data URL of the local presence image bytes (sharp or blurred) for the
-/// in-app settings preview once [`ensure_rpc_image`] has confirmed the image is
-/// hosted.
-///
-/// The Android `WebView` resolves `files.catbox.moe` through system DNS rather
-/// than the Rust HTTP client, so a hosted Catbox URL can fail to paint in the
-/// settings preview on networks with ISP DNS filtering even after the upload
-/// itself succeeded and Discord's media proxy can reach it. Encoding the bytes
-/// locally keeps the preview gated on a real host success while letting the
-/// `WebView` paint without a second network round-trip.
-///
-/// The bytes are downscaled to [`PREVIEW_IMAGE_EDGE`] first. A custom cover is
-/// stored up to 1600 px, so sending it whole put several hundred KB of base64
-/// into a single IPC reply, re-sent on every settings keystroke, to fill a 60 px
-/// square. A cover picked from a phone photo hit that; a small one did not,
-/// which made a size problem look like a file-format one. Undecodable bytes are
-/// passed through rather than dropped, so the preview still shows whatever the
-/// host accepted.
+/// Data URL of local presence image bytes for settings preview once [`ensure_rpc_image`] confirms upload.
+/// Encodes locally (downscaled to [`PREVIEW_IMAGE_EDGE`]) so Android `WebView` DNS blocks or large custom covers do not break the preview.
 pub async fn preview_rpc_image_data_url(data_dir: &std::path::Path, game: &Game) -> Option<String> {
     let (source, blurred) = rpc_image_source(data_dir, game)?;
     let bytes = load_rpc_image_bytes(&source, blurred).await?;
@@ -347,18 +322,8 @@ pub async fn preview_rpc_image_data_url(data_dir: &std::path::Path, game: &Game)
     Some(image_data_url(&bounded))
 }
 
-/// Data URL of the locally cached VNDB cover, for the settings preview.
-///
-/// A safe cover is never uploaded: [`build_activity`] puts the remote
-/// `t.vndb.org` URL on the card, and the preview painted that URL directly. So
-/// the preview silently depended on the `WebView` reaching the network for an
-/// image the app already has on disk — on a filtered or offline connection the
-/// library showed the cover (it reads the cache first) while the settings
-/// preview showed an empty art slot. That reads as a broken preview, and it is
-/// why a cover could look fine in the library and missing here.
-///
-/// Returns `None` when the cover was never downloaded, so the caller keeps the
-/// remote URL: Discord can still fetch it even when this device cannot.
+/// Data URL of the cached VNDB cover for the settings preview, avoiding remote-only reliance offline.
+/// Returns `None` if not cached locally so the caller falls back to the remote URL.
 pub async fn preview_cached_cover_data_url(
     data_dir: &std::path::Path,
     game: &Game,
@@ -1011,10 +976,8 @@ mod tests {
 
     #[test]
     fn the_concealment_decision_matches_the_library_for_a_chosen_cover() {
-        // `custom_cover_source_vndb` is never set, so every custom cover is an
-        // image the app has no rating for. The decision must equal `isExplicit` in
-        // `src/lib/library.ts` — including the unrated case, where the library
-        // shows the art.
+        // `custom_cover_source_vndb` stays unset so custom covers follow `isExplicit` in
+        // `src/lib/library.ts` (unrated custom covers stay visible).
         let relative = crate::vndb::images::ImageStore::custom_relative("gamea");
         assert!(!custom_cover_is_concealed(&image_game(
             None,
@@ -1377,10 +1340,8 @@ mod tests {
     #[test]
     fn only_a_fully_rated_low_cover_is_public() {
         assert!(!cover_is_explicit(&game_with_ratings(Some(0), Some(0))));
-        // Level 1 is withheld from Discord as well. It used to be published, because
-        // this check had its own `>= 2` threshold while the library concealed level 1 —
-        // so a cover the user never saw in full inside the app was uploaded to Discord's
-        // CDN. One threshold now decides both surfaces.
+        // Level 1 is withheld from Discord as well so both surfaces share one threshold.
+        // Previously this check used `>= 2` and uploaded covers concealed in the library.
         assert!(cover_is_explicit(&game_with_ratings(Some(1), Some(1))));
         assert!(cover_is_explicit(&game_with_ratings(Some(2), Some(0))));
         assert!(cover_is_explicit(&game_with_ratings(Some(0), Some(2))));
@@ -1642,10 +1603,8 @@ mod tests {
         assert_eq!(service.cycle_index(), 0);
     }
 
-    /// A custom cover is stored up to 1600 px, and the preview used to base64 the
-    /// whole file into one IPC reply for a 60 px art slot — on every settings
-    /// keystroke. A cover picked from a large photo therefore failed to paint
-    /// while a small one worked, which reads as a file-format problem.
+    /// A custom cover can be up to 1600 px, so the preview must return a bounded image
+    /// rather than base64-encoding the full file for a 60 px slot.
     #[tokio::test]
     async fn the_preview_carries_a_bounded_image_not_the_whole_cover() {
         use base64::Engine;

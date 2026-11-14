@@ -1,5 +1,3 @@
-//! Walkthrough service: fetches, parses, stores, and translates visual novel walkthroughs.
-
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::net::SocketAddr;
@@ -38,7 +36,6 @@ struct CharItem {
     original: Option<String>,
 }
 
-/// Errors that can occur during walkthrough operations.
 #[derive(Debug, thiserror::Error)]
 pub enum WalkthroughError {
     #[error("HTTP error: {0}")]
@@ -53,7 +50,6 @@ pub enum WalkthroughError {
     NotFound,
 }
 
-/// Consolidated view of a game's walkthrough for the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WalkthroughView {
@@ -63,7 +59,7 @@ pub struct WalkthroughView {
     pub notes: Option<String>,
     pub routes: Vec<WalkthroughRoute>,
     pub checked_items: Vec<String>,
-    /// Available translations: map of "`provider_lang`" => `Vec<WalkthroughRoute>`
+    /// Keyed by "`provider_lang`".
     pub translations: HashMap<String, Vec<WalkthroughRoute>>,
     pub character_glossary: HashMap<String, String>,
 }
@@ -88,7 +84,6 @@ pub fn build_seiya_client() -> Result<reqwest::Client, WalkthroughError> {
     builder.build().map_err(WalkthroughError::Http)
 }
 
-/// Fetch raw HTML from a Seiya-Saiga page, handling `Shift_JIS` decoding.
 pub async fn fetch_seiya_html(
     client: &reqwest::Client,
     url: &str,
@@ -103,7 +98,6 @@ pub async fn fetch_seiya_html(
     Ok(decode_html_bytes(&bytes))
 }
 
-/// Fetch and parse the combined Seiya-Saiga master index across main, galge, and all-ages PC catalogs.
 pub async fn fetch_master_index(
     client: &reqwest::Client,
 ) -> Result<Vec<WalkthroughIndexEntry>, WalkthroughError> {
@@ -117,7 +111,6 @@ pub async fn fetch_master_index(
         }
     }
 
-    // Fetch all 4 index sources concurrently
     let (res_pc, res_galge, res_main, res_bekkan) = tokio::join!(
         fetch_seiya_html(client, SEIYA_PC_KOURYAKU_URL),
         fetch_seiya_html(client, SEIYA_GALGE_URL),
@@ -169,14 +162,12 @@ pub async fn fetch_master_index(
     Ok(combined)
 }
 
-/// Backwards-compatible alias for [`fetch_master_index`].
 pub async fn fetch_kouryaku_index(
     client: &reqwest::Client,
 ) -> Result<Vec<WalkthroughIndexEntry>, WalkthroughError> {
     fetch_master_index(client).await
 }
 
-/// Retrieve the character glossary (original Kanji -> English/Romaji name) from VNDB details.
 pub async fn load_character_glossary(
     pool: &SqlitePool,
     vn_id: Option<&str>,
@@ -221,7 +212,6 @@ pub async fn load_character_glossary(
     glossary
 }
 
-/// Load the complete walkthrough view from the database.
 pub async fn get_walkthrough_view(
     pool: &SqlitePool,
     game_id: &str,
@@ -243,7 +233,6 @@ pub async fn get_walkthrough_view(
         serde_json::from_str(&routes_json).map_err(|e| WalkthroughError::Parse(e.to_string()))?;
     let checked_items: Vec<String> = serde_json::from_str(&checked_items_json).unwrap_or_default();
 
-    // Load translations
     let trans_rows: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT provider, target_lang, routes_json \
          FROM walkthrough_translations WHERE game_id = ?",
@@ -274,7 +263,6 @@ pub async fn get_walkthrough_view(
     }))
 }
 
-/// Save a newly parsed walkthrough into the database.
 pub async fn save_walkthrough(
     pool: &SqlitePool,
     game_id: &str,
@@ -309,7 +297,6 @@ pub async fn save_walkthrough(
     Ok(())
 }
 
-/// Save a translation of a walkthrough into the database.
 pub async fn save_translation(
     pool: &SqlitePool,
     game_id: &str,
@@ -341,7 +328,6 @@ pub async fn save_translation(
     Ok(())
 }
 
-/// Toggle a checked item for a game walkthrough.
 pub async fn toggle_checked_item(
     pool: &SqlitePool,
     game_id: &str,
@@ -375,7 +361,6 @@ pub async fn toggle_checked_item(
     Ok(items)
 }
 
-/// Clear all checked progress for a game walkthrough.
 pub async fn clear_checked_items(pool: &SqlitePool, game_id: &str) -> Result<(), WalkthroughError> {
     sqlx::query("UPDATE game_walkthroughs SET checked_items_json = '[]' WHERE game_id = ?")
         .bind(game_id)
@@ -384,7 +369,6 @@ pub async fn clear_checked_items(pool: &SqlitePool, game_id: &str) -> Result<(),
     Ok(())
 }
 
-/// Translate text lines in batch using Google Translate's free API.
 #[allow(clippy::implicit_hasher)]
 pub async fn translate_batch_google(
     client: &reqwest::Client,
@@ -396,7 +380,6 @@ pub async fn translate_batch_google(
         return Ok(Vec::new());
     }
 
-    // Pre-substitute glossary terms in the Japanese text where possible
     let mut prepared = Vec::with_capacity(texts.len());
     for t in texts {
         let mut s = t.clone();
@@ -408,7 +391,7 @@ pub async fn translate_batch_google(
         prepared.push(s);
     }
 
-    // Google Translate supports batching by joining with newlines
+    // Google Translate batches newline-joined lines in a single request.
     let joined = prepared.join("\n");
     let url = format!(
         "https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl={}&dt=t",
@@ -441,7 +424,6 @@ pub async fn translate_batch_google(
         .map(|s| s.trim().to_string())
         .collect();
 
-    // Align length with original texts
     if result_lines.len() < texts.len() {
         while result_lines.len() < texts.len() {
             result_lines.push(texts[result_lines.len()].clone());
@@ -453,7 +435,6 @@ pub async fn translate_batch_google(
     Ok(result_lines)
 }
 
-/// Translate text lines in batch using the configured AI provider, with VNDB character glossary.
 #[allow(clippy::implicit_hasher)]
 pub async fn translate_batch_ai(
     client: &reqwest::Client,
@@ -496,7 +477,6 @@ pub async fn translate_batch_ai(
         .await
         .map_err(|e| WalkthroughError::Translation(e.to_string()))?;
 
-    // Clean up potential markdown formatting (```json ... ```)
     let cleaned = raw_reply.trim();
     let json_str = if cleaned.starts_with("```") {
         let lines: Vec<&str> = cleaned.lines().collect();
@@ -519,7 +499,7 @@ pub async fn translate_batch_ai(
         return Ok(translated_array);
     }
 
-    // Fallback: line-by-line parsing if json array was malformed
+    // Fallback when the model returns a bulleted list instead of a JSON array.
     let mut lines = Vec::new();
     for line in json_str.lines() {
         let t = line
@@ -538,11 +518,9 @@ pub async fn translate_batch_ai(
         return Ok(lines);
     }
 
-    // Final fallback: return original texts if AI returned wrong format
     Ok(texts.to_vec())
 }
 
-/// Helper to url-encode a string slice.
 fn urlencoding(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }

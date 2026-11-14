@@ -42,21 +42,8 @@ function numberProperty(style: CSSStyleDeclaration, property: string): number {
 }
 
 /**
- * Translate a wheel gesture into horizontal movement for a horizontal scroller.
- *
- * The shelf is `overflow-x: auto`, and the browser only moves such an element for
- * a horizontal wheel delta. A mouse wheel sends `deltaY` only, so a shelf under a
- * mouse could not be scrolled at all: the gesture fell through to `.app__main`,
- * which has no vertical overflow while the shelf fits the viewport, so nothing
- * moved anywhere. Trackpads worked (they send `deltaX`), which is why this looked
- * like a mouse-only bug.
- *
- * This function only does arithmetic and the write; the snap toggle lives in
- * `shelfWheelScroll`, which must suspend snapping before calling this.
- *
- * Returns the number of pixels actually consumed. `0` means the gesture was left
- * alone so the page can use it, which is what keeps reaching the end of the shelf
- * from trapping the wheel.
+ * Converts vertical mouse-wheel `deltaY` into horizontal scrolling for shelves.
+ * Returns `0` at boundaries or on horizontal/Shift gestures so page scroll can take over.
  */
 export function shelfWheelDelta(
   element: Pick<HTMLElement, "scrollLeft" | "scrollWidth" | "clientWidth">,
@@ -64,10 +51,7 @@ export function shelfWheelDelta(
   speed = 1,
 ): number {
   const { deltaX, deltaY } = event;
-  // A horizontal gesture, or a trackpad two-finger swipe, already scrolls natively.
-  // Taking it over would double the movement the browser is about to apply. A
-  // shift-wheel is the browser's own way to express "horizontal", including when
-  // it arrives as a bare deltaY.
+  // Let native horizontal gestures and Shift+wheel pass through untouched.
   if (event.shiftKey) return 0;
   if (Math.abs(deltaX) > Math.abs(deltaY)) return 0;
   if (deltaY === 0) return 0;
@@ -90,35 +74,14 @@ export function shelfWheelDelta(
 export const WHEEL_SNAP_IDLE_MS = 220;
 
 /**
- * Suspend scroll snapping for a wheel burst, write the scroll, then restore it.
- *
- * Two ordering details make this work, and both were wrong on earlier attempts:
- *
- * 1. Snapping is disabled *before* the write. With `scroll-snap-type: x` active the
- *    browser re-anchors `scrollLeft` to the nearest snap point immediately, and the
- *    first card sits at offset 4, so a +120 step became 4 every time.
- * 2. It stays off for the whole burst, not just the current task. Restoring on the
- *    next frame is not enough: the shelf re-renders in response to the scroll
- *    event, after that frame, so the value was re-anchored as soon as snapping
- *    returned. The restore waits for `WHEEL_SNAP_IDLE_MS` of quiet instead.
- *
- * Touch flings and keyboard navigation never reach this path, so they keep their
- * snapping (arrow keys go through `scrollToIndex`, which lands on a card boundary
- * and tolerates a snap).
+ * Temporarily disables `scrollSnapType` before assigning `scrollLeft` and restores the
+ * initial inline value after `WHEEL_SNAP_IDLE_MS` so active CSS snap cannot immediately revert wheel steps.
  */
 export function shelfWheelScroll(
   element: HTMLElement,
   event: Pick<WheelEvent, "deltaX" | "deltaY" | "shiftKey">,
   pending = new WeakMap<HTMLElement, number>(),
 ): number {
-  // Snapping must be off BEFORE the write, not after: `shelfWheelDelta` assigns
-  // `scrollLeft`, and with snap still active the browser re-anchors that value to
-  // the nearest card immediately. Turning it off afterwards leaves the revert in
-  // place, which is why the wheel still did nothing on the first attempt.
-  //
-  // The inline value is captured once, on the first event of a burst. Reading it
-  // on every event would capture the "none" this function wrote a moment ago, so
-  // the restore would put "none" back and leave snapping off forever.
   const timers = pending;
   const suspended = timers.has(element);
   const previousSnap = suspended ? "" : element.style.scrollSnapType;

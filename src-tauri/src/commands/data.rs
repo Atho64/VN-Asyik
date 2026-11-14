@@ -51,12 +51,7 @@ pub struct LibraryFile {
     pub version: u32,
     pub payload: SyncPayload,
     pub prefs: PrefsSnapshot,
-    /// The reader's own captures, bodies inline.
-    ///
-    /// Screenshots are local-only in sync — the bytes are far too large for the
-    /// row payload and a path means nothing on another device — but a backup
-    /// that silently loses the pictures is not a backup. `default` keeps a file
-    /// written before this field existed readable.
+    /// User captures embedded inline (`default` preserves compatibility with older exports; sync excludes screenshots).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub screenshots: Vec<ExportedScreenshot>,
 }

@@ -27,13 +27,9 @@
 
 use crate::model::SyncMeta;
 
-/// Anything that carries sync metadata.
-///
-/// Implemented for the four synced tables rather than derived from a field, so a
-/// new table has to opt in explicitly and cannot silently arrive in a merge with
-/// metadata the merge does not know how to read.
+/// Synced tables must opt in explicitly rather than deriving from a field, so a new
+/// table cannot silently enter merge logic without handling its sync rules.
 pub trait MetaFields {
-    /// Row identity and sync metadata.
     fn meta(&self) -> &SyncMeta;
 }
 
@@ -67,45 +63,33 @@ impl MetaFields for crate::model::Route {
     }
 }
 
-/// Which side supplied the value that won.
+/// Which side supplied the winning revision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
-    /// The copy already on this device.
     Local,
-    /// The copy that arrived from elsewhere.
     Remote,
 }
 
-/// Why a merge picked the side it did.
-///
-/// Recorded so the conflict log can explain an overwrite instead of just
-/// reporting that one happened.
+/// Why a merge picked the side it did, recorded for the conflict log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
-    /// Only one side had the row.
     OnlyOneSide,
-    /// Both sides were identical, so nothing moved.
     Identical,
-    /// The winning side had a later `updated_at`.
     Newer,
-    /// Timestamps matched; the higher `device_id` won to break the tie.
+    /// Timestamps matched; higher `device_id` broke the tie.
     TieBreak,
-    /// One side deleted the row and the other only edited it.
     DeleteWins,
 }
 
 /// The outcome of merging one row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Decision {
-    /// Which side's value should be stored, or `None` when the two are equal and
-    /// no write is needed at all.
+    /// Winning side, or `None` when both copies are equal and no write is needed.
     pub winner: Option<Side>,
-    /// Why.
     pub reason: Reason,
 }
 
 impl Decision {
-    /// Whether the local row has to be rewritten.
     #[must_use]
     pub const fn needs_write(&self) -> bool {
         matches!(self.winner, Some(Side::Remote))
@@ -202,23 +186,17 @@ fn decide_one_way(local: &SyncMeta, remote: &SyncMeta) -> Option<Decision> {
 /// A conflict worth telling the user about.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conflict {
-    /// Row id.
     pub id: String,
-    /// Table the row belongs to, e.g. `games`.
+    /// Table name, e.g. `games`.
     pub table: &'static str,
-    /// Which copy was kept.
     pub kept: Side,
-    /// Why.
     pub reason: Reason,
-    /// The `updated_at` of the copy that lost, so the log shows what was dropped.
+    /// Lost copy's `updated_at`, preserved so the log shows what was dropped.
     pub discarded_updated_at_ms: i64,
 }
 
-/// Merge one table's rows by identity.
-///
-/// Returns the winning rows in the order the local side had them, followed by
-/// rows only the remote side had. Both devices must call this with their own
-/// collection as `local` to converge, which is the property the tests check.
+/// Merges one table's rows by identity (local order first, then remote-only rows).
+/// Both devices must pass their own rows as `local` to converge.
 #[must_use]
 pub fn merge_rows<T: MetaFields + Clone>(
     table: &'static str,
@@ -230,7 +208,6 @@ pub fn merge_rows<T: MetaFields + Clone>(
     let mut seen: std::collections::HashSet<String> =
         std::collections::HashSet::with_capacity(local.len());
 
-    // Walk local rows in order, replacing where remote wins.
     for row in local {
         let id = row.meta().id.to_string();
         seen.insert(id.clone());
@@ -272,7 +249,6 @@ pub fn merge_rows<T: MetaFields + Clone>(
         }
     }
 
-    // Rows only the remote side has.
     for row in remote {
         let id = row.meta().id.to_string();
         if !seen.contains(&id) {
@@ -283,13 +259,8 @@ pub fn merge_rows<T: MetaFields + Clone>(
     (out, conflicts)
 }
 
-/// Merge append-only sessions.
-///
-/// Sessions are playtime records, so a session that exists on either side is
-/// kept as-is and never overwritten: overwriting one would silently rewrite
-/// history. A correction is a new row, not an edit of an old one.
-///
-/// Returns the union, local first, and the ids that were only on the remote side.
+/// Merges append-only sessions without overwriting history (corrections are new rows).
+/// Returns local rows followed by remote-only rows and those remote-only ids.
 #[must_use]
 pub fn merge_sessions<T: MetaFields + Clone>(local: &[T], remote: &[T]) -> (Vec<T>, Vec<String>) {
     let mut out: Vec<T> = local.to_vec();

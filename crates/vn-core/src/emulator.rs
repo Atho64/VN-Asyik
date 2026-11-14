@@ -89,12 +89,9 @@ pub enum Verification {
     Verified,
 }
 
-/// Where a runner exists at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Platforms {
-    /// Runs on Windows.
     pub windows: bool,
-    /// Runs on Android.
     pub android: bool,
 }
 
@@ -156,7 +153,6 @@ impl RunnerKind {
         }
     }
 
-    /// Where this runner exists.
     #[must_use]
     pub const fn platforms(self) -> Platforms {
         match self {
@@ -336,7 +332,6 @@ pub fn title_needle(title_match: Option<&str>, launch_target: Option<&str>) -> O
 /// File names that appear in many games' folders and so say nothing about which.
 const GENERIC_TARGET_NAMES: [&str; 5] = ["eboot", "game", "main", "default", "launcher"];
 
-/// Whether a window caption belongs to the game described by `needle`.
 #[must_use]
 pub fn matches_window_title(title: &str, needle: &str) -> bool {
     let needle = needle.trim();

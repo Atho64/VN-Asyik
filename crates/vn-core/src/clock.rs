@@ -14,22 +14,19 @@ use crate::model::ModelError;
 pub struct Timestamp(i64);
 
 impl Timestamp {
-    /// The Unix epoch.
     pub const EPOCH: Self = Self(0);
 
-    /// Wrap a raw millisecond value.
     #[must_use]
     pub const fn from_millis(ms: i64) -> Self {
         Self(ms)
     }
 
-    /// Raw milliseconds since the epoch.
     #[must_use]
     pub const fn as_millis(self) -> i64 {
         self.0
     }
 
-    /// Current wall-clock time, or an error if the system clock is out of range.
+    /// Current UTC wall-clock time, or `ClockOutOfRange` if out of `i64` ms bounds.
     pub fn now() -> Result<Self, ModelError> {
         let now = OffsetDateTime::now_utc();
         let ms = i64::try_from(now.unix_timestamp_nanos() / 1_000_000)
@@ -37,7 +34,6 @@ impl Timestamp {
         Ok(Self(ms))
     }
 
-    /// True when this timestamp is later than `other`.
     #[must_use]
     pub const fn is_after(self, other: Self) -> bool {
         self.0 > other.0

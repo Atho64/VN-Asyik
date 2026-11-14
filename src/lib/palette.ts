@@ -1,13 +1,6 @@
 /**
- * Accent extraction from cover art.
- *
- * This is the identity motif made operational: the cover is the light source, so
- * the accent has to come from the artwork, never from a fixed brand colour.
- *
- * The algorithm is a coarse median-cut over a heavily subsampled image, then a
- * contrast clamp. It runs on the main thread over at most a 32x32 thumbnail, so
- * it costs well under a frame; the result is cached in the database by the
- * `accent_color` column, so it is computed once per cover in the app's lifetime.
+ * Extracts a contrast-clamped accent palette from subsampled cover art once per
+ * cover (cached in `games.accent_color`).
  */
 
 export interface Rgb {
@@ -102,11 +95,8 @@ const THEME_SURFACE: Record<"dark" | "light", Rgb> = {
 };
 
 /**
- * Adapt a chosen accent to the active theme so it clears AA as text and as a
- * focus ring. A pale accent picked for the dark theme is darkened for the light
- * one (and vice versa) rather than pasted raw onto a surface it cannot read on.
- * The stored choice stays the reader's exact hex; only the applied value moves.
- * An invalid hex returns null so the caller keeps the theme's own accent.
+ * Clamps a user-chosen accent to meet WCAG AA (4.5:1) against the active theme surface
+ * while keeping the stored hex untouched; invalid hex strings return `null`.
  */
 export function accentForTheme(hex: string, theme: "dark" | "light"): string | null {
   const rgb = fromHex(hex);
@@ -119,12 +109,7 @@ export function accentForTheme(hex: string, theme: "dark" | "light"): string | n
   return toHex(adapted);
 }
 
-/**
- * Text colour that sits on an accent-filled control: whichever of near-black or
- * white contrasts more with the accent. A luminance threshold that returns a
- * dark colour on both sides of the branch leaves a dark accent with dark,
- * unreadable label text, so this compares the two candidates directly.
- */
+/** Picks whichever of near-black or white has higher contrast on an accent-filled control. */
 export function onAccentFor(hex: string): string {
   const rgb = fromHex(hex);
   if (!rgb) return "#102125";
@@ -143,11 +128,7 @@ export function hashHue(text: string): number {
 }
 
 /**
- * Palette used when a game has no cover art.
- *
- * Derived from the title hash so every game still gets its own colour and the
- * same game always looks the same. This is the "never show a broken image" rule
- * from DESIGN.md §2, not a decorative gradient.
+ * Stable title-derived fallback palette when cover art is unavailable so broken images never appear.
  */
 export function fallbackPalette(title: string): AccentPalette {
   const hue = hashHue(title);
@@ -181,12 +162,8 @@ function hslToRgb(h: number, s: number, l: number): Rgb {
 }
 
 /**
- * Reduce a pixel buffer to a background colour and an accent.
- *
- * `pixels` is RGBA, row-major, `width * height * 4` long. Fully transparent and
- * near-white/near-black pixels are ignored: white would produce a washed accent
- * and black a colourless one, which is exactly the "safe" result the design
- * direction rejects.
+ * Reduces an RGBA buffer (`width * height * 4`) to a background and contrast-clamped accent,
+ * ignoring transparent and near-white/near-black pixels to avoid washed or colourless picks.
  */
 export function extractPalette(
   pixels: Uint8ClampedArray,

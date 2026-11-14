@@ -4,13 +4,7 @@ use crate::commands::{CommandError, CommandResult};
 
 const MAX_DOCUMENT_BYTES: u64 = 64 * 1024 * 1024;
 
-/// Ceiling for a library export, which now carries the reader's screenshots
-/// inline as base64.
-///
-/// The 64 MiB document cap exists so a picker cannot hand the app a file that
-/// exhausts memory. A library with a few hundred captures legitimately exceeds
-/// it, so this path gets its own, larger ceiling rather than silently dropping
-/// pictures from a backup.
+/// Larger document cap for library backups that inline base64 screenshots.
 const MAX_LIBRARY_BYTES: u64 = 512 * 1024 * 1024;
 
 #[cfg(target_os = "android")]
@@ -73,16 +67,9 @@ pub fn remove_secret(name: &str) -> Result<(), String> {
     mobile::call("removeSecret", serde_json::json!({"name": name}))
 }
 
-/// A user-selected document resolved to a readable file. On Android a
-/// `content://` URI from the system picker is copied through the content
-/// resolver into a private cache file (AGENTS.md §9: the URI is never treated
-/// as a filesystem path); the copy is deleted when this guard drops. Every
-/// other path is used as-is.
-///
-/// `display_name` is the file's human-facing name as the picker reported it —
-/// the name to sort multi-file imports by and to show in the UI. It is never
-/// derived from a `content://` URI: those are opaque ids whose order says
-/// nothing about the files they name.
+/// User-selected document resolved to a readable local file.
+/// On Android, `content://` URIs are copied to a private cache file deleted on drop (AGENTS.md §9),
+/// and `display_name` comes from the picker because `content://` URIs are opaque IDs.
 #[derive(Debug)]
 pub struct ResolvedDocument {
     path: std::path::PathBuf,
@@ -201,12 +188,7 @@ pub async fn save_document(
     save_document_as(app, filename, contents, "application/json", "json").await
 }
 
-/// Save a document of any text format through the platform picker.
-///
-/// The MIME type matters on Android: the picker decides the file's type from it,
-/// and a Markdown journal saved as `application/json` opens in nothing. On desktop
-/// it becomes the dialog's extension filter, so the file the user writes keeps the
-/// extension the app promised.
+/// Save a text document through the platform picker with the given MIME type and extension filter.
 pub async fn save_document_as(
     app: tauri::AppHandle,
     filename: String,
@@ -241,16 +223,10 @@ pub async fn save_library_document(
 /// limit exists so a malformed data URL cannot exhaust memory.
 const MAX_IMAGE_BYTES: usize = 16 * 1024 * 1024;
 
-/// Decode the PNG data URL a share card produces.
-///
-/// The prefix, the base64 and the PNG signature are all checked here rather than
-/// trusted: this is the boundary between a canvas in the webview and a file on
-/// disk, and writing arbitrary bytes under a `.png` name would be silent
-/// corruption.
+/// Validates prefix, base64 payload, [`MAX_IMAGE_BYTES`], and PNG signature before returning raw PNG bytes.
 ///
 /// # Errors
-/// `invalid_image` for a non-PNG data URL or bad base64; `file_too_large` past
-/// [`MAX_IMAGE_BYTES`].
+/// Returns `invalid_image` on malformed prefix/base64/signature, or `file_too_large` over [`MAX_IMAGE_BYTES`].
 pub fn decode_png_data_url(data_url: &str) -> CommandResult<Vec<u8>> {
     use base64::Engine as _;
     const PREFIX: &str = "data:image/png;base64,";

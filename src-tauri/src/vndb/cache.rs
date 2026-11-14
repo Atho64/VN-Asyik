@@ -176,12 +176,7 @@ pub struct CachedScreenshot {
     pub blur_path: Option<PathBuf>,
     /// Absolute path of the pre-blurred lightbox copy, when one was written.
     pub blur_full_path: Option<PathBuf>,
-    /// Pixel width of the cached files, as generated.
-    ///
-    /// Stored so the pipeline can tell a file made by an older, smaller width from a
-    /// current one. Without it, changing `SCREENSHOT_WIDTH` left every existing file
-    /// in place and the fix never reached a user who already had a gallery — which is
-    /// exactly what happened when the blur radius was wrong.
+    /// Pixel width of the cached files, used to detect stale resolution/blur caches.
     pub width: Option<u32>,
     /// Pixel height of the cached files, as generated.
     pub height: Option<u32>,
@@ -192,14 +187,7 @@ pub struct CachedScreenshot {
 }
 
 impl CachedScreenshot {
-    /// Whether the community's flagging votes make this explicit.
-    ///
-    /// The level is rounded by `dto::flag_level` and compared by
-    /// `vn_core::model::is_explicit_at_level`, which is the same pair a cover's stored
-    /// rating goes through. A screenshot and a cover with identical votes are therefore
-    /// concealed by the same setting — before, this path used a `>= 1` test while the
-    /// cover used `>= 2`, so the same scene could be blurred in the gallery and shown
-    /// in the library.
+    /// Whether the community's flagging votes make this explicit (shares `dto::flag_level` and `vn_core::model::is_explicit_at_level` with covers).
     #[must_use]
     pub fn is_explicit(&self) -> bool {
         flag_level_is_explicit(self.sexual) || flag_level_is_explicit(self.violence)

@@ -33,12 +33,10 @@ pub enum WindowLaunchMode {
     Customized,
 }
 
-/// Physical top-left window coordinates `(x, y)`.
+/// Physical top-left window coordinates `(x, y)` relative to the virtual desktop origin.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WindowPosition {
-    /// Horizontal offset relative to the virtual desktop origin.
     pub x: i32,
-    /// Vertical offset relative to the virtual desktop origin.
     pub y: i32,
 }
 
@@ -46,24 +44,18 @@ pub struct WindowPosition {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WindowLaunchPrefs {
-    /// Whether to center or restore `(x, y)` on app launch.
     pub mode: WindowLaunchMode,
-    /// Saved customized top-left X coordinate (physical pixels).
+    /// Saved top-left coordinates (physical pixels).
     pub x: Option<i32>,
-    /// Saved customized top-left Y coordinate (physical pixels).
     pub y: Option<i32>,
 }
 
-/// Physical monitor work-area or display rectangle `(x, y, width, height)`.
+/// Physical monitor work-area or display rectangle `(x, y, width, height)` in pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MonitorRect {
-    /// Monitor top-left X coordinate.
     pub x: i32,
-    /// Monitor top-left Y coordinate.
     pub y: i32,
-    /// Monitor width in physical pixels.
     pub width: u32,
-    /// Monitor height in physical pixels.
     pub height: u32,
 }
 

@@ -1,13 +1,5 @@
-//! Screenshots the reader captured themselves.
-//!
-//! Deliberately separate from `vndb::screenshots`, which caches somebody else's
-//! gallery from VNDB and is disposable. These are the reader's own pictures: the
-//! only copy, kept beside the database, and never rebuilt from anywhere.
-//!
-//! Local-only in sync. A row is small but the bytes are not, and an image path
-//! means nothing on another device, so folder sync never carries them. The
-//! library export does, with the bodies inline, because a backup that silently
-//! loses the pictures is not a backup.
+//! Reader-captured screenshots stored beside the database (separate from disposable `vndb::screenshots`).
+//! Excluded from folder sync (paths are device-local); inlined in library backup exports.
 
 use std::path::{Path, PathBuf};
 
@@ -81,11 +73,7 @@ impl ScreenshotStore {
         format!("screenshots/{}/{}.jpg", sanitise(game_id), sanitise(id))
     }
 
-    /// Resolve a stored relative path against the data directory.
-    ///
-    /// Returns `None` for anything that is not a plain path inside the capture
-    /// directory. A stored value is data, not code, and a tampered or hand-edited
-    /// row must not be able to point at `..\..\Windows\System32`.
+    /// Resolves a relative capture path inside the capture directory; returns `None` on traversal.
     #[must_use]
     pub fn resolve(&self, relative: &str) -> Option<PathBuf> {
         let rest = relative.strip_prefix("screenshots/")?;

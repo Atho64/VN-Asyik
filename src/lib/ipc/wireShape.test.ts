@@ -1,14 +1,6 @@
 /**
- * Wire-shape guards for the IPC boundary.
- *
- * These exist because a serde `rename_all = "camelCase"` on the Rust side and a
- * snake_case zod schema on this side is not a compile error — it is a runtime
- * `contract` failure that the caller can swallow. That is exactly how a saved
- * custom cover rendered as no art at all: Rust sent `coverDataUrl`, the schema
- * required `cover_data_url`, and the rejection was quietly turned into `null`.
- *
- * Each case below pins the exact key set the Rust structs serialize, so a future
- * rename on either side fails here instead of in the UI.
+ * IPC wire-shape contract tests pinning exact serialized keys between Rust
+ * structs and frontend schemas so renames fail at test time instead of silently.
  */
 import { describe, expect, it } from "vitest";
 

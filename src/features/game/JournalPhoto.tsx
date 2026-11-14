@@ -8,17 +8,8 @@ import { api } from "@/lib/ipc/client";
 import type { ScreenshotView } from "@/lib/ipc/types";
 
 /**
- * One screenshot pinned to a journal checkpoint.
- *
- * The payload is policy-free — `src` plus `blurred_src` — exactly like the gallery
- * and `vndb_local_art`, so the same three-way rule applies here: `show` paints the
- * sharp file, `blur` paints its own pre-blurred copy, `hide` paints the neutral
- * surface. A reveal is keyed by the policy value as well as the image, so switching
- * the setting back to Blur re-conceals instead of leaving the picture open.
- *
- * Tiles are cached per `(vn, image)` for the life of the window. A journal page
- * re-renders on every save and every focus event; without the cache each of those
- * would be another IPC round trip carrying the same bytes.
+ * Window-lifetime tile cache per `(vnId, imageId)` avoiding redundant IPC
+ * round trips across journal saves and focus changes. Reveals obey `show`/`blur`/`hide`.
  */
 const tileCache = new Map<string, Promise<ScreenshotView>>();
 
@@ -28,8 +19,7 @@ function loadTile(vnId: string, imageId: string): Promise<ScreenshotView> {
   if (cached) return cached;
   const pending = api.vndbScreenshotTile(vnId, imageId);
   tileCache.set(key, pending);
-  // A failed fetch must not be cached: the next render should be allowed to retry
-  // (the gallery may still be downloading the image).
+  // Evict rejected fetches so retries succeed while gallery batches finish downloading.
   pending.catch(() => tileCache.delete(key));
   return pending;
 }

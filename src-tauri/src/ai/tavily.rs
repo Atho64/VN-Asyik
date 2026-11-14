@@ -1,22 +1,7 @@
-//! Web search through Tavily, used to find what people actually say about
-//! visual novels.
+//! Tavily web search for community visual novel recommendations.
 //!
-//! # Why this exists
-//!
-//! VNDB metadata describes a game. It cannot say which game someone should read
-//! next: that lives in reviews, recommendation threads and tag pages, all of
-//! which are prose a tag list never contains. See
-//! `docs/ADR/0004-dropping-local-embeddings.md`.
-//!
-//! # Honesty rules
-//!
-//! * Tavily's `score` is *their* relevance for the query, not our confidence in
-//!   a recommendation. It is carried through as
-//!   [`SearchResult::relevance`] and never presented as agreement.
-//! * Results are sources, not answers. The UI shows the URL with each one so a
-//!   claim can be checked.
-//! * The key is read from the OS credential store and only ever placed in one
-//!   `Authorization` header. It is never logged or included in an error.
+//! `SearchResult::relevance` reflects query match score, not recommendation
+//! confidence. The API key stays in the OS keychain and is sent only in `Authorization`.
 
 use std::time::Duration;
 
@@ -39,14 +24,11 @@ pub const MAX_RESULTS: u8 = 20;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Depth {
-    /// One credit.
     Basic,
-    /// Two credits.
     Advanced,
 }
 
 impl Depth {
-    /// The wire value.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -55,7 +37,6 @@ impl Depth {
         }
     }
 
-    /// Credits this depth costs.
     #[must_use]
     pub fn credits(self) -> u8 {
         match self {
@@ -65,60 +46,40 @@ impl Depth {
     }
 }
 
-/// One search hit.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
-    /// Page title.
     pub title: String,
-    /// Page address, shown so the claim can be checked.
     pub url: String,
-    /// Extracted snippet.
     pub content: String,
-    /// Tavily's relevance for the query, 0 to 1.
-    ///
-    /// Named `relevance` rather than `score` on purpose: it says how well the
-    /// page matches the words searched, which is not the same as how good a
-    /// recommendation it contains.
+    /// Tavily query-match score (0 to 1), not recommendation confidence.
     pub relevance: f32,
 }
 
-/// A completed search.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchOutcome {
-    /// The query that was sent.
     pub query: String,
-    /// Written summary, when one was requested and the provider produced it.
     pub answer: Option<String>,
-    /// Pages, best first.
     pub results: Vec<SearchResult>,
-    /// Credits this call is billed for.
     pub credits: u8,
 }
 
-/// Failures a caller must distinguish, because each needs different advice.
 #[derive(Debug, Error)]
 pub enum SearchError {
-    /// No key is stored.
     #[error("no Tavily API key is configured")]
     NoKey,
-    /// The provider rejected the key.
     #[error("the Tavily API key was rejected")]
     Unauthorized,
-    /// The account is out of credits or past its plan limit (HTTP 432/433).
+    /// HTTP 432/433: plan or credit limit reached.
     #[error("the Tavily plan or credit limit has been reached")]
     OutOfCredits,
-    /// Rate limited; the caller may retry after a pause.
     #[error("Tavily is rate limiting requests, try again shortly")]
     Throttled,
-    /// The request failed before reaching the provider.
     #[error("could not reach Tavily: {0}")]
     Offline(String),
-    /// The provider returned something unexpected.
     #[error("unexpected response from Tavily: {0}")]
     BadResponse(String),
-    /// The query was empty or absurdly long.
     #[error("{0}")]
     BadQuery(String),
 }
@@ -154,13 +115,12 @@ struct RawResult {
     score: f32,
 }
 
-/// Bound on how long a search may take before the UI gives up.
 const TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Validate a query before spending a credit on it.
+/// Validate a query before spending a credit.
 ///
 /// # Errors
-/// When the query is empty or too long to be a real question.
+/// Returns [`SearchError`] when empty or over length limits.
 pub fn check_query(query: &str) -> Result<&str, SearchError> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
@@ -174,10 +134,8 @@ pub fn check_query(query: &str) -> Result<&str, SearchError> {
     Ok(trimmed)
 }
 
-/// Run one search.
-///
 /// # Errors
-/// See [`SearchError`]: each variant maps to different user advice.
+/// Returns [`SearchError`] mapped to the failure cause.
 pub async fn search(
     client: &reqwest::Client,
     key: &TavilyApiKey,

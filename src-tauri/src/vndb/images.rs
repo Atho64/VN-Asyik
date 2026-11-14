@@ -314,15 +314,7 @@ pub fn import_custom_cover(
     import_custom_cover_bytes(store, game_id, &bytes)
 }
 
-/// Import a user-chosen image, decoded from raw bytes, as a game's cover.
-///
-/// The source is decoded, not merely copied: bytes that are not a real image
-/// are rejected here instead of failing later in the webview, and re-encoding
-/// bounds the stored size and normalises the format to JPEG. Decoding sniffs
-/// the format from the bytes, never from a file extension: Android's picker
-/// hands back `content://` documents whose names carry no extension, and a
-/// renamed file is the same bytes either way. Returns the app-data-relative
-/// path to store on the game row.
+/// Decode, re-encode to JPEG, and import bytes as a custom cover (sniffing format from bytes for extensionless Android `content://` URIs); returns the app-data-relative path.
 ///
 /// # Errors
 /// Fails when the source cannot be decoded or the destination cannot be written.
@@ -524,10 +516,7 @@ mod tests {
 
     #[test]
     fn a_cover_imports_from_extensionless_bytes() {
-        // Android's picker answers with a `content://` document copied to a
-        // cache file that carries no image extension, so decoding must sniff
-        // the format from the bytes. If this regresses to an extension guess,
-        // every Android cover pick fails as undecodable.
+        // Android picker cache copies carry no extension, so decoding must sniff bytes.
         let (store, root) = temp_store("bytes");
         let source = write_source(&root, "pick.png", 120, 90);
         let bytes = std::fs::read(&source).expect("read png bytes");

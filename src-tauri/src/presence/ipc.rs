@@ -1,6 +1,7 @@
-// Only the Windows client and the unsupported stub implement the trait here; on
-// Linux the socket client in `ipc_unix` does, and this module holds only the
-// shared protocol helpers.
+//! Windows named-pipe / stub Rich Presence sink and shared Discord IPC protocol helpers.
+//! The raw framing constants and helpers below are used by `ipc_unix` and protocol tests;
+//! Windows delegates framing to `discord-rich-presence`.
+
 #[cfg(not(target_os = "linux"))]
 use super::{PresenceError, PresenceSink};
 use vn_core::presence::PresenceActivity;
@@ -11,48 +12,22 @@ use discord_rich_presence::{
     activity::{Activity, Assets, Button, Timestamps},
 };
 
-/// Opcode for the handshake frame.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) const OP_HANDSHAKE: u32 = 0;
-/// Opcode for a command frame.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) const OP_FRAME: u32 = 1;
-/// Opcode Discord sends to close the socket.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) const OP_CLOSE: u32 = 2;
-/// Opcode for a ping.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) const OP_PING: u32 = 3;
-/// Opcode for a pong.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) const OP_PONG: u32 = 4;
 
-/// Largest frame accepted from Discord, in bytes.
-///
-/// A reply is a small JSON object; anything near this is a broken or hostile
-/// peer, and allocating on its say-so is how a socket turns into a memory bug.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
+/// Largest frame accepted from Discord (bounds allocation against a broken/hostile peer).
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) const MAX_FRAME: u32 = 1 << 20;
 
-/// The `activity` object Discord expects inside `SET_ACTIVITY`.
-///
-/// Shared by the Windows named-pipe client and the Unix socket client: the
-/// payload shape is the protocol, not a platform detail, and two copies would
-/// drift the moment a field is added.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
+/// Discord `SET_ACTIVITY` `activity` payload shared between Windows pipe and Unix socket paths.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn activity_payload(activity: &PresenceActivity) -> serde_json::Value {
     let mut body = serde_json::Map::new();
@@ -94,9 +69,7 @@ pub(crate) fn activity_payload(activity: &PresenceActivity) -> serde_json::Value
     body.into()
 }
 
-/// A `SET_ACTIVITY` command, or the clear form when `activity` is absent.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
+/// `SET_ACTIVITY` command envelope (clears activity when `activity` is `None`).
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn set_activity_command(activity: Option<&PresenceActivity>) -> serde_json::Value {
     serde_json::json!({
@@ -109,9 +82,7 @@ pub(crate) fn set_activity_command(activity: Option<&PresenceActivity>) -> serde
     })
 }
 
-/// One Discord IPC frame: an 8-byte little-endian header and a JSON body.
-// Used by the Linux client and by the protocol tests. Dead on Windows, where the
-// `discord-rich-presence` crate does the framing and the payload building.
+/// Encodes one Discord IPC frame (8-byte little-endian header + JSON payload).
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn encode_frame(op: u32, payload: &str) -> Vec<u8> {
     let bytes = payload.as_bytes();

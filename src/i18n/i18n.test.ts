@@ -87,18 +87,8 @@ describe("dictionary completeness", () => {
   });
 
   /**
-   * Every `t("literal.key")` in the source must exist in the dictionary.
-   *
-   * The two parity tests above only compare the locales with each other, so a key
-   * that is used in code but defined in neither shipped as the raw key on screen:
-   * the token sheet rendered a button labelled `common.cancel` beside "Save Discord
-   * Token". `translate` returns the key on a miss by design (a visible bug beats a
-   * blank string), and `t` accepts `MessageKey | string`, so neither the runtime
-   * nor the type checker caught it. This is the check that does.
-   *
-   * Only literal first arguments are scanned. Dynamic keys such as
-   * `t(\`status.${game.status}\`)` cannot be resolved statically, so the enum-shaped
-   * families are listed explicitly below instead of being silently skipped.
+   * Ensures every literal `t("key")` call exists in the dictionaries (missing keys render raw);
+   * dynamic enum-based keys are checked explicitly below.
    */
   it("defines every key the source asks for", () => {
     const files = readdirSync(SRC, { recursive: true, encoding: "utf8" })

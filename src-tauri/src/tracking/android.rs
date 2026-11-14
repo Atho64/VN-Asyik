@@ -114,13 +114,8 @@ const PRESENCE_FOREGROUND_TOLERANCE_MS: i64 = 90_000;
 
 /// Query the Android game whose card Discord should show, if any.
 ///
-/// The open selection alone is not evidence the game is running: `UsageStats`
-/// cannot see process death, so a selection survives the user going home or
-/// locking the phone. The end of the last counted interval is the freshest
-/// foreground proof — replay closes it at every pause, app switch and screen-off
-/// — so the card lives only while that proof is recent. Elapsed is counted time,
-/// never `now - started_at`: a surviving card must not advertise hours nobody
-/// played.
+/// Because `UsageStats` cannot detect process death, the card lives only while
+/// the last counted foreground interval is recent. Elapsed is counted time, never `now - started_at`.
 pub async fn active_target(pool: &SqlitePool, now_ms: i64) -> Option<ActiveAndroidTarget> {
     let selection = load_selection(pool).await.ok().flatten()?;
     if selection.stopped_at_ms.is_some() {
@@ -689,17 +684,13 @@ mod tests {
 
     #[tokio::test]
     async fn leaving_for_another_app_keeps_the_session_alive() {
-        // Reported bug: start a game from VN Asyik, open another app, come back.
-        // The time away was counted and the session ended on return -- the exact
-        // inverse of what should happen.
+        // Regression: returning from another app previously ended the session and counted away time.
         let db = Db::open_memory().await.expect("db");
         let device = queries::ensure_device_id(db.pool()).await.expect("device");
         let game = seed_game(db.pool(), &device, "Away").await;
         let selected = selection(game);
 
-        // Reading for 90 s, then another app for a few minutes, then VN Asyik
-        // itself resumes at 300_000 -- which is what `tracking_android_session`
-        // replays when the user comes back.
+        // 90 s reading, then Chrome, then VN Asyik resumes at 300_000 (the replay window).
         let events = vec![
             event(Some("org.example.runner"), 1, 2_000),
             event(Some("com.android.chrome"), 1, 92_000),

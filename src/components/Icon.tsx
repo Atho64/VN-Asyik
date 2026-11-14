@@ -1,9 +1,5 @@
 /**
- * One small icon set, drawn to match the identity motif: 1.5px strokes, square
- * joins, no rounded stylised library look (antislop R-04). Each glyph earns its
- * place by naming something concrete in this app, so there is no decorative set.
- *
- * `currentColor` only; size comes from the caller's font size.
+ * Minimal icon set with 1.5px strokes and square joins (`currentColor`, scaled by font size).
  */
 
 import type { ReactNode } from "react";

@@ -11,12 +11,8 @@ import type {
 } from "@/lib/ipc/types";
 
 /**
- * The one primary action on the game screen.
- *
- * Sized and coloured as the thing to press, not as another chip in a row: it is
- * the only control here that starts something. It names what will happen before
- * it happens -- a Japanese-locale badge means the game will start through Locale
- * Emulator, a runner badge names the emulator/runner, and no badge means direct.
+ * Primary launch action that shows the active launch method badge (Locale Emulator,
+ * runner, or direct) before launching.
  */
 export function PlayButton({
   gameId,

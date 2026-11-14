@@ -15,10 +15,7 @@ function describe(error: unknown): string | null {
   }
 }
 
-/**
- * Route-level failure. Says what happened and offers a way back, instead of a
- * blank screen (antislop R-27).
- */
+/** Route-level error fallback displaying what failed and a path back. */
 export function RouteError() {
   const error = useRouteError();
   const { t } = useI18n();

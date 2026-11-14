@@ -1,24 +1,6 @@
-//! Screenshot download, caching and per-image blur.
+//! Per-image screenshot download, caching, and Rust-side blur (avoiding CSS `filter: blur()` on Android `WebView`).
 //!
-//! Why this is separate from `images.rs` (the cover pipeline):
-//!
-//! * A cover is one image per VN and is part of the row's identity, so it lives in
-//!   `vndb_images` keyed by `vn_id`. A VN has up to 30 screenshots, each with its
-//!   own content rating, so they need their own table and their own key
-//!   (`image_id`, e.g. `sf190`).
-//! * The content policy is per image, not per game. One VN's gallery is routinely a
-//!   mix of harmless backgrounds and explicit scenes, and blurring the whole set
-//!   because one tile is explicit would hide art the user asked to see — while
-//!   showing an explicit tile because the rest are fine is the actual bug. Each
-//!   screenshot is therefore classified from its own flagging votes and blurred
-//!   individually.
-//! * Files are small and numerous, so they are kept in a subdirectory and named by
-//!   the VNDB image id rather than the VN id.
-//!
-//! Blurring happens here, in Rust, for the reason DESIGN.md §2 gives for covers: a
-//! large CSS `filter: blur()` on a scrolling `WebView` surface is what breaks frame
-//! rate on low-end Android. A pre-blurred 32 px JPEG upscaled by the browser costs
-//! nothing to paint.
+//! Keyed by `image_id` (e.g. `sf190`) in its own table/directory so each screenshot is rated and blurred individually.
 
 use std::path::{Path, PathBuf};
 
@@ -49,18 +31,8 @@ pub const SCREENSHOT_TILE_WIDTH: u32 = 640;
 /// was being upscaled by the browser and looked worse than the blur.
 pub const SCREENSHOT_FULL_WIDTH: u32 = 1920;
 
-/// Width of the pre-blurred resample.
-///
-/// This is the *resample* width, not the painted width: the image is squashed to
-/// this and scaled back up, so the blur radius ends up roughly
-/// `painted_width / SCREENSHOT_BLUR_WIDTH` pixels.
-///
-/// 48 was far too aggressive. At 512/48 that is a ~10px radius, which erased the
-/// picture entirely — the first version shipped as an unreadable smear. Blurring is
-/// meant to stop the art resolving, not to erase it: at 640/128 the radius is ~5px on
-/// a tile and a soft wash in the lightbox, which hides the detail that matters while
-/// leaving the composition and colours recognisable, so a reader can tell one scene
-/// from another and decide whether to reveal it.
+/// Resample width for pre-blurred screenshots (`painted_width / SCREENSHOT_BLUR_WIDTH` px radius).
+/// 128 (~5 px at 640 px) obscures faces and text without reducing the image to an unreadable smear like 48 did.
 pub const SCREENSHOT_BLUR_WIDTH: u32 = 128;
 
 /// Width of the blurred copy intended for the lightbox.
@@ -203,16 +175,9 @@ fn sanitise(id: &str) -> String {
         .collect()
 }
 
-/// Download and cache every screenshot of a VN that is not cached yet.
+/// Download and cache uncached screenshots sequentially (sharing the VNDB rate limiter) in VNDB order.
 ///
-/// Returns the rows that are now on disk, in the order VNDB listed them. A failure
-/// on any single image is collected rather than thrown: one dead URL must not cost
-/// the other twenty-nine, and the gallery renders what it has.
-///
-/// Downloads are sequential on purpose. The client's rate limiter is shared with
-/// every other VNDB call, and thirty parallel image fetches for one screen would
-/// spend the whole budget at once for no visible gain — the grid paints progressively
-/// as each tile arrives.
+/// Per-image fetch errors are collected without aborting the gallery.
 ///
 /// # Errors
 /// Only when the database cannot be read or written at all.
@@ -351,29 +316,9 @@ struct ShotRequest<'a> {
     now: Timestamp,
 }
 
-/// Download, render and blur one screenshot, then record it.
-///
-/// Three files are produced from one download:
-///
-/// | file | purpose |
-/// | --- | --- |
-/// | `{id}.tile.jpg` | grid tile, 640 px |
-/// | `{id}.full.jpg` | lightbox, up to [`SCREENSHOT_FULL_WIDTH`] |
-/// | `{id}.blur.jpg` / `{id}.blur.full.jpg` | the same two sizes, pre-blurred |
-///
-/// The sharp copies are written regardless of the current policy: generating them
-/// costs milliseconds from bytes already in memory, and a user who later switches the
-/// setting must not need a second network round trip for art they already own.
-/// Serving them is what the policy controls, not producing them.
-///
-/// Returns `Ok(None)` when the entry has nothing to download.
 /// Whether a cached image has to be regenerated before it can be shown.
 ///
-/// One definition, called by the pipeline (which decides what to download) and by the
-/// command (which decides what to report missing). They used to be two, and they
-/// already disagreed: a row with no recorded width was rebuilt by one and skipped by
-/// the other, so the gallery reported a permanent download failure for images it never
-/// attempted.
+/// Shared by the download pipeline and the UI command so missing-width rows are handled consistently.
 #[must_use]
 pub fn needs_rebuild(
     cached_width: Option<u32>,
@@ -390,6 +335,15 @@ pub fn needs_rebuild(
             .any(|path| !path.exists())
 }
 
+/// Download, render, and blur one screenshot, then record its metadata.
+///
+/// Produces four variants on disk regardless of policy so toggling blur later needs no re-download:
+///
+/// | file | purpose |
+/// | --- | --- |
+/// | `{id}.tile.jpg` | grid tile, 640 px |
+/// | `{id}.full.jpg` | lightbox, up to [`SCREENSHOT_FULL_WIDTH`] |
+/// | `{id}.blur.jpg` / `{id}.blur.full.jpg` | pre-blurred tile and lightbox copies |
 async fn cache_one(
     client: &VndbClient,
     pool: &SqlitePool,
@@ -410,10 +364,7 @@ async fn cache_one(
     let blur_path = store.blur_path(image_id);
     let blur_full_path = store.blur_full_path(image_id);
 
-    // Files written by a build with a different cache format are rebuilt rather than
-    // reused. This is what makes a resolution or blur fix reach someone who already
-    // opened the gallery once — twice now the fix was correct and invisible because
-    // the old files were simply kept.
+    // Rebuild caches written under an older format or target width so resolution/blur fixes apply cleanly.
     let needs_work = needs_rebuild(
         cached_width,
         &tile_path,
@@ -425,8 +376,7 @@ async fn cache_one(
     let mut written: Option<(u32, u32)> = None;
     if needs_work {
         let bytes = client.fetch_bytes(url).await?;
-        // A previous format's `{id}.jpg` is not one of the files this build names, so
-        // it would sit in the folder forever and quietly double the on-disk cost.
+        // Remove stale files from older layouts (e.g. `{id}.jpg`) before writing the current set.
         for path in store.all_paths(image_id) {
             let _ = std::fs::remove_file(path);
         }
@@ -437,9 +387,7 @@ async fn cache_one(
         // Tile: what the grid paints.
         let tile = resize_to_width(&decoded, SCREENSHOT_TILE_WIDTH);
         write_jpeg(&tile, &tile_path)?;
-        // Full: what the lightbox paints. Not the source verbatim — a 4000 px
-        // screenshot would be a pointless 3 MB — but far above the tile so the
-        // lightbox is never an upscale.
+        // Downscale lightbox output from source resolution while staying well above tile size.
         let full = resize_to_width(&decoded, SCREENSHOT_FULL_WIDTH);
         write_jpeg(&full, &full_path)?;
         // Blurs, at both sizes.
@@ -539,18 +487,8 @@ fn write_blur(
     path: &Path,
     paint_width: u32,
 ) -> Result<(), ScreenshotError> {
-    // The blur radius is a fixed number of **output** pixels, not a fixed ratio.
-    //
-    // This was a ratio (`128 * paint_width / 640`), which meant the lightbox blur was
-    // resampled at 1280/256 = 5x and produced a ~5px radius across a 1280px image:
-    // dialogue text stayed readable and faces stayed recognisable. A content filter
-    // that leaves the thing it is hiding legible is not a filter. That shipped, and
-    // the honest reading of it is that explicit screenshots were visible.
-    //
-    // Scaling the radius with the image is the correct model for perceived blur, but
-    // the constant has to be much larger than a tile's. `BLUR_RADIUS` is the fraction
-    // of the width one resample step removes; a 1/24 ratio is a heavy blur at any
-    // size, which is the point of the setting.
+    // Scale the blur radius proportionally (~1/24 of target width) rather than using a fixed tile resample
+    // size, so large lightbox images still obscure faces and text cleanly.
     const BLUR_DIVISOR: u32 = 24;
     let blur_width = (paint_width / BLUR_DIVISOR).max(8);
     let tiny = resize_to_width(source, blur_width);

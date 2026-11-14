@@ -39,12 +39,7 @@ impl From<ScreenshotRow> for ScreenshotCard {
     }
 }
 
-/// Whether the capture button can do anything right now, and if not, why.
-///
-/// Answered by the backend rather than guessed in the UI: the reason differs per
-/// platform (Android needs a projection the reader granted, Windows needs a
-/// capturable window) and the button must say which one is missing instead of
-/// looking broken.
+/// Capture availability and platform-specific reason when unavailable (Android projection vs Windows window).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureStatus {

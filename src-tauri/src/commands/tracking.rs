@@ -569,12 +569,7 @@ pub struct ChapterView {
     pub route_key: Option<String>,
     /// Human route label, when known.
     pub route_name: Option<String>,
-    /// What to show as the route heading.
-    ///
-    /// Computed here rather than in the panel: an engine route whose code is not in
-    /// the verified table has a `route_key` and no `route_name`, and grouping on
-    /// the key while labelling from the name made every such route render as
-    /// "No route" — the same text as a chapter with no route at all.
+    /// Resolved route heading (computed here so unknown engine codes with a `route_key` don't collapse into "No route").
     pub route_label: String,
     /// Whether this chapter has been reached.
     pub reached: bool,
@@ -977,13 +972,7 @@ struct ActivePresenceTarget {
     phase: Phase,
 }
 
-/// The bare file name of a tracked executable.
-///
-/// The tracker reports a full path, which contains the user's Windows account
-/// name. `{exe_name}` is a template token anyone can put on a public profile, so
-/// only the file name may leave the machine. The split is by hand on both
-/// separators because the path is a Windows path even where this is compiled
-/// for another OS.
+/// Bare executable filename (splits on both `/` and `\` so full host paths never leave the machine).
 fn exe_file_name(path: &str) -> Option<String> {
     path.rsplit(['/', '\\'])
         .next()
@@ -1020,17 +1009,9 @@ fn target_from_manual(
     })
 }
 
-/// The automatically tracked game, while it is being played.
-///
-/// The phase is compared with [`phase_name`], the function that produced it. It
-/// was once compared with a literal `"Tracking"` while the tracker reports
-/// `"tracking"`, so an automatically tracked game never reached Discord.
-///
-/// `show_when_unfocused` widens what counts as "being played" from
-/// [`Phase::Tracking`] to also include [`Phase::Unfocused`]. Note what it does
-/// **not** widen to: `Paused` is the user asking for nothing to be recorded, and
-/// `Idle` means the process is gone. Neither may publish, so the switch can never
-/// advertise a novel that is closed or deliberately put down.
+/// Automatically tracked game when actively playing.
+/// Compares via [`phase_name`] to match serialized tracker status; `show_when_unfocused` widens to
+/// `Unfocused`, never to `Paused` or `Idle` (closed or intentionally paused games must not publish).
 fn target_from_status(
     status: &TrackingStatus,
     now: Timestamp,
@@ -1093,10 +1074,7 @@ async fn sync_presence_loop(state: &AppState, now: Timestamp) {
                 exe_name: Some(active.package),
                 active_ms: active.active_ms,
                 start_epoch: Some(active.start_epoch),
-                // `active_target` answers only while the game is in the
-                // foreground — the last counted interval is still fresh — so
-                // Android has no equivalent of "running but another window has
-                // focus" and this branch is not gated by the setting.
+                // `active_target` is foreground-only while intervals stay fresh, so `show_when_unfocused` does not apply on Android.
                 phase: Phase::Tracking,
             }),
     };
@@ -1460,10 +1438,7 @@ pub async fn stats_derived(
         })
         .collect();
 
-    // Route totals reuse the same sum the chapters panel shows, so the two
-    // screens cannot disagree. Joined to `games` like every aggregate over a
-    // child table (AGENTS.md §5): orphan rows — chapters whose game row is gone
-    // — must not inflate route stats or `favourite_route`.
+    // Reuse the chapter panel's sum and join `games` (`AGENTS.md` §5): orphan chapters from deleted games must not inflate route stats.
     let route_rows = sqlx::query(
         "SELECT c.route_name AS name, SUM(ps.counted_ms) AS playtime_ms \
          FROM chapters c \

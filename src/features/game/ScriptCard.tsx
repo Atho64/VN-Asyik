@@ -29,24 +29,14 @@ function basename(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
-/**
- * Scripts the user extracted themselves and imported for this game.
- *
- * This is the disassemble-it-yourself path: VN Asyik never opens the game's
- * archives here, it only reads the text file the user points at. The card says
- * so, and it says where the script goes — into the companion chat, summarized
- * chunk by chunk so a whole novel fits a model's context without inventing
- * content.
- */
+/** User-imported external scripts compacted chunk-by-chunk for companion chat grounding. */
 export function ScriptCard({ gameId }: { gameId: string }) {
   const { t, locale } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
 
   const [docs, setDocs] = useState<ScriptDocument[] | null>(null);
   const [importing, setImporting] = useState(false);
-  // The document currently being summarized, if any. One at a time: the calls
-  // are sequential by design (each summarizes the next pending chunks), and a
-  // second concurrent loop would race the same progress row.
+  // Allow only one sequential compaction loop at a time to avoid racing progress rows.
   const [compactingId, setCompactingId] = useState<string | null>(null);
   const stopRef = useRef(false);
   // Summarizer agent count; null until the setting loads.
@@ -152,14 +142,8 @@ export function ScriptCard({ gameId }: { gameId: string }) {
   };
 
   /**
-   * Summarize until the digest exists. Each call covers a bounded batch of
-   * chunks, so progress is visible between calls and a stop request (or the
-   * card unmounting) takes effect without abandoning a completed batch — the
-   * backend resumes from `doneChunks` on the next run.
-   *
-   * `rebuild` starts over instead of resuming: that is the only way to replace
-   * a finished digest written by an older summarizer, whose stored chunk
-   * summaries cannot be reused with the current prompts.
+   * Compact in bounded batches so progress updates between calls and cancellation resumes via `doneChunks`.
+   * Pass `rebuild = true` to discard older chunk summaries and re-run from scratch.
    */
   const summarize = async (doc: ScriptDocument, rebuild = false): Promise<void> => {
     if (compactingId !== null) return;
@@ -184,11 +168,7 @@ export function ScriptCard({ gameId }: { gameId: string }) {
         if (info.doneChunks >= info.chunkCount) return;
       }
     } catch (caught) {
-      // Compaction needs the chat provider; say that in app words rather than
-      // the raw error code when that is what is missing. The backend holds a
-      // per-document lease, so a run started before this card mounted (the
-      // loop survives unmount until its batch ends) reports busy instead of
-      // racing the same progress row.
+      // Surface friendly missing-provider copy; backend per-document lease reports busy if compaction is active.
       pushToast(
         "error",
         caught instanceof IpcError && caught.code === "chat_key_missing"

@@ -1,29 +1,16 @@
-//! Shared OpenAI-compatible request shape for the AI features.
-//!
-//! One request/response pair with the error mapping every caller wants: an
-//! auth failure, throttling, network trouble and unusable responses are
-//! distinct, because the UI says different things for each. The streaming
-//! companion chat has its own transport; this module serves the one-shot
-//! callers (recommendations, script compaction).
-//!
-//! Nothing here runs on startup; it only runs when a feature asks.
+//! One-shot OpenAI/Anthropic request wrapper for recommendations and script compaction.
+//! Runs on demand (companion streaming uses `conversation`).
 
 use serde::{Deserialize, Serialize};
 
 use crate::secrets::ChatApiKey;
 
-/// Why a request failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatError {
-    /// No key configured.
     NoKey,
-    /// The configured endpoint or key was rejected.
     Unauthorized,
-    /// Rate limited or throttled by the provider.
     Throttled,
-    /// Network trouble.
     Offline(String),
-    /// The provider answered with something unusable.
     BadResponse(String),
 }
 
@@ -41,19 +28,12 @@ impl std::fmt::Display for ChatError {
 
 impl std::error::Error for ChatError {}
 
-/// Which wire format a saved endpoint speaks.
-///
-/// Gemini's OpenAI-compatible layer is `openai`: the difference that matters is
-/// the request and response *shape*, not who runs the server. Anthropic's Messages
-/// API is its own shape, so it gets its own variant.
+/// Wire protocol a saved endpoint speaks (e.g. Gemini's OpenAI-compatible layer uses `OpenAi`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
     /// `POST {base}/chat/completions`, `Authorization: Bearer`.
-    ///
-    /// Spelled out because `snake_case` turns the variant name into `open_ai`:
-    /// the UI and every stored profile say `openai`, and the alias keeps a blob
-    /// written by a build that sent the split spelling readable.
+    /// Explicit rename/alias prevents `snake_case` from serializing `open_ai`.
     #[default]
     #[serde(rename = "openai", alias = "open_ai")]
     OpenAi,
@@ -62,10 +42,8 @@ pub enum Provider {
 }
 
 impl Provider {
-    /// Every provider the app can speak to.
     pub const ALL: [Self; 2] = [Self::OpenAi, Self::Anthropic];
 
-    /// The key the UI and the stored profile use.
     #[must_use]
     pub fn id(self) -> &'static str {
         match self {
@@ -74,10 +52,8 @@ impl Provider {
         }
     }
 
-    /// Read the id the UI sends.
-    ///
     /// # Errors
-    /// The unknown id, so the caller can report it instead of guessing.
+    /// Returns the unrecognized provider id.
     pub fn parse(raw: &str) -> Result<Self, String> {
         match raw.trim() {
             "openai" | "" => Ok(Self::OpenAi),
@@ -87,17 +63,14 @@ impl Provider {
     }
 }
 
-/// Where the chat provider lives.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatConfig {
-    /// Which wire format this endpoint speaks. Older stored configs have no
-    /// field and read as `openai`.
+    /// Stored configs without this field predate provider selection and read as `openai`.
     #[serde(default)]
     pub provider: Provider,
-    /// Base URL, without the trailing `/chat/completions` (or `/messages`).
+    /// Base URL without `/chat/completions` or `/messages`.
     pub base_url: String,
-    /// Model name as the provider spells it.
     pub model: String,
 }
 
@@ -114,14 +87,12 @@ impl Default for ChatConfig {
     }
 }
 
-/// One message in the request.
 #[derive(Debug, Serialize)]
 struct Message<'a> {
     role: &'a str,
     content: &'a str,
 }
 
-/// Request body for `/chat/completions`.
 #[derive(Debug, Serialize)]
 struct ChatRequest<'a> {
     model: &'a str,
@@ -158,17 +129,10 @@ struct ChatResponse {
 
 /// One system/user exchange with the configured provider.
 ///
-/// Added so the recommendation pipeline can reuse the request shape and error
-/// mapping without duplicating them. Unlike [`comment`], the reply is returned
-/// unvalidated: there is no deterministic profile behind a web-search
-/// recommendation to check it against, so grounding is enforced by
-/// `recommend::unsupported_candidates` instead. The key is optional so local
-/// OpenAI-compatible servers (Ollama and friends) work keyless, exactly like
-/// the streaming chat transport.
+/// Keyless endpoints (e.g. Ollama) are permitted; the reply is unvalidated.
 ///
 /// # Errors
-/// [`ChatError`] for a missing key, auth failure, throttling, network trouble, or
-/// an unusable response.
+/// Returns [`ChatError`] on missing key, auth failure, throttling, transport error, or bad response.
 pub async fn complete(
     client: &reqwest::Client,
     config: &ChatConfig,
@@ -179,11 +143,7 @@ pub async fn complete(
     complete_with_budget(client, config, key, system, user, 2400).await
 }
 
-/// One system/user exchange with an explicit output token budget.
-///
-/// Multi-agent segment digests and final reduce merges handle up to 1200 words
-/// of dense factual information, which requires a larger token budget (e.g. 8192)
-/// so reasoning models and thorough summarizers do not get cut off mid-thought.
+/// One system/user exchange with an explicit `max_tokens` budget (e.g. 8192 for dense summaries).
 pub async fn complete_with_budget(
     client: &reqwest::Client,
     config: &ChatConfig,
@@ -281,9 +241,7 @@ async fn request(
                 Ok(text)
             }
         }
-        // A reasoning model can spend the whole budget thinking and emit nothing.
-        // Saying so is far more useful than "empty response", because the fix is
-        // to raise the limit or pick a non-reasoning model.
+        // Surface exhausted thinking budget instead of reporting a generic empty reply.
         _ if choice.message.reasoning_content.is_some() => Err(ChatError::BadResponse(
             "the model used its whole reply budget on reasoning and produced no answer;              raise the token limit, or use a model that does not reason first"
                 .to_owned(),
@@ -295,8 +253,7 @@ async fn request(
     }
 }
 
-/// Anthropic's Messages API, in the shape this app sends (`system` at the top
-/// level, one user turn, no tools).
+/// Calls Anthropic's Messages API (top-level `system`, one user turn, no tools).
 async fn request_anthropic(
     client: &reqwest::Client,
     config: &ChatConfig,

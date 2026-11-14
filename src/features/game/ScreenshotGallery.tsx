@@ -9,21 +9,10 @@ import { Sheet } from "@/components/Sheet";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { ScreenshotView } from "@/lib/ipc/types";
 
-/**
- * How long the gallery waits before giving up and saying so.
- *
- * Generous rather than tight: the first visit downloads the whole gallery
- * sequentially at VNDB's rate limit, which for 30 screenshots is around 15-20
- * seconds. The point is not to be fast, it is to fail visibly instead of spinning.
- */
+/** Generous timeout for sequential rate-limited download of up to 30 screenshots. */
 const GALLERY_TIMEOUT_MS = 120_000;
 
-/**
- * How many download rounds to ask for before giving up on the rest.
- *
- * A 30-image gallery is five rounds of six. The cap is a guard against a backend that
- * keeps reporting work outstanding, not a real limit.
- */
+/** Cap polling rounds to prevent infinite loops if pending count stops progressing. */
 const MAX_ROUNDS = 8;
 
 interface ScreenshotGalleryProps {
@@ -36,27 +25,15 @@ interface ScreenshotGalleryProps {
 }
 
 /**
- * The VN's screenshots, read from the local cache.
- *
- * Two decisions worth stating, because both are visible:
- *
- * * **Nothing downloads until this component mounts.** The gallery lives under the
- *   description, and a VN with thirty screenshots is a few megabytes. A screen that
- *   fetched them on open would delay the text the user came to read.
- * * **The content policy is applied by the backend, per image.** The `src` handed to
- *   a tile is already the pre-blurred file for an explicit screenshot, so the sharp
- *   bytes never reach the webview and no CSS class can accidentally reveal them.
- *   `explicit` is carried alongside so the tile can label itself and offer a reveal.
+ * Cached VNDB screenshot gallery that defers downloads until mount and receives
+ * pre-blurred copies directly from Rust for explicit images.
  */
 export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGalleryProps) {
   const { t } = useI18n();
   const nsfw = useAppStore((state) => state.prefs.nsfw);
   const pushToast = useAppStore((state) => state.pushToast);
 
-  // The gallery is keyed by everything that can change what it should show. A load
-  // result is stored together with the key it was fetched for, so a stale response
-  // arriving after the VN or the content setting changed is ignored instead of
-  // painted over the newer state. Nothing is written to state from an effect body.
+  // Store results with the query key so stale async loads cannot overwrite newer game/policy state.
   const galleryKey = `${vnId ?? ""}:${version}`;
   const [loaded, setLoaded] = useState<{
     key: string;
@@ -66,16 +43,14 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
     complete: boolean;
     pending: number;
   } | null>(null);
-  // A reveal is scoped to the policy value as well as to the gallery, so switching the
-  // setting back to Blur re-conceals exactly like the cover reveal does. The payload is
-  // policy-free, so the policy no longer belongs in the fetch key — only here.
+  // Policy is not part of the fetch key because the backend returns both sharp and pre-blurred URLs;
+  // scoping reveal state by `${galleryKey}:${nsfw}` ensures toggling back to blur re-conceals tiles.
   const revealScope = `${galleryKey}:${nsfw}`;
   const [revealed, setRevealed] = useState<{ key: string; ids: string[] }>({
     key: revealScope,
     ids: [],
   });
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  // The full-size version of the current lightbox image, fetched lazily.
   const [fullView, setFullView] = useState<ScreenshotView | null>(null);
   const [fullFailed, setFullFailed] = useState(false);
 
@@ -92,12 +67,7 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
       if (!cancelled) setLoaded({ key: galleryKey, ...next });
     };
 
-    // The first visit to a VN downloads up to 30 screenshots, so this call is far
-    // slower than any other on the page and cannot be given the same budget. It is
-    // still bounded: a request that never settles used to leave the placeholders
-    // spinning forever, which reads as a broken screen rather than a slow one. On
-    // timeout the section says it could not load and offers nothing it cannot back
-    // up — the tiles already cached will paint on the next visit.
+    // Bound first-visit batched download (up to 30 screenshots) so stalled requests fail visibly.
     const timeout = window.setTimeout(() => {
       settle({
         status: "error",
@@ -108,11 +78,9 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
       });
     }, GALLERY_TIMEOUT_MS);
 
-    // The backend downloads in batches so a 30-image gallery is not one minute of
-    // blank screen. Keep asking while it reports work outstanding: each round paints
-    // the new tiles, so the grid fills in visibly.
+    // Poll batched downloads progressively so tiles appear without waiting for the whole set.
     const loadRound = async (): Promise<void> => {
-      // Bounded so a backend that never settles cannot loop forever.
+      // Cap polling rounds if the backend continues reporting pending screenshots.
       for (let round = 0; round < MAX_ROUNDS; round += 1) {
         const gallery = await api.vndbScreenshots(vnId);
         if (cancelled) return;
@@ -155,10 +123,7 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
     };
   }, [vnId, galleryKey]);
 
-  // A reveal is per screenshot and is revoked when the policy changes, the same way
-  // the cover reveal is. Keying a single object rather than resetting a map in an
-  // effect means the revocation happens on the same render as the policy change, with
-  // no intermediate frame in which the old reveals are still true.
+  // Key reveals by policy value so policy changes revoke per-tile reveals on the same render.
   const revealedIds = revealed.key === revealScope ? revealed.ids : [];
   const remote = loaded?.key === galleryKey ? loaded : null;
   const shots = remote?.shots ?? [];
@@ -258,11 +223,7 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
             section that borrows it makes the page look like it never finished. */}
         {state === "loading" ? (
           <div aria-busy="true" aria-label={t("detail.screenshots")}>
-            {/* Say what the wait is for. Three anonymous placeholders on a first
-                visit that legitimately takes ~20 s read as a broken gallery; naming
-                the download and promising it happens once is the honest version.
-                The skeleton is also a full row rather than three tiles, because the
-                count is unknown until the response arrives. */}
+            {/* Show loading text and a full-row skeleton so initial fetch latency does not look broken. */}
             <p className="body" style={{ marginBottom: "var(--space-2)" }}>
               {t("detail.screenshotsLoading")}
             </p>
@@ -286,11 +247,7 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
           <>
             <ul className="gallery">
               {shots.map((shot, index) => {
-                // The same three-way policy a cover is drawn under, from the same
-                // preference and the same rule: `show` paints the sharp file, `blur`
-                // paints its own pre-blurred copy, and `hide` paints nothing and shows
-                // the neutral surface. Revealing is per tile and expires with the
-                // policy, exactly like `useArtwork`'s reveal.
+                // Apply the shared three-way NSFW policy with reveals keyed by policy value.
                 const explicit = shot.explicit;
                 const revealed = revealedIds.includes(shot.image_id);
                 const concealed = nsfw !== "show" && explicit && !revealed;
@@ -440,10 +397,7 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
       >
         {current ? (
           (() => {
-            // The lightbox obeys the same policy as the tile that opened it, and reaches
-            // for the sharp full-size file only once the image is genuinely in the
-            // clear. A tile opened after its reveal paints sharp; one that somehow got
-            // here under `blur` must not be promoted merely because the view is larger.
+            // Gate sharp full-size image loads behind `show` or an active per-tile reveal.
             const revealed = revealedIds.includes(current.image_id);
             const concealed = nsfw !== "show" && current.explicit && !revealed;
             const blurSrc = fullView?.blurred_src ?? current.blurred_src;

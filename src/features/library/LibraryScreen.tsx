@@ -14,14 +14,7 @@ import type { GameStatus } from "@/lib/ipc/types";
 import { AddGameSheet } from "./AddGameSheet";
 import { VirtualLibrary } from "./VirtualLibrary";
 
-/**
- * The library.
- *
- * Three views because browsing a collection genuinely has three jobs: scanning
- * titles (list), comparing covers (grid), and lingering on a few favourites
- * (shelf). That is the RHYTHM 3 decision from DESIGN.md §0, not three skins on
- * one grid.
- */
+/** Library view offering title scan (list), cover comparison (grid), and pinned favorites (shelf). */
 export function LibraryScreen() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -31,23 +24,16 @@ export function LibraryScreen() {
   const setCards = useAppStore((state) => state.setCards);
   const setLibraryError = useAppStore((state) => state.setLibraryError);
 
-  // The browsing state (search, chips, view, sort) lives in the store: the
-  // router unmounts this screen on navigation, and the query used to reset while
-  // the results it had produced did not come back with it.
+  // Persisted in app store because the router unmounts this screen on navigation.
   const { query, statuses, ratedOnly, view, sort } = useAppStore(
     (state) => state.libraryBrowse,
   );
   const updateLibraryBrowse = useAppStore((state) => state.updateLibraryBrowse);
   const [addOpen, setAddOpen] = useState(false);
-  // The collection remounts on a filter change (it resets scroll and remeasures).
-  // Its key was an object dumped to JSON, which is a different string for every
-  // status chip even when the selection is the same; a stable joined key means
-  // only a real change remounts the grid.
+  // Joined primitive key avoids remounting the virtualized grid on status-array reference churn.
   const collectionKey = `${view}|${query}|${statuses.join(",")}|${ratedOnly ? 1 : 0}|${sort}`;
 
-  // The filter and sort live in `lib/library` next to their tests. A second copy
-  // here had already drifted: it compared raw titles where the shared one folds
-  // case and spacing, so the same list ordered differently depending on the path.
+  // Reuse `lib/library` normalization so card ordering matches tested sort/filter behavior.
   const filtered = useMemo(
     () =>
       // Title reads A→Z; the numeric keys read highest-first.

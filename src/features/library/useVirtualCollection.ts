@@ -101,10 +101,7 @@ class CollectionStore {
   measureElement = (element: HTMLDivElement | null): void => {
     this.instance.measureElement(element);
     if (element?.isConnected) {
-      // The core's normal ref measurement may run before measurementsCache is
-      // built for a newly committed layout, or skip while scrolling. Build the
-      // layout and synchronously size this visible row instead of leaving its
-      // position based on estimates until a later ResizeObserver delivery.
+      // Build layout and measure visible rows synchronously instead of waiting on ResizeObserver estimates.
       this.instance.getTotalSize();
       this.instance.resizeItem(
         this.instance.indexFromElement(element),

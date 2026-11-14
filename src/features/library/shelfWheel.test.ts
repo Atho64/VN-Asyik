@@ -2,14 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { shelfWheelDelta, shelfWheelScroll, WHEEL_SNAP_IDLE_MS } from "./VirtualLibrary";
 
-/**
- * A scroller double that models `scroll-snap-type: x`.
- *
- * The real bug was not arithmetic: the write was correct and the browser rounded
- * it back to the nearest snap point, so a 120 px wheel step landed on 4 px. A
- * double that just stores whatever is written cannot catch that, which is why the
- * first version of these tests passed against broken code.
- */
+/** Scroll scroller double simulating browser `scroll-snap-type: x` snapback rounding. */
 function scroller(scrollLeft = 0, scrollWidth = 2000, clientWidth = 1000) {
   const firstSnapPoint = 4;
   const step = 264;
@@ -26,10 +19,7 @@ function scroller(scrollLeft = 0, scrollWidth = 2000, clientWidth = 1000) {
         this._left = value;
         return;
       }
-      // Snap: pick the nearest multiple of the card step. Reading the property
-      // back in the same task still reports the requested value, so snap has to
-      // be modelled as a rejection rather than a silent rewrite: that is exactly
-      // the behaviour that made the wheel look inert.
+      // Simulate scroll-snap rejection: reading scrollLeft in the same task returns the target before snapping back.
       // Snap to the nearest card boundary, clamped to the scrollable range.
       const max = scrollWidth - clientWidth;
       const index = Math.max(0, Math.round((value - firstSnapPoint) / step));
@@ -75,10 +65,7 @@ describe("shelfWheelDelta", () => {
       const previousSnap = element.style.scrollSnapType;
       shelfWheelScroll(host, wheel(0, 120), pending);
       expect(element.style.scrollSnapType).toBe("none");
-      // A second notch inside the idle window must not restore snapping: doing so
-      // re-anchored the offset, and that was the actual reason the wheel did
-      // nothing. Restoring on the next frame was not enough either, because the
-      // shelf re-renders in response to the scroll event after that frame.
+      // Delay snap restoration past immediate scroll frames so rapid wheel notches do not re-anchor.
       vi.advanceTimersByTime(WHEEL_SNAP_IDLE_MS / 2);
       shelfWheelScroll(host, wheel(0, 120), pending);
       expect(element.style.scrollSnapType).toBe("none");

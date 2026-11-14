@@ -1,14 +1,6 @@
 /**
- * The wrapped share card.
- *
- * Drawn on a canvas rather than screenshotted from the DOM: the result must be
- * the same picture on every theme, at predictable sizes, and a canvas can be
- * exported without a third-party renderer. Only local data URLs are drawn; a
- * remote cover would taint the canvas and make `toDataURL` throw.
- *
- * Two layouts share one model:
- * - `post` 1080x1350, the feed-friendly card with facts under the top games.
- * - `story` 1080x1920, the taller card with five games and an hour chart.
+ * Canvas-rendered wrapped share cards (`post` 1080x1350, `story` 1080x1920) for theme-independent
+ * output; draws local data URLs only because remote URLs taint the canvas.
  */
 
 import type { Locale } from "@/i18n";

@@ -1,17 +1,5 @@
-//! Live checks for the presence image host.
-//!
-//! Ignored by default: these publish a small generated image to a **public** host
-//! and need the network. Run them by hand when touching `presence::upload`:
-//!
-//! ```text
-//! cargo test --test presence_upload_live -- --ignored --nocapture
-//! ```
-//!
-//! Why they exist: the upload path is the one part of Rich Presence that cannot be
-//! proven by a unit test with a seeded cache. A wrong field name, a missing
-//! `User-Agent` rejected by the host's CDN, or a reply shape that is not the bare
-//! URL all look identical to the app ("the card has no image"), and every one of
-//! them is only visible against the real endpoint.
+//! Live checks for Rich Presence image host uploads (multipart fields, `User-Agent`, bare URL response).
+//! Ignored by default; run manually with `cargo test --test presence_upload_live -- --ignored --nocapture`.
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use vn_core::presence::RpcImageHost;

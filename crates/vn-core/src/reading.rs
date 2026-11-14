@@ -26,13 +26,8 @@ pub struct ReadingEntry {
     pub save_slot: String,
     pub route_name: String,
     pub chapter_name: String,
-    /// VNDB image id of the screenshot pinned to this checkpoint, or empty.
-    ///
-    /// Only the id travels: the bytes live in the disposable screenshot cache,
-    /// which is rebuilt from VNDB on demand. A peer that has not cached the image
-    /// yet shows the checkpoint without its photo instead of failing the row.
-    ///
-    /// Defaulted so a payload written before the column existed still decodes.
+    /// VNDB screenshot id pinned to this checkpoint, or empty.
+    /// Only the id syncs (bytes live in the disposable cache); defaulted for legacy rows.
     #[serde(default)]
     pub photo_image_id: String,
 }
@@ -50,9 +45,7 @@ impl ReadingEntry {
     }
 }
 
-/// A checkpoint must carry *something*: text, or a pinned photo. A photo with no
-/// note is a real moment (`AGENTS.md` §5: the journal is not only prose), so the
-/// empty rule counts the photo as content rather than requiring a caption.
+/// Require at least one non-empty field; a pinned photo counts as content without prose (`AGENTS.md` §5).
 pub fn validate_text(
     note: &str,
     slot: &str,
@@ -79,11 +72,7 @@ pub fn validate_text(
     validate_photo_id(photo)
 }
 
-/// Reject a photo id that could not be a VNDB image id.
-///
-/// The id is written into a document the user may share, so whitespace and
-/// control characters are refused rather than escaped: a newline in an image id
-/// would break the Markdown line it is embedded in.
+/// Reject whitespace and control characters so embedded ids cannot break Markdown exports.
 fn validate_photo_id(photo: &str) -> Result<(), String> {
     if photo.is_empty() {
         return Ok(());

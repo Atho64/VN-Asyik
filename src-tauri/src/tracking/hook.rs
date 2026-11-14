@@ -1,12 +1,5 @@
-//! The live text ring the companion chat reads.
-//!
-//! Text arrives from one source: the `LunaTranslator` network service, whose
-//! websocket streams every line the game displays. There is no in-process
-//! hooking, no injected module and no named pipe — this file only holds a bounded
-//! buffer of recent lines and the connection state the UI shows.
-//!
-//! Nothing reaches the game. This is a read-only consumer of a local websocket
-//! the user chose to enable.
+//! Bounded live-text ring fed read-only from the local `LunaTranslator` websocket;
+//! no in-process hooking, injected module, or named pipe touches the game.
 
 use std::collections::VecDeque;
 use std::sync::Arc;

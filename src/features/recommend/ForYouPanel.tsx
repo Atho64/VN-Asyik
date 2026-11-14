@@ -16,18 +16,8 @@ import type {
 import { isExplicitHit } from "@/lib/vndbSearch";
 
 /**
- * "For you": what VNDB holds that matches this library's taste.
- *
- * The seeds are computed locally from the games' own tags, studios, staff and
- * voices — a game the user rated 8.0 or higher counts twice — and one
- * documented VNDB query per page pulls candidates matching any of them. The
- * ranking is a sum of seed weights, and every card says which seeds it
- * matched: "Because you liked X", "Creators you like: …", "Themes you like:
- * …". Nothing on this panel is a model's opinion; it is all counts a user
- * could redo by hand.
- *
- * Covers follow the same per-image rule as the add-game sheet: explicit ones
- * are hidden unless the content setting says show.
+ * "For you" recommendation feed scored deterministically from local rating-weighted
+ * library seeds (tags, studios, staff, voices >= 8.0 weighted 2x); obeys per-image concealment.
  */
 
 /** The seed categories, in display order. */

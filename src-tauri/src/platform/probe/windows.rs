@@ -1,22 +1,7 @@
-//! Windows implementation of the tracker probe.
-//!
-//! Every call here was verified against the `windows` crate 0.62 API and run on a
-//! real machine before being written into the app: foreground window plus owning
-//! pid, last-input time, a toolhelp process snapshot, and a full image path via
-//! `PROCESS_QUERY_LIMITED_INFORMATION`.
-//!
-//! Access rights are the minimum that works. `QueryFullProcessImageNameW` needs
-//! only `PROCESS_QUERY_LIMITED_INFORMATION`, which is granted for ordinary user
-//! processes, so the app does not require elevation to see a game it is tracking.
-//!
-//! Nothing here writes to another process, injects code, or opens a handle with
-//! write access. The safety rules in AGENTS.md §8.3 apply in full.
+//! Windows tracker probe using Win32 (`windows` 0.62) and `PROCESS_QUERY_LIMITED_INFORMATION`.
+//! Read-only process/window inspection only (no elevation, memory writes, or injection; AGENTS.md §8.3).
 
-// The workspace denies `unsafe` everywhere. Win32 calls require it, so this file
-// is the single, deliberate exception: every block below is a direct wrapper
-// around one documented API call, each carries a SAFETY note, and no other module
-// may opt in. Removing the deny workspace-wide would let unsafe leak into the
-// domain logic, which is exactly what the rule protects.
+// Single module allowed `unsafe` for direct Win32 FFI wrappers; every block has a SAFETY note.
 #![allow(unsafe_code)]
 
 use windows::Win32::Foundation::{CloseHandle, HWND};

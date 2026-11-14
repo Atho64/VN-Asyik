@@ -6,65 +6,44 @@
 
 use crate::clock::Timestamp;
 
-/// Milliseconds in one day.
 pub const MS_PER_DAY: i64 = 86_400_000;
-
-/// Milliseconds in one hour.
 pub const MS_PER_HOUR: i64 = 3_600_000;
-
-/// Milliseconds in one minute.
 pub const MS_PER_MINUTE: i64 = 60_000;
-
-/// Milliseconds in one second.
 pub const MS_PER_SECOND: i64 = 1_000;
 
-/// Whole minutes, floored, from a millisecond duration.
+/// Floored whole minutes (clamped at 0).
 #[must_use]
 pub const fn minutes_of(ms: i64) -> i64 {
     if ms <= 0 { 0 } else { ms / MS_PER_MINUTE }
 }
 
-/// Whole seconds, floored, from a millisecond duration.
+/// Floored whole seconds (clamped at 0).
 #[must_use]
 pub const fn seconds_of(ms: i64) -> i64 {
     if ms <= 0 { 0 } else { ms / MS_PER_SECOND }
 }
 
-/// Whether a duration is shorter than one minute, and so has no whole minutes to
-/// report.
-///
-/// This is the case that made real sessions read as "0 min": the tracker records
-/// in short slices (about four seconds of counted time per poll), so a genuine
-/// two-minute reading produced rows whose displayed minute count floored to zero.
-/// A duration that is non-zero but under a minute must say how many seconds it
-/// was, not claim nothing happened.
+/// True for non-zero durations under one minute (tracker records ~4s slices that floor to 0 min).
 #[must_use]
 pub const fn is_sub_minute(ms: i64) -> bool {
     ms > 0 && ms < MS_PER_MINUTE
 }
 
-/// Split a duration into hours and minutes, discarding seconds.
+/// Split a duration into `(hours, minutes)`, discarding seconds.
 #[must_use]
 pub const fn hours_minutes(ms: i64) -> (i64, i64) {
     let total_minutes = minutes_of(ms);
     (total_minutes / 60, total_minutes % 60)
 }
 
-/// A calendar day key in UTC, as days since the Unix epoch.
-///
-/// Bucketing in UTC keeps the rule deterministic; the UI converts to local time
-/// for display. Documented limitation: near midnight a session can land in the
-/// neighbouring day for some timezones. Phase 3 revisits this with a stored
-/// UTC offset when per-day accuracy near midnight matters.
+/// Calendar day key in UTC (days since the Unix epoch).
+/// Limitation: sessions near midnight can land in the adjacent UTC day for local timezones.
 #[must_use]
 pub const fn utc_day_index(ts: Timestamp) -> i64 {
     ts.as_millis().div_euclid(MS_PER_DAY)
 }
 
-/// A month key in UTC, as `(year, month)` with month in 1..=12.
-///
-/// Uses the civil-from-days algorithm so no date library is needed in the pure
-/// core. Correct for all dates representable in `i64` milliseconds.
+/// UTC month key `(year, month)` with month in `1..=12`.
 #[must_use]
 pub fn utc_month_index(ts: Timestamp) -> (i32, u8) {
     let days = utc_day_index(ts);

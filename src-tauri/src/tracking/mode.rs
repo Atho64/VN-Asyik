@@ -1,21 +1,4 @@
-//! What "automatic tracking" means for this user.
-//!
-//! # Two answers, one truth
-//!
-//! The default (`Auto`) reads the focused window and the OS idle timer: time counts
-//! while the game is in front, and a break is filed as away once it passes the
-//! grace threshold. That is the honest measurement, and it is what the app shipped
-//! with.
-//!
-//! Some readers do not want the app second-guessing them. They leave the game open,
-//! alt-tab to a guide, read for ten minutes, come back. For them `Always` counts
-//! every second the game process is alive, away time included, and the run ends
-//! when the process does. The switch is called "automatic tracking" because that is
-//! exactly what it turns off: the automatic decisions about focus and idleness.
-//!
-//! Neither mode invents time. `Always` counts wall clock while the process runs;
-//! it never resumes a session that already ended, so closing the game and opening
-//! it tomorrow produces two runs, not one long one.
+//! Playtime tracking modes: `Auto` (focused window + OS idle timer) vs `Always` (wall clock while running).
 
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;

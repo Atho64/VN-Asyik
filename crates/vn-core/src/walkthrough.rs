@@ -30,7 +30,6 @@ pub enum ItemKind {
 pub struct WalkthroughItem {
     /// Stable item identifier within the walkthrough (e.g. `c_0`, `s_1`).
     pub id: String,
-    /// The kind of item.
     pub kind: ItemKind,
     /// Text of the step in the original or translated language.
     pub text: String,
@@ -47,7 +46,6 @@ pub struct WalkthroughRoute {
     pub id: String,
     /// Title of the route (e.g. `共通・小鳥、ちはや`, `ルチア、朱音`).
     pub title: String,
-    /// Steps in this route.
     pub items: Vec<WalkthroughItem>,
 }
 
@@ -62,7 +60,6 @@ pub struct Walkthrough {
     /// General notes, patch requirements, or walkthrough instructions.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
-    /// Routes in this walkthrough.
     pub routes: Vec<WalkthroughRoute>,
 }
 
@@ -76,7 +73,6 @@ pub struct WalkthroughIndexEntry {
     pub url: String,
 }
 
-/// Errors that may occur while parsing a walkthrough.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum WalkthroughParseError {
     #[error("walkthrough content is empty")]
@@ -222,12 +218,11 @@ fn normalize_for_match(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
-            // Full-width space, half-width space, punctuation, brackets, quotes, wave dashes
+            // Punctuation, spaces, brackets, quotes, and wave dashes ignored across titles.
             ' ' | '\u{3000}' | '-' | '－' | '・' | '\u{ff65}' | ':' | '：' | '！' | '!' | '？'
             | '?' | '~' | '～' | '〜' | '_' | '/' | '／' | '\\' | '.' | '。' | ',' | '、'
             | '，' | '+' | '＋' | '\'' | '’' | '‘' | '"' | '“' | '”' | '(' | ')' | '（' | '）'
             | '【' | '】' | '『' | '』' | '「' | '」' | '［' | '］' | '[' | ']' => {}
-            // Normalize case
             other => {
                 for lower in other.to_lowercase() {
                     out.push(lower);
@@ -238,7 +233,7 @@ fn normalize_for_match(s: &str) -> String {
     out
 }
 
-/// Score-based search across index entries, matching strictly against title content.
+/// Scores index entries by normalized title only (never URL).
 #[must_use]
 pub fn search_index(
     entries: &[WalkthroughIndexEntry],
@@ -262,7 +257,6 @@ pub fn search_index(
 
         let mut score: u32 = 0;
 
-        // Search strictly from TITLE CONTENT:
         if !norm_query.is_empty() && !norm_title.is_empty() {
             if norm_title == norm_query {
                 score += 100;
@@ -344,7 +338,6 @@ pub fn find_best_match<'a>(
         .filter(|c| !c.is_empty())
         .collect();
 
-    // 1. Exact normalized match
     for cand in &norm_candidates {
         for entry in entries {
             let norm_entry = normalize_for_match(&entry.title);
@@ -354,7 +347,6 @@ pub fn find_best_match<'a>(
         }
     }
 
-    // 2. Prefix or substring match (candidate starts with entry or vice-versa)
     for cand in &norm_candidates {
         if cand.len() < 3 {
             continue;
@@ -382,16 +374,11 @@ pub fn parse_seiya_walkthrough(
         return Err(WalkthroughParseError::EmptyContent);
     }
 
-    // 1. Extract Title
     let title = extract_title(html).unwrap_or_else(|| "Visual Novel Walkthrough".to_string());
-
-    // 2. Extract top notes (instructions, disks, save slots, general notices)
     let notes = extract_notes(html);
 
-    // 3. Extract Routes:
-    // Seiya-Saiga routes are formatted in tables where a header row has cells
-    // (typically bgcolor="#ccffff" or similar) with route titles, followed by
-    // a row containing the corresponding steps for each column.
+    // Seiya-Saiga routes use table header rows (e.g. `bgcolor="#ccffff"`) with
+    // route titles followed by a row of step columns.
     let tr_re = regex::Regex::new(r"(?is)<tr[^>]*>(?P<tr>.*?)</tr>").expect("valid tr_re");
     let cell_re = regex::Regex::new(r"(?is)<t[dh](?P<attrs>[^>]*)>(?P<content>.*?)</t[dh]>")
         .expect("valid cell_re");
@@ -529,7 +516,6 @@ fn extract_notes(html: &str) -> Option<String> {
 
 /// Parse the step items inside a route's table cell.
 fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
-    // Split on `<br>`, `<hr>`, or newlines
     let line_re = regex::Regex::new(r"(?i)<br\s*/?>|<hr\s*/?>|\n").expect("valid split re");
     let mut items = Vec::new();
 
@@ -539,7 +525,6 @@ fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
             continue;
         }
 
-        // 1. Choice: contains <input type="checkbox">
         if part.to_ascii_lowercase().contains("type=\"checkbox\"")
             || part.to_ascii_lowercase().contains("type='checkbox'")
             || part.to_ascii_lowercase().contains("type=checkbox")
@@ -562,7 +547,6 @@ fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
             continue;
         }
 
-        // 2. Save point marker
         if clean.contains("セーブ") || clean.starts_with("◆セーブ") || clean.starts_with("セーブ")
         {
             *counter += 1;
@@ -575,7 +559,6 @@ fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
             continue;
         }
 
-        // 3. Ending marker
         if clean.contains("END")
             || clean.contains("BAD")
             || clean.contains("TrueEnd")
@@ -591,7 +574,6 @@ fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
             continue;
         }
 
-        // 4. Date marker (e.g. ■１０月２１日, ■5月12日)
         if clean.starts_with('■') || (clean.contains('月') && clean.contains('日')) {
             *counter += 1;
             items.push(WalkthroughItem {
@@ -603,7 +585,6 @@ fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
             continue;
         }
 
-        // 5. Action / Navigation marker (e.g. ◆MAP, 目的地に進む)
         if clean.starts_with('◆') || clean.contains("目的地") || clean.contains("MAP") {
             *counter += 1;
             items.push(WalkthroughItem {
@@ -615,7 +596,6 @@ fn parse_route_items(body: &str, counter: &mut usize) -> Vec<WalkthroughItem> {
             continue;
         }
 
-        // 6. Generic note / Condition
         *counter += 1;
         items.push(WalkthroughItem {
             id: format!("n_{counter}"),
@@ -823,12 +803,12 @@ mod tests {
             },
         ];
 
-        // 1. Matches Japanese title content even if URL is completely different (sothewitch vs サノバウィッチ)
+        // Matches Japanese title content even when URL slug differs (sothewitch vs サノバウィッチ).
         let res1 = search_index(&entries, "サノバウィッチ", 5);
         assert_eq!(res1.len(), 1);
         assert_eq!(res1[0].title, "サノバウィッチ");
 
-        // 2. Normalizes fullwidth quotes and wave dashes across VNDB and Seiya-Saiga
+        // Normalizes fullwidth quotes and wave dashes across VNDB and Seiya-Saiga.
         let res2 = search_index(&entries, "さくら、もゆ。-as the Night's, Reincarnation-", 5);
         assert_eq!(res2.len(), 1);
         assert_eq!(
@@ -836,7 +816,6 @@ mod tests {
             "さくら、もゆ。 -as the Night’s，Reincarnation-"
         );
 
-        // 3. Partial / prefix search on Japanese title
         let res3 = search_index(&entries, "リトルバスターズ", 5);
         assert_eq!(res3.len(), 1);
         assert_eq!(res3[0].title, "リトルバスターズ！");

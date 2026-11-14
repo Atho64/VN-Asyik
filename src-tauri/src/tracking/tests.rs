@@ -151,10 +151,6 @@ async fn an_unsupported_platform_reports_why() {
 
 #[tokio::test]
 async fn a_siglus_title_caption_creates_a_chapter_and_updates_it_in_place() {
-    // The path a real Siglus game takes: the caption carries the chapter, so the
-    // poll attributes it without touching the game's memory. Exercised through
-    // the real service so the source policy from `vn_core::adapter` is in play,
-    // not bypassed.
     let (db, device, game_id, probe, service) = fixture().await;
     probe.set(
         vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
@@ -248,13 +244,7 @@ async fn a_full_width_day_and_route_caption_are_attributed() {
 
 #[tokio::test]
 async fn a_caption_belonging_to_a_different_game_is_not_attributed() {
-    // The caption is the only chapter source that does not identify its game, so
-    // it has to be matched against the tracked game's title. A caption from
-    // another title must not create a chapter in this one.
-    //
-    // Note this holds the game focused: with focus elsewhere the tracker pauses
-    // and never polls chapters, so an unfocused setup would pass whether or not
-    // the title matched. The assertion below is on the title check, not focus.
+    // Holds focus because unfocused ticks pause without polling chapters, isolating the title check.
     let (db, device, game_id, probe, service) = fixture().await;
     probe.set(
         vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
@@ -432,9 +422,8 @@ async fn idle_time_becomes_afk_after_the_threshold() {
 
 #[tokio::test]
 async fn a_session_spent_clicking_through_dialogue_is_not_filed_as_away() {
-    // The probe reports "time since the last input", so a click 300 ms before the
-    // poll shows 300 ms of idle -- never zero. Counting that as an idle run made
-    // every session look away after about a minute of active playing.
+    // The probe reports time since the last input, so a click 300 ms before the
+    // poll reads as 300 ms idle rather than zero; small readings must not accumulate into an AFK run.
     let (db, device, game_id, probe, service) = fixture().await;
     probe.set(
         vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],

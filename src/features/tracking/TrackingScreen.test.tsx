@@ -9,14 +9,7 @@ import type { UsageAccessView } from "@/lib/ipc/types";
 
 const t = createTranslator("en");
 
-/**
- * The Android usage-access card.
- *
- * Android is the one platform where playtime silently does nothing until the user
- * grants a permission that has no runtime dialog. The card is the only thing that
- * explains that, and the desktop build cannot show it, so it is covered here by
- * driving the state the platform would report.
- */
+/** Covers Android usage-access permission states that cannot be rendered on desktop builds. */
 
 // Hoisted because `vi.mock` is lifted above the imports, so anything it
 // references has to exist before the module body runs.

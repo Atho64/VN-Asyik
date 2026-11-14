@@ -67,18 +67,8 @@ function MemoryRow({ memory }: { memory: MemoryEvent }) {
 }
 
 /**
- * "On this day": checkpoints and endings from earlier years that share today's
- * date.
- *
- * The card renders nothing at all when there is no anniversary. That is the
- * opposite of the rest of this page, where an empty state explains the absence —
- * a statistic with no data is a question the reader asked, while a memory with no
- * data is simply not a memory. A permanent "nothing happened today" panel would be
- * furniture, not information.
- *
- * The backend decides what counts as "today" (`'localtime'`, the heatmap's
- * calendar) and excludes today's own rows, so the card can never show a moment
- * from this morning as a year-old memory.
+ * Past-year checkpoints and endings matching today's local date (excluding today).
+ * Renders nothing when empty so no "nothing happened today" placeholder appears.
  */
 export function OnThisDay() {
   const { t } = useI18n();

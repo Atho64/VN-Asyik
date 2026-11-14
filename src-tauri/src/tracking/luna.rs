@@ -1,18 +1,9 @@
-//! `LunaTranslator` network-service text source.
+//! Cross-platform `LunaTranslator` websocket text source (desktop and Android).
 //!
-//! The user runs `LunaTranslator` with its 网络服务 (network service) enabled and
-//! points VN Asyik at the local HTTP origin (default port 2333; the owner uses
-//! 2334). Verified 2026-10-24 from the official docs
-//! (docs.lunatranslator.org/en/apiservice.html) and the GPL-3.0 source
-//! (`network/server/tcpservice.py` `WSHandler.send_text`,
-//! `textio/textoutput/websocket.py` `dispatch`): the endpoint
-//! `/api/ws/text/origin` streams every extracted original text as a plain
-//! WebSocket text frame — the raw string, no JSON wrapper. Frames are fed into
-//! the shared [`HookHost`] ring, so the companion chat tool and the live-text
-//! UI read Luna's text the same way they read any other live source.
-//!
-//! Plain HTTP/WebSocket means this works on every platform, Android included —
-//! unlike the Windows named pipe.
+//! Verified 2026-10-24 from `docs.lunatranslator.org/en/apiservice.html` and
+//! `network/server/tcpservice.py` (`WSHandler.send_text`) /
+//! `textio/textoutput/websocket.py` (`dispatch`): `/api/ws/text/origin` streams
+//! raw text frames (no JSON wrapper; default port 2333) into [`HookHost`].
 
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -338,9 +329,7 @@ pub struct LunaProbe {
     pub detail: String,
 }
 
-/// GET the service root (`/`, the navigation page per the docs). Any HTTP
-/// answer proves a listener — including error statuses. Validation runs first
-/// so a probe can never be aimed off this machine.
+/// GET `/` on the configured local service; any HTTP status proves a listener after origin validation.
 #[must_use]
 pub async fn probe(settings: &LunaSettings) -> LunaProbe {
     if let Err(reason) = settings.validate() {

@@ -18,11 +18,7 @@ pub struct BackupFile {
     pub header: BackupHeader,
     /// Every live game.
     pub games: Vec<vn_core::model::Game>,
-    /// Every live route.
-    ///
-    /// Defaulted so a backup written before routes existed still imports; it
-    /// simply carries no routes, and the chapters/endings that mention one keep
-    /// `route_id = NULL` rather than failing validation.
+    /// Every live route (`default` allows importing backups created before routes existed, leaving `route_id = NULL`).
     #[serde(default)]
     pub routes: Vec<vn_core::model::Route>,
     /// Every live chapter.
@@ -205,9 +201,7 @@ pub async fn import_payload(
         summary.endings += 1;
     }
     for session in &payload.sessions {
-        // A duplicate id is the ordinary case on a second import (sessions are
-        // append-only and merge by uuid), so it is `Ok(false)`, not an error. It used
-        // to arrive as `Corrupt`, which made a genuinely damaged row count as a skip.
+        // Sessions are append-only and deduplicate by UUID (`Ok(false)`), keeping corrupt-row errors separate.
         match queries::insert_session(&mut *tx, session).await {
             Ok(true) => summary.sessions += 1,
             Ok(false) => summary.sessions_skipped += 1,

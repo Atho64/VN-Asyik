@@ -20,7 +20,6 @@ use crate::clock::Timestamp;
 /// One play session, as far as statistics care.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SessionSample {
-    /// When it began.
     pub started_at: i64,
     /// Time actually counted, excluding idle.
     pub counted_ms: i64,
@@ -33,7 +32,6 @@ pub struct GameSample {
     pub status: String,
     /// The user's rating in decivotes: 10 is 1.0, 100 is 10.0.
     pub rating: Option<u8>,
-    /// Total playtime for this game.
     pub playtime_ms: i64,
     /// When it was finished, UTC ms, when known.
     pub finished_at: Option<i64>,
@@ -47,13 +45,11 @@ pub struct DerivedStats {
     pub completion_rate: Option<f64>,
     /// Mean of the user's ratings in decivotes, so 75.5 means 7.55.
     pub average_rating: Option<f64>,
-    /// The longest single session.
     pub longest_session_ms: Option<i64>,
     /// Mean session length, excluding zero-length rows.
     pub average_session_ms: Option<i64>,
-    /// Sessions counted.
     pub session_count: usize,
-    /// The route with the most time, when any chapter has a route.
+    /// Route with the most time, when any chapter has a route.
     pub favourite_route: Option<RouteStat>,
     /// How many games carry each whole-star rating, indexed as
     /// `counts[stars - 1]`. A 7.5 counts toward 7, since the chart shows stars.
@@ -68,7 +64,6 @@ pub struct DerivedStats {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RouteStat {
-    /// Route label.
     pub name: String,
     /// Time across the route's chapters.
     pub playtime_ms: i64,
@@ -77,7 +72,6 @@ pub struct RouteStat {
 /// Milliseconds in a day, for streak arithmetic.
 const DAY_MS: i64 = 86_400_000;
 
-/// Compute every derived figure from the raw rows.
 #[must_use]
 pub fn derive(
     games: &[GameSample],
@@ -645,25 +639,16 @@ impl Period {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeBucket {
-    /// Inclusive start of the bucket, UTC ms.
+    /// Inclusive bucket start (UTC ms).
     pub start_ms: i64,
-    /// Exclusive end.
+    /// Exclusive bucket end (UTC ms).
     pub end_ms: i64,
-    /// Time counted inside it.
     pub playtime_ms: i64,
-    /// Sessions that contributed.
     pub sessions: usize,
 }
 
-/// Bucket sessions into a time series ending at `now`.
-///
-/// The series always has `Period::bucket_count()` entries, oldest first, with
-/// zero-filled gaps. A chart that silently dropped empty days would make a
-/// sporadic reader look continuous, which is the opposite of informative.
-///
-/// Buckets are aligned to UTC calendar days and months rather than to arbitrary
-/// offsets, so "yesterday" means the same thing on every machine in the same
-/// timezone-free data model the rest of the app uses.
+/// Buckets sessions into `Period::bucket_count()` zero-filled intervals ending
+/// at `now`, oldest first, aligned to UTC calendar boundaries.
 #[must_use]
 pub fn time_series(sessions: &[SessionSample], period: Period, now: Timestamp) -> Vec<TimeBucket> {
     let now_ms = now.as_millis();

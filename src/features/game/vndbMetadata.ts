@@ -1,34 +1,13 @@
 /**
- * Turning VNDB's coded values into something a reader can use.
- *
- * The API reports languages as BCP-47-ish tags (`ja`, `zh-Hans`, `pt-BR`),
- * platforms as three-letter codes (`win`, `psp`) and development status as an
- * integer. None of those are display strings, and none of them should be pasted
- * into the UI raw: a facts row reading `win, psp, drc` is data, not information.
- *
- * Two rules here:
- *
- * 1. **Unknown codes pass through unchanged.** VNDB adds platforms, and a new code
- *    must degrade to its own abbreviation rather than vanish or throw. This is why
- *    every lookup takes the caller's translator instead of importing i18n: the
- *    module stays pure and testable.
- *
- * 2. **A region matters where it changes the reader's answer.** `zh-Hans` and
- *    `zh-Hant` are different releases with different availability, so the region is
- *    kept as a qualifier rather than flattened to "Chinese".
+ * Pure formatters translating VNDB codes (BCP-47 tags, platform codes, dev status)
+ * into localized display labels, passing unknown codes through verbatim.
  */
 
 import type { VndbExtLink, VndbProducer } from "@/lib/ipc/types";
 
 type Translate = (key: string) => string;
 
-/**
- * Prefix-based language naming.
- *
- * The tag is split on `-` and the primary subtag drives the name; the remainder is
- * appended as a parenthesised qualifier, so `zh-Hans` becomes "Chinese (Hans)" rather
- * than either an unknown string or a bare "Chinese" that hides a real distinction.
- */
+/** Resolves primary language subtag via i18n and keeps regional subtags as qualifiers (e.g. `zh-Hans`). */
 export function languageName(tag: string, t: Translate): string {
   const trimmed = tag.trim();
   if (trimmed.length === 0) return t("common.unknown");
@@ -82,14 +61,7 @@ export function developmentStatus(status: number | null, t: Translate): string |
   }
 }
 
-/**
- * Format a VNDB release date for display.
- *
- * VNDB dates are intentionally partial: `2007`, `2007-08` and `2007-08-17` all mean
- * different amounts of precision, and padding a year-only date to January 1st would
- * claim a day nobody knows. So the string is reformatted only as far as it is known.
- * `TBA` and `unknown` are real values the API documents.
- */
+/** Formats a partial or full VNDB release date (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`, `TBA`, `unknown`). */
 export function formatReleaseDate(
   value: string | null,
   t: Translate,
@@ -115,14 +87,7 @@ export function formatReleaseDate(
   return year;
 }
 
-/**
- * Order developers so the ones worth reading come first.
- *
- * VNDB returns them as it likes. A company that developed the VN is the answer to
- * "who made this"; an amateur group or an individual is usually a credit rather than
- * a publisher, and a long list of both buries the one name a reader wants. Companies
- * keep their API order among themselves, which is the site's own ranking.
- */
+/** Orders developer credits with companies (in API rank order) ahead of individual or circle credits. */
 export function rankDevelopers(developers: VndbProducer[]): VndbProducer[] {
   const named = developers.filter(
     (entry) => (entry.name ?? "").trim().length > 0 || (entry.original ?? "").trim().length > 0,
@@ -172,15 +137,7 @@ const REFERENCE_SITES = new Set([
   "vndb",
 ]);
 
-/**
- * Split external links into the ones people actually click and the rest.
- *
- * VNDB's `extlinks` for one VN routinely holds a dozen entries, most of them
- * databases. The official site, a Steam or GOG page and a translation patch are what
- * a reader wants; the fourth GameFAQs mirror is not. Both lists are returned because
- * the reference links are still worth having behind a disclosure, just not in the
- * first row.
- */
+/** Partitions VNDB `extlinks` into primary user links (official sites, stores, patches) and secondary reference links. */
 export function splitExtLinks(links: VndbExtLink[]): {
   primary: VndbExtLink[];
   reference: VndbExtLink[];

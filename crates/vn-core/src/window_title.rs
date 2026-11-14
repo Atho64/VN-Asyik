@@ -64,15 +64,11 @@ fn normalise_width(text: &str) -> String {
         .collect()
 }
 
-/// Whether a character can be part of a date marker.
 fn is_marker_char(ch: char) -> bool {
     ch.is_ascii_digit() || ch.is_whitespace() || matches!(ch, '月' | '日' | '/' | '-')
 }
 
-/// Split a normalised title into `(before, marker)` for the trailing date.
-///
-/// Returns the text before the marker and the marker itself, or `None` when the
-/// title does not end with a date.
+/// Split a normalised title into `(before, marker)` at a trailing date.
 fn split_trailing_date(normalised: &str) -> Option<(&str, &str)> {
     let trimmed = normalised.trim_end();
     let start = trimmed
@@ -141,9 +137,8 @@ fn split_trailing_label(title: &str) -> Option<(&str, &str)> {
 
 /// Split `(before, marker)` for a Japanese counter: `第3話`, `第2章`, `2日目`.
 ///
-/// `第` is required before an episode or chapter unit, so a menu caption such as
-/// `全12話` (the episode total) does not become a chapter, and the day counter
-/// only counts with `目` — which is what keeps it apart from the date `7月26日`.
+/// `第` is required before episode/chapter units so totals like `全12話` are ignored,
+/// and the day counter requires `目` to avoid matching dates like `7月26日`.
 fn split_trailing_counter(title: &str) -> Option<(&str, &str)> {
     let trimmed = title.trim_end();
     let (without_unit, unit) = trimmed
@@ -189,13 +184,9 @@ pub fn parse_siglus_title(title: &str, game_title: &str) -> TitleChapter {
         return TitleChapter::None;
     }
 
-    // Cut the game name off the front.
-    //
     // The engine writes its own caption, which is not always byte-identical to the
-    // library entry: it can be shorter ("Summer Pockets" for "Summer Pockets
-    // REFLECTION BLUE") or written in full-width characters. Try the full name,
-    // then the longest leading run of its words that the caption actually starts
-    // with.
+    // library entry (e.g. shorter or full-width). Try the full name, then the
+    // longest leading run of its words that the caption actually starts with.
     let game = normalise_width(game_title.trim());
     let mut rest = strip_prefix_ignore_ascii_case(trimmed, &game).map(str::trim_start);
     if rest.is_none() {
@@ -390,7 +381,7 @@ mod tests {
         assert!(!engine_has_title_chapters("unknown"));
     }
 
-    // --- labelled counters -------------------------------------------------
+    // Labelled counters
     //
     // `anemoi` writes a day number instead of a date, and writes the whole marker
     // in full-width characters. Observed live: `anemoi Ｄａｙ １`.

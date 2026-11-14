@@ -54,13 +54,7 @@ const DENSITY = [
 /** How long a colour picker may keep changing before the value is written. */
 const COMMIT_DELAY_MS = 400;
 
-/**
- * Identity for a theme the reader just created.
- *
- * Module scope, not the component body: a component that calls `Date.now()` while
- * rendering is impure, and the lint rule that says so cannot tell an event
- * handler from a render.
- */
+/** Generates a custom theme ID outside component render to keep render paths pure. */
 function customThemeId(): string {
   return `custom:${Date.now().toString(36)}`;
 }
@@ -76,17 +70,8 @@ interface Patch {
 }
 
 /**
- * Appearance: theme, accent, background image and the shape of the interface.
- *
- * Everything is stored on the Rust side and applied by `AppProvider` through
- * `updateAppearance`, so it survives a reload and applies before the first screen
- * paints. The chosen hex is kept exactly as picked; the resolver adapts it to the
- * active theme so it stays readable.
- *
- * A theme's colours are edited as a draft and written on a short delay: a colour
- * picker fires on every pointer move, and a round trip per frame would stutter.
- * The draft is published to the store immediately, so the preview is live even
- * though the save is not.
+ * Theme, accent, and background settings persisted to Rust with debounced writes
+ * for live colour-picker dragging and immediate store previews.
  */
 export function AppearancePanel() {
   const { t } = useI18n();

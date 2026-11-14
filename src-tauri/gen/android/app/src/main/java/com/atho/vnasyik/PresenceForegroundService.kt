@@ -39,7 +39,6 @@ class PresenceForegroundService : Service() {
                     context.startService(intent)
                 }
             } catch (e: Exception) {
-                // If background launch is denied, don't crash the app
             }
         }
 
@@ -51,7 +50,6 @@ class PresenceForegroundService : Service() {
             try {
                 context.stopService(Intent(context, PresenceForegroundService::class.java))
             } catch (e: Exception) {
-                // Ignore service stop error
             }
         }
     }
@@ -100,7 +98,6 @@ class PresenceForegroundService : Service() {
                         startForeground(NOTIFICATION_ID, notification)
                     }
                 } catch (e: Exception) {
-                    // Fallback if foreground service cannot start with specialUse
                     stopSelf()
                     return START_NOT_STICKY
                 }

@@ -1,17 +1,5 @@
-//! One-shot capture of a running game's window over X11.
-//!
-//! `GetImage` on the window itself, not the root: the root would include
-//! whatever else is on screen, and the point of the Windows path is that a
-//! screenshot is the game.
-//!
-//! **Wayland.** A native Wayland window cannot be captured by another client at
-//! all. A visual novel running through `XWayland` is an X11 window and is
-//! captured normally. When the window is not an X11 window this returns
-//! `WindowUnavailable`, which is the honest answer rather than a black frame.
-//!
-//! The capture is a fresh connection per call on purpose: a screenshot is a rare
-//! user action, and holding an X connection open for it would mean owning its
-//! lifetime, its error handling and its teardown for no benefit.
+//! One-shot X11 capture of a running game's window (`GetImage` on the game window, not root).
+//! Uses a fresh X connection per call; works for `XWayland`, while native Wayland returns `WindowUnavailable`.
 
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{Atom, AtomEnum, ConnectionExt as _, ImageFormat, Window};

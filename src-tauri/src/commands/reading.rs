@@ -85,21 +85,10 @@ pub struct JournalExportOutcome {
     pub concealed: usize,
 }
 
-/// Write one game's journal as a readable Markdown or HTML document.
-///
-/// The library export (`commands::data`) already carries checkpoints as sync rows;
-/// this is the same data as prose, which is what a reader can actually keep. The two
-/// are separate on purpose and neither replaces the other.
-///
-/// Photos are resolved from the local screenshot cache only. An export must work
-/// offline — the app's own rule (`AGENTS.md` §2.6) — so a pinned image that is not
-/// on disk is reported in the document instead of triggering a download. In
-/// practice every pinned photo is cached, because pinning one means picking it out
-/// of the gallery that cached it.
+/// Export one game's journal as Markdown or HTML, resolving pinned photos from the local cache only (`AGENTS.md` §2.6 offline rule).
 ///
 /// # Errors
-/// `not_found` for an unknown game, `invalid` for an unknown format, and the
-/// document layer's errors when the file cannot be written.
+/// `not_found` for an unknown game, `invalid` for an unknown format, or document write errors.
 #[tauri::command]
 pub async fn journal_export_file(
     app: tauri::AppHandle,
@@ -263,14 +252,8 @@ async fn local_today(pool: &sqlx::SqlitePool) -> CommandResult<String> {
     Ok(today)
 }
 
-/// Turn a pinned image id into bytes the document can embed, under the content
-/// setting.
-///
-/// The three-way rule is the gallery's, applied once here so the document cannot
-/// disagree with the screen: `show` embeds the sharp copy, `blur` embeds the
-/// pre-blurred copy and labels it, `hide` embeds nothing. A missing sharp file is
-/// reported rather than silently replaced by the blur — a soft image presented as
-/// the real one is the exact failure `ScreenshotView::sharp` exists to prevent.
+/// Resolve a pinned image ID under `NsfwMode` (`show` embeds sharp, `blur` embeds pre-blurred, `hide` embeds none).
+/// Missing sharp files are reported rather than silently substituted with a blurred image.
 async fn resolve_photo(
     cached: &HashMap<String, CachedScreenshot>,
     store: &ScreenshotStore,

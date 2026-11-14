@@ -36,9 +36,6 @@ internal class PackageLaunchArgs {
 @TauriPlugin
 class UsageStatsPlugin(private val activity: Activity) : Plugin(activity) {
 
-    /**
-     * Whether the user has granted usage access.
-     */
     private fun hasUsageAccess(): Boolean {
         val appOps = activity.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

@@ -1,17 +1,7 @@
-//! Desktop playtime tracking: the loop that joins the OS probe to the state machine.
+//! Desktop playtime tracking loop joining [`crate::platform::probe`] to [`vn_core::tracker`].
 //!
-//! Responsibilities are split so each part can be tested:
-//!
-//! * [`vn_core::tracker`] decides *what* time counts. Pure, heavily tested.
-//! * [`crate::platform::probe`] answers *whether* the game is focused and whether
-//!   the user is present. Thin Win32 wrappers.
-//! * This module runs the loop: poll, feed events, persist segments.
-//!
-//! Polling is a fixed interval rather than an event hook. `SetWinEventHook` would be
-//! lower latency, but it is a per-process global hook and this feature must stay
-//! as boring as possible: a poll costs microseconds and cannot destabilise the
-//! game. The interval is chosen so AFK detection stays accurate to the configured
-//! threshold without waking the CPU often.
+//! Uses a fixed poll interval rather than a global `SetWinEventHook` so tracking cannot
+//! destabilise the game process while staying accurate to the configured AFK threshold.
 
 pub mod android;
 pub mod chapter;
@@ -561,15 +551,9 @@ impl TrackingService {
         Ok(segments)
     }
 
-    /// Resolve the chapter currently playing in `pid`, creating its row on first
-    /// sight.
+    /// Resolve the chapter playing in `pid`, creating its row on first sight.
     ///
-    /// Returns `None` when the engine has no verified profile, is still loading, or
-    /// is at a screen that is not a chapter (a title menu, a map). Those cases are
-    /// normal and must not be reported as failures, or a user idling on the title
-    /// screen would see errors instead of simply "no chapter".
-    /// `game_id` is supplied by the caller rather than read here: `poll` already
-    /// holds the tracker lock, and taking it again on the same task deadlocks.
+    /// Returns `None` on menus/unprofiled engines; `game_id` is passed in because `poll` holds the tracker lock.
     async fn poll_chapter(
         &self,
         pool: &SqlitePool,
@@ -578,12 +562,7 @@ impl TrackingService {
         device: &DeviceId,
         now: Timestamp,
     ) -> Result<Option<EntityId>, TrackingError> {
-        // The order and the availability of each source come from `vn_core::adapter`
-        // rather than from `if` statements here, so the policy is testable without
-        // a game on the machine and an unsupported platform reports a reason
-        // instead of quietly contributing nothing.
-        // No engine family can be identified without reading the process, so
-        // the window-title adapter is the only source that can ever answer.
+        // Source precedence comes from `vn_core::adapter::source_order`; only `WindowTitle` is active without a process hook.
         let engine: Option<String> = None;
         let order = vn_core::adapter::source_order(
             engine.as_deref(),
@@ -595,11 +574,7 @@ impl TrackingService {
                 vn_core::adapter::ChapterSource::WindowTitle => {
                     self.chapter_from_title(pool, pid, game_id).await
                 }
-                // Reading an engine's scene table meant reading another
-                // process's memory at injected-pattern offsets, which went with
-                // the hook. `vn_core::adapter::source_order` still lists the
-                // source so the capability report stays honest about it; nothing
-                // here can contribute one.
+                // `MemoryScene` stays listed in `source_order` for honest capability reporting; process-memory reads were removed with the hook.
                 vn_core::adapter::ChapterSource::MemoryScene => None,
             };
 
@@ -720,17 +695,9 @@ impl TrackingService {
         Ok(None)
     }
 
-    /// The focus event for this poll, or none when the window is unfocused and idle.
+    /// Emit at most one focus/tick event per poll (never both, or time advances twice).
     ///
-    /// One event per poll: `FocusGained` when the window just came back, otherwise a
-    /// tick carrying the presence sample. Sending both would advance the machine's
-    /// clock twice and lose the gap between them.
-    ///
-    /// A manual timer owns the stretch it is timing, so detected accrual hands off
-    /// rather than recording the same wall-clock minutes twice.
-    ///
-    /// In wall-clock mode focus is not consulted at all: a game behind the browser
-    /// still counts, which is the whole point of that mode.
+    /// Manual timers own accrual during overlap; wall-clock (`Always`) ignores window focus.
     async fn focus_event(&self, tracker: &Tracker, target: &TrackTarget) -> Option<Event> {
         let mode = self.mode().await;
         if mode == TrackingMode::Auto {

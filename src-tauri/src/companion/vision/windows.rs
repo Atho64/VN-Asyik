@@ -183,12 +183,7 @@ impl Drop for Apartment {
 /// How long a one-shot capture waits for the frame pool to produce a frame.
 const ONCE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
 
-/// Take exactly one frame from the window owned by `pid`.
-///
-/// Separate from [`Capture`]'s session lifecycle on purpose: a screenshot is not
-/// a reading session, so nothing is bound, tracked or budgeted. `Capture` must be
-/// created and dropped on one thread, which is why the caller runs this on a
-/// blocking worker.
+/// Captures one frame from `pid`'s window without session tracking (`Capture` must live on one thread).
 pub fn capture_window_once(pid: u32) -> std::result::Result<(u32, u32, Vec<u8>), &'static str> {
     let target = list()?
         .into_iter()
@@ -234,11 +229,8 @@ impl Capture {
         let apartment = Apartment;
         Self::create(target, apartment).map_err(|_| "vision_unavailable")
     }
-    /// The reader approved the title listed at bind time, so the window must
-    /// still show it when the capture is created: pid and process creation
-    /// time cannot tell a recycled window from the listed one. Per-tick
-    /// validation deliberately skips the title, because engines like Siglus
-    /// rewrite their caption live during reading.
+    /// Confirms PID, creation time, and bind-time title before capture creation; per-tick
+    /// checks skip title because engines like Siglus update their caption live.
     fn confirm_binding(target: &Target) -> Result<()> {
         #[cfg(test)]
         if target.synthetic {
@@ -325,10 +317,7 @@ impl Capture {
         if self.closed.load(Ordering::Acquire) {
             return Err("vision_window_changed");
         }
-        // The SDR verdict only changes when the window moves to another
-        // monitor, so re-run the cheap monitor lookup per frame and the
-        // expensive adapter enumeration only when that lookup answers
-        // differently.
+        // Re-check SDR only when the window moves to another monitor.
         let monitor =
             unsafe { MonitorFromWindow(HWND(self.target.handle as *mut _), MONITOR_DEFAULTTONULL) };
         if monitor != self.sdr_monitor {

@@ -8,42 +8,18 @@ import { fallbackPalette } from "@/lib/palette";
 import { usePalette } from "@/lib/usePalette";
 import type { Game, LocalArt } from "@/lib/ipc/types";
 
-/**
- * How much of a game's artwork the current content setting allows.
- *
- * `visible` — nothing to conceal (or the user asked for it).
- * `blur`    — explicit art is covered by its own blurred image.
- * `hide`    — explicit art is replaced by a neutral surface.
- *
- * Blur is a real state rather than a synonym for hidden: the setting is called
- * "Blur until revealed", and for two phases it behaved exactly like `hide`, so
- * the control did nothing a user could see.
- */
+/** Content visibility policy for explicit art (`blur` uses a pre-blurred copy, `hide` renders a neutral surface). */
 export type ArtPolicy = "visible" | "blur" | "hide";
 
 export interface Artwork {
   game: Game;
-  /** The whole image URL candidate list resolved, or `null` while unknown. */
+  /** Resolved image URL candidate list, or `null` while unknown. */
   artUrl: string | null;
-  /**
-   * The image to paint. This is the blurred source while the policy is `blur`,
-   * which is why it is a separate field from `artUrl`: the sharp original is
-   * never rendered by a concealing component.
-   */
+  /** Image to paint (`blur` uses a pre-blurred copy so a concealing component never renders the sharp original). */
   imageUrl: string | null;
-  /**
-   * Where to send the library backdrop. `null` while art must stay concealed:
-   * a blurred downscale is still a legible picture of the artwork at backdrop
-   * scale, so a hidden cover cannot be laundered through it.
-   */
+  /** Library backdrop target; `null` while art must stay concealed so hidden covers cannot leak. */
   backdropUrl: string | null;
-  /**
-   * The cached, pre-blurred backdrop as a data URL, or `null`.
-   *
-   * Canvas surfaces cannot draw a remote image without tainting the canvas, so
-   * the share card needs a local source specifically. This is the same image
-   * `backdropUrl` prefers, and it is withheld under the same concealment rule.
-   */
+  /** Cached pre-blurred data URL (`null` when absent or concealed) so canvas share cards avoid tainting. */
   localBackdropUrl: string | null;
   /** What the calling surface must do with the artwork. */
   policy: ArtPolicy;
@@ -69,14 +45,7 @@ interface UseArtworkOptions {
   accentOwner?: string;
 }
 
-/**
- * Shared artwork resolution, caching and content policy.
- *
- * Every surface that shows a game's art goes through this hook so the content
- * setting cannot be honoured by one view and ignored by the next. Resolution
- * order is local cache first (offline browsing must not flash an uncached remote
- * URL), then the remote cover, then a neutral title-hash surface.
- */
+/** Shared artwork resolver enforcing cache-first lookup, remote fallback, and centralized NSFW policy. */
 export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork {
   const nsfw = useAppStore((state) => state.prefs.nsfw);
   const { preferRemote = false } = options;
@@ -90,9 +59,7 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
   const [cached, setCached] = useState<{ key: string; art: LocalArt | null } | null>(
     null,
   );
-  // A cover the user picked, keyed by game id. Fetched for every game, not only
-  // VNDB ones: this is the whole point of the feature — a manually added game has
-  // no VN id and would otherwise never resolve any art at all.
+  // Always fetch custom covers by game id so manually added games without a VNDB id resolve art too.
   const [custom, setCustom] = useState<{
     key: string;
     art: LocalArt | null;
@@ -115,8 +82,7 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
     };
   }, [artKey, game.vndb_id]);
 
-  // Only fetch when the row says there is a file to read. A game with no custom
-  // cover must not pay for an IPC round trip on every card in a virtualized grid.
+  // Skip the IPC round trip on every virtualized grid card when no custom cover path exists.
   const hasCustomCover = Boolean(game.custom_cover_path);
   useEffect(() => {
     if (!hasCustomCover) return undefined;
@@ -126,10 +92,7 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
         if (!cancelled) setCustom({ key: artKey, art });
       },
       (caught: unknown) => {
-        // A missing file resolves to nulls on the Rust side, so a rejection is a
-        // real failure (typically an IPC contract break), not "no art". Log it:
-        // swallowing this into `art: null` is how a camelCase/snake_case mismatch
-        // made a correctly saved cover render as nothing at all.
+        // Missing files resolve to nulls in Rust, so rejections indicate contract/IO errors; log them.
         if (!cancelled) console.error("game_custom_art failed", caught);
         if (!cancelled) setCustom({ key: artKey, art: null });
       },
@@ -141,13 +104,11 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
 
   const localArt = cached?.key === artKey ? cached.art : null;
   const customArt = custom?.key === artKey ? custom.art : null;
-  // The custom cover wins over both the VNDB cache and the remote URL: the user
-  // chose it deliberately, and a stale VNDB cover must not shadow it.
+  // User-chosen custom covers take precedence over cached VNDB and remote URLs.
   const customReady = !hasCustomCover || custom?.key === artKey;
   const cacheReady = !game.vndb_id || cached?.key === artKey;
   const failedUrls = failed?.key === artKey ? failed.urls : [];
-  // Wait for the local lookups before requesting a remote cover. Browsing a
-  // cached library offline should not briefly render an uncached URL first.
+  // Resolve local lookups before remote URLs so offline libraries avoid flashing uncached covers.
   const candidates = preferRemote
     ? [game.cover_url, customArt?.cover_data_url, localArt?.cover_data_url]
     : [customArt?.cover_data_url, localArt?.cover_data_url, game.cover_url];
@@ -167,9 +128,7 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
   const revealed = reveal.scope === revealScope && reveal.shown;
   const explicit = isExplicit(game);
   const concealed = nsfw !== "show" && explicit && hasArt && !revealed;
-  // The cached pre-blurred backdrop is the only blur this app can afford on a
-  // scrolling surface (DESIGN.md §2). Without it there is nothing to blur, so
-  // the artwork falls back to the neutral surface rather than being shown.
+  // Scrolling lists cannot afford live CSS blur; require a pre-blurred copy or fall back to hide.
   const blurredUrl = customArt?.backdrop_data_url ?? localArt?.backdrop_data_url ?? null;
   const policy: ArtPolicy = !concealed
     ? "visible"
@@ -209,14 +168,7 @@ export function useArtwork(game: Game, options: UseArtworkOptions = {}): Artwork
   };
 }
 
-/**
- * Point the palette variables at an artwork's accent.
- *
- * Publishing rather than writing: the resolver decides whether the game's
- * palette wins, and it already knows the reader's accent and the theme. A
- * reader who chose an app accent asked for a fixed colour, so hovering a cover
- * must not quietly replace it; the switch in Appearance is the harder off.
- */
+/** Publishes artwork accent variables unless Appearance locks a custom accent colour. */
 export function applyAccent(palette: ReturnType<typeof fallbackPalette>): void {
   updateAppearance({ tint: palette });
 }

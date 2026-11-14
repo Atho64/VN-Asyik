@@ -1,10 +1,4 @@
-//! Appearance: the accent colour and the background image.
-//!
-//! Two preferences that are neither theme mode nor content policy, so they live in
-//! their own small record instead of widening the prefs snapshot every backup
-//! carries. The image is returned as a data URL, the same way a custom cover is:
-//! the webview has no filesystem access, and opening one would grant it more than
-//! this feature needs.
+//! Appearance commands: accent color, background image (`data:` URL), and theme state stored in `sync_state`.
 
 use serde::{Deserialize, Serialize};
 use tauri::State;

@@ -9,10 +9,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children?: ReactNode;
 }
 
-/**
- * One button with four intents. Every variant has a real behaviour at the call
- * site; this component never renders a decorative control (antislop R-26).
- */
+/** Four-intent button; every variant maps to real call-site behavior. */
 export function Button({
   variant = "secondary",
   size = "default",

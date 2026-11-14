@@ -8,26 +8,15 @@ import { api, IpcError } from "@/lib/ipc/client";
 import type { CaptureStatus } from "@/lib/ipc/types";
 
 /**
- * One-press capture of the running game.
- *
- * The button asks the backend what it can do rather than deciding for itself:
- * the reason a capture is unavailable differs per platform (nothing tracked,
- * Android without a granted projection, a window that excludes capture) and
- * saying which one is missing is the difference between "broken" and "not yet".
- *
- * `onCaptured` fires after a successful shot so the surface that owns the
- * library can refresh without polling.
+ * Capture button gated by backend `screenshotStatus` capability checks (platform
+ * projection, active tracked window) and notifying `onCaptured` on completion.
  */
 export function ScreenshotButton({
   gameId,
   onCaptured,
   variant = "secondary",
 }: {
-  /**
-   * When set, the button only appears if this is the game being tracked. A
-   * capture is attributed to the tracked game, so offering it on another game's
-   * page would file the shot somewhere the reader did not expect.
-   */
+  /** Scope capture to this game so shots cannot be filed under an inactive game. */
   gameId?: string;
   onCaptured?: () => void;
   variant?: "secondary" | "ghost";

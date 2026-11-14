@@ -226,12 +226,8 @@ pub(crate) async fn last_position(
         .map_or(0, |max| max.saturating_add(1)))
 }
 
-/// Drop the oldest rows until `room` more fit inside the window.
-///
-/// Deletion is by `position`, oldest first, and every row is an exchange half:
-/// dropping one at a time would leave a user question with no answer or the
-/// reverse, so the rows that go are whole exchanges from the top. A thread that
-/// is short enough to fit is left untouched.
+/// Drops oldest exchange pairs until `room` additional rows fit inside `MAX_MESSAGES`.
+/// Deletes complete two-row exchanges to preserve user/assistant alternation.
 pub(crate) async fn trim_window(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     thread_id: &str,
@@ -248,9 +244,7 @@ pub(crate) async fn trim_window(
     if excess <= 0 {
         return Ok(());
     }
-    // Round the trim up to an even number so the surviving window starts on a
-    // user question, which `build_history` also expects. Two rows always fit,
-    // so a thread at the window boundary still accepts the next exchange.
+    // Round up so the surviving window always starts on a user turn.
     if excess % 2 == 1 {
         excess += 1;
     }

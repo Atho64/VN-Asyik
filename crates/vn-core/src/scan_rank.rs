@@ -1,19 +1,9 @@
 //! Ranking candidate executables found by a folder scan.
 //!
-//! A Visual Novel folder routinely holds dozens of `.exe` files that are not the
-//! game: uninstallers, crash handlers, patch tools, launcher shims, and — in the
-//! case that prompted this module — an entire vendored SDK build with its own
-//! test binaries. The user then has to pick the right one by hand.
-//!
-//! Size alone is a poor guide. In a real folder the largest binary was a 31 MB
-//! message-script editor and the game itself was 0.9 MB, ranked sixth. Name
-//! patterns carry far more signal: `uninst`, `patch`, `tool`, `setup` and
-//! `launcher` are almost never the game, while a bare title matching the folder
-//! name usually is.
-//!
-//! The classification and ranking are pure; only [`walk`] touches the
-//! filesystem, through portable `std` directory reads, so every rule here is
-//! testable without one.
+//! Visual novel folders hold many non-game `.exe` files (uninstallers, crash
+//! handlers, patch tools, or even vendored SDK test binaries). Name patterns
+//! outrank binary size: in real folders a 31 MB editor outsized a 0.9 MB game.
+//! Classification and ranking are pure; only [`walk`] reads directories.
 
 use serde::{Deserialize, Serialize};
 
@@ -104,26 +94,19 @@ fn trim_end_matches_case_insensitive<'t>(text: &'t str, suffix: &str) -> &'t str
 pub struct Found {
     /// File name, lowercased.
     pub name: String,
-    /// Full path.
     pub path: String,
-    /// Size in bytes.
     pub size_bytes: u64,
-    /// Directory depth below the scan root. 0 means it sat directly in the
-    /// folder the user chose.
+    /// Directory depth below the scan root (0 = directly in the chosen folder).
     pub level: u32,
 }
 
-/// Upper bound on results. A folder tree can hold thousands of executables, and
-/// the list is for a human to pick from.
+/// Upper bound on results shown to the user.
 pub const MAX_FOUND: usize = 200;
 
-/// Walk `root` and return every `.exe` found within `max_levels` of it.
+/// Walk `root` and return every `.exe` found within `max_levels`.
 ///
-/// Depth-first and breadth-limited. A directory that is too deep is skipped —
-/// **not** treated as the end of the walk: `pop()` returns directories in LIFO
-/// order, so one deep folder says nothing about the siblings still queued.
-/// Returning early there was a real bug: scanning `F:\DC4 new` stopped inside a
-/// vendored SDK and never reached the sibling folder holding the game.
+/// Too-deep directories are skipped rather than ending the walk: `pop()` visits
+/// directories in LIFO order, so a deep SDK folder can precede the sibling game folder.
 #[must_use]
 pub fn walk(root: &std::path::Path, max_levels: u32) -> Vec<Found> {
     let mut found = Vec::new();
@@ -166,17 +149,10 @@ pub fn walk(root: &std::path::Path, max_levels: u32) -> Vec<Found> {
     found
 }
 
-/// Rank walk results for display.
+/// Rank walk results: plausibility, subfolder vs root-level, size, then path.
 ///
-/// Order: how much the name looks like a game, then whether it sits inside a
-/// folder rather than loose at the scan root, then size, then path.
-///
-/// The root-is-not-a-game rule matters more than it looks. A user points this at
-/// a shared `Visual Novels` directory, which is also where installers accumulate:
-/// one real folder held 335 executables, 40 of them loose at the root, and the
-/// largest by far were `Terabox`, `ProtonVPN` and a `.NET` runtime. Games live in their
-/// own subfolder, so a loose root-level binary is demoted rather than listed
-/// first.
+/// Loose root-level binaries are demoted behind subfolder entries because shared
+/// VN directories accumulate large installers (`Terabox`, `ProtonVPN`, `.NET`) at the root.
 #[must_use]
 pub fn order_found<'f>(found: &'f [Found], folder_name: &str) -> Vec<&'f Found> {
     let mut scored: Vec<(u8, u8, u64, &'f Found)> = found

@@ -176,12 +176,7 @@ describe("PresencePanel", () => {
 
     renderPanel();
 
-    // Scoped to the preview card: the scope picker and the preview-game picker
-    // both list the same title, so a bare findByText would pass even if the card
-    // itself were blank.
-    // Wait for the title inside the card, not merely for the card: the shell
-    // renders before the preview round-trip resolves, so waiting on the
-    // container alone raced the async preview and failed only in a full run.
+    // Scope to the preview card and wait for the title after the async preview round-trip resolves.
     const card = await waitFor(() => {
       const found = document.querySelector(".dc-card");
       expect(found).not.toBeNull();

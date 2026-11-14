@@ -33,10 +33,7 @@ describe("isExplicitHit", () => {
   });
 
   it("conceals a partly-rated explicit cover", () => {
-    // This is the library's rule (isExplicit: level 1 means "the community voted
-    // this explicit at all"). Requiring 2.0 here meant the add sheet showed
-    // explicit thumbnails under Hide while the library concealed the same cover.
-    // Sanoba Witch is 0.93 sexual on VNDB (v16044).
+    // Enforce EXPLICIT_FLAG_LEVEL = 1 across add-sheet previews and the library (e.g. 0.93 sexual is concealed).
     expect(isExplicitHit(hit({ sexual: 93 }), "hide")).toBe(true);
     expect(isExplicitHit(hit({ sexual: 100 }), "blur")).toBe(true);
     expect(isExplicitHit(hit({ violence: 100 }), "blur")).toBe(true);

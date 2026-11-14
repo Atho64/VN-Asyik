@@ -1,20 +1,7 @@
 /**
- * Themes: named token overrides, and the only module allowed to write them.
- *
- * Before this existed, three places wrote `--accent` on `documentElement` and
- * fought over it: the provider wrote the reader's accent, `useArtwork` wrote the
- * game's palette, and the shell removed the property when leaving a game route.
- * `removeProperty` deletes rather than restores, so the reader's accent was gone
- * until the next restart. One writer with one precedence order fixes that by
- * construction: theme → reader accent → game tint.
- *
- * The second reason it exists: an inline custom property beats *every* stylesheet
- * rule, including the `@media (prefers-reduced-transparency)` and
- * `(prefers-contrast: more)` blocks in `tokens.css`, because media queries add no
- * specificity. So a theme that wrote `--glass-bg` would silently disable the
- * reduced-transparency path on exactly the low-end devices that need it. The
- * resolver therefore takes the media state as input and applies the reduced
- * values itself.
+ * Single writer for document theme and accent custom properties (`theme -> reader accent -> game tint`).
+ * Also accepts media/effect accessibility flags directly because inline custom properties override
+ * stylesheet `@media` and `:root[data-reduce-effects]` rules.
  */
 
 import {
@@ -38,13 +25,8 @@ export type RadiusScale = "sharp" | "soft" | "round";
 export type Density = "compact" | "comfortable";
 
 /**
- * The tokens a theme owns.
- *
- * Deliberately not the whole token set: translucency ramps (`--surface-1..3`,
- * `--border*`, `--field-bg`) and the artwork scrim are *derived* from `base` and
- * `bg`, because they are alpha layers over whatever sits behind them. Exposing
- * them would let a reader pick a combination that is invisible or unreadable
- * without any way to see it coming.
+ * Editable theme tokens. Translucency ramps and artwork scrims are derived from
+ * `base` and `bg` rather than exposed directly so contrast remains intact.
  */
 export interface ThemeTokens {
   bg: string;
@@ -68,12 +50,8 @@ export interface Theme {
 }
 
 /**
- * What the accessibility settings say, resolved by the caller.
- *
- * `reduceEffects` is the app's own switch rather than a media query, but it has
- * exactly the same problem: `:root[data-reduce-effects="true"]` is a stylesheet
- * rule and an inline property beats it. Reading it here keeps the switch working
- * for anyone using a theme.
+ * Caller-resolved accessibility preferences; read inline here because inline
+ * custom properties override `:root[data-reduce-effects]` CSS rules.
  */
 export interface ThemeMedia {
   reducedTransparency: boolean;
@@ -106,14 +84,7 @@ export const DEFAULT_THEME_TOKENS: Record<ThemeBase, ThemeTokens> = {
   },
 };
 
-/**
- * Curated themes.
- *
- * They are not recolours of each other: each one answers a different reading
- * condition (dim room, paper, daylight, low vision). `Default` is not in this
- * list — it is the absence of a theme, so the built-in dark/light/system choice
- * keeps working exactly as before.
- */
+/** Curated themes tuned for different reading conditions; omits Default so built-in light/dark remains untouched. */
 export const THEME_PRESETS: Theme[] = [
   {
     id: "preset:nord",
@@ -300,14 +271,7 @@ export interface ThemeInput {
 }
 
 /**
- * The accent that should be in force.
- *
- * Order: the reader's own accent, then the focused game's palette, then the
- * theme's. A reader who picked a colour asked for a fixed one and hovering a
- * cover must not quietly replace it — that guard predates this module and is
- * kept. The switch is the harder off: with it disabled no game ever tints the
- * interface, which is what a reader who finds the colour shifting distracting
- * is asking for.
+ * Accent precedence: reader's fixed colour > focused game's tint (when enabled) > theme default.
  */
 export function resolveAccent(input: ThemeInput): AccentPalette | null {
   if (!input.accent) {
@@ -343,11 +307,7 @@ function onAccent(hex: string): string {
 }
 
 /**
- * Every custom property this module should own for the given input.
- *
- * Returns only what differs from `tokens.css`: with no theme and no accent the
- * map is empty and the stylesheet is untouched, which is what keeps the default
- * look byte-identical to before this feature existed.
+ * Returns only custom properties that override `tokens.css` (empty when no theme or accent is set).
  */
 export function resolveThemeVars(input: ThemeInput): Record<string, string> {
   const vars: Record<string, string> = {};
@@ -385,9 +345,7 @@ export function resolveThemeVars(input: ThemeInput): Record<string, string> {
   vars["--text-muted"] = tokens.textMuted;
   vars["--text-faint"] = tokens.textFaint;
 
-  // The scrim is measured against artwork, so it is derived from the background
-  // rather than exposed: a reader-picked scrim is the one value that can make
-  // body text unreadable over a cover without changing any text colour.
+  // Derive the artwork scrim from `tokens.bg` so readers cannot set a scrim that makes text unreadable.
   const bg = triplet(tokens.bg);
   vars["--scrim-top"] = `rgb(${bg} / 0.3)`;
   vars["--scrim-mid"] = `rgb(${bg} / 0.7)`;
@@ -410,8 +368,7 @@ export function resolveThemeVars(input: ThemeInput): Record<string, string> {
     vars[name] = `${Math.round(value * scale)}px`;
   }
 
-  // Accessibility last: these are the values the stylesheet's media queries would
-  // have applied, and an inline property would otherwise win over them.
+  // Accessibility last: inline properties override stylesheet media queries.
   if (input.media.reducedTransparency || input.media.reduceEffects) {
     vars["--glass-bg"] = tokens.surfaceSolid;
     vars["--glass-blur"] = "0px";
@@ -428,13 +385,7 @@ export function resolveThemeVars(input: ThemeInput): Record<string, string> {
 /** Properties this module has written, so the next render can clear them. */
 const written = new Set<string>();
 
-/**
- * What every caller wants, in one place.
- *
- * The provider owns theme, mode and the reader's accent; `useArtwork` owns the
- * focused game's tint; the shell clears it on navigation. They all publish here
- * and the map is derived once, so no caller can clobber another's property.
- */
+/** Combined inputs from provider, cover hover tint, and route clear; resolved once so writers cannot clobber each other. */
 let current: ThemeInput = {
   theme: null,
   mode: "dark",

@@ -1,10 +1,4 @@
-//! `search_library`: filtering, ordering, paging and tie detection in SQL.
-//!
-//! These run against a real migrated database, because the part that was
-//! rewritten is the SQL: the old version filtered and sorted decoded JSON cards
-//! in Rust, so a shape mistake here (a lost spoiler filter, a status that no
-//! longer narrows, an offset that starts at the wrong row) would only show up in
-//! a live chat answer.
+//! Integration tests for `search_library` SQL filtering, sorting, paging, and tie detection against a migrated DB.
 
 use serde_json::Value;
 use std::fmt::Write;

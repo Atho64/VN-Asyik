@@ -60,9 +60,6 @@ pub fn external_url_allowed(url: &str) -> bool {
 /// # Errors
 /// `invalid_url` when the scheme is not on the allowlist, and `open_failed` when the
 /// OS refuses.
-// Tauri's IPC layer deserialises command arguments into owned values, so both the
-// handle and the URL arrive by value regardless of what this body needs. Taking the
-// URL as `String` is also the contract the frontend sends.
 #[allow(
     clippy::needless_pass_by_value,
     reason = "tauri::command requires owned argument types for deserialisation"
@@ -175,12 +172,7 @@ pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
-/// Rewrite the tray menu in the language the UI is currently using.
-///
-/// The tray is built in Rust before the frontend knows the locale, so the labels
-/// start as English and are replaced here as soon as the UI boots and whenever the
-/// user switches language. Every other user-visible string in the app comes from
-/// the i18n dictionaries; the tray menu is no exception.
+/// Update tray menu labels for the active UI locale once booted or on language change.
 #[tauri::command]
 #[allow(unused_variables, clippy::needless_pass_by_value)]
 pub fn tray_set_labels(

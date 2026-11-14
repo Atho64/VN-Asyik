@@ -8,10 +8,8 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 pub const MAX_MESSAGE: usize = 16_000;
-/// Rows a thread keeps. It is a rolling window, not a ceiling: past this, the
-/// oldest exchange is dropped on write, so a long-lived chat stays usable instead
-/// of rejecting every new message (there is no chat paging UI to reach old rows
-/// anyway). Counting rows rather than exchanges keeps the trim exact.
+/// Rolling row window kept per thread; oldest exchanges drop on write instead of
+/// blocking new messages (counting rows keeps the trim exact).
 pub const MAX_MESSAGES: usize = 200;
 pub const MAX_CALLS: usize = 16;
 pub const MAX_ROUNDS: usize = 8;
@@ -25,12 +23,8 @@ pub enum Spoilers {
     All,
 }
 
-/// The companion's personality: how it talks, never what it is allowed to say.
-///
-/// Every persona lives under the same facts, tools, spoiler policy and citation
-/// rules — only the `## Voice` paragraph of the system prompt changes. Stored
-/// per thread as part of `ChatOptions`; older threads without the field read
-/// as [`Persona::Companion`].
+/// Companion personality: changes only the `## Voice` paragraph; facts, tools,
+/// spoilers, and citation rules apply equally. Missing field defaults to `Companion`.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Persona {

@@ -10,15 +10,7 @@ import settingsShot from "@/assets/guide/settings.jpg";
 import statsShot from "@/assets/guide/stats.jpg";
 import trackingShot from "@/assets/guide/tracking.jpg";
 
-/**
- * Every feature the app actually has, with a screenshot of this build.
- *
- * The pictures are real captures of the running app, not mockups: a guide that
- * shows a screen the user cannot find is worse than no guide. Each section states
- * what the feature does and the three things about it that are easy to get wrong,
- * because those are the questions the app itself cannot answer. The companion
- * section ships text-only until a real capture of that screen replaces it.
- */
+/** In-app user guide documenting features and build screenshots. */
 const sections = [
   { key: "library", shot: libraryShot },
   { key: "tracking", shot: trackingShot },

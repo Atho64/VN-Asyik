@@ -13,26 +13,22 @@ use crate::model::ModelError;
 pub struct EntityId(Uuid);
 
 impl EntityId {
-    /// Generate a new time-ordered id.
     #[must_use]
     pub fn new() -> Self {
         Self(Uuid::now_v7())
     }
 
-    /// Wrap an existing `UUID` (used when decoding rows from storage).
     #[must_use]
     pub const fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
 
-    /// Parse from canonical text form.
     pub fn parse(text: &str) -> Result<Self, ModelError> {
         Uuid::parse_str(text)
             .map(Self)
             .map_err(|_| ModelError::InvalidId(text.to_owned()))
     }
 
-    /// The inner `UUID`.
     #[must_use]
     pub const fn as_uuid(&self) -> Uuid {
         self.0
@@ -61,10 +57,7 @@ impl fmt::Display for EntityId {
 pub struct DeviceId(String);
 
 impl DeviceId {
-    /// Wrap an existing device identifier.
-    ///
-    /// # Errors
-    /// Rejects empty or whitespace-only identifiers.
+    /// Parses a trimmed, non-empty device identifier (max 128 bytes).
     pub fn parse(text: &str) -> Result<Self, ModelError> {
         let trimmed = text.trim();
         if trimmed.is_empty() {
@@ -76,7 +69,6 @@ impl DeviceId {
         Ok(Self(trimmed.to_owned()))
     }
 
-    /// The identifier as text.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0

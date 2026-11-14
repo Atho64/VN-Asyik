@@ -13,14 +13,6 @@
 //! The taste profile itself is computed from VNDB tag ratings with plain
 //! arithmetic: local, deterministic, and free.
 //!
-//! # Removed: local embeddings
-//!
-//! A local `EmbeddingGemma` similarity index (own library plus a 198 MB VNDB
-//! catalogue) was removed on 2026-10-22. It never had an in-app install or
-//! indexing path, so it could not be set up without copying files by hand. The
-//! code is preserved with a restore guide in `docs/archive/local-embeddings/`,
-//! and the pre-removal tree is tagged `embedding-stack-before-removal-2026-10-22`.
-//!
 //! # Licensing
 //!
 //! Independently implemented. See the README attribution and licensing notes.

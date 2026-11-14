@@ -37,17 +37,10 @@ class DocumentArgs {
     lateinit var filename: String
     lateinit var contents: String
 
-    /**
-     * MIME type the picker should declare. Defaults to JSON because every caller
-     * before the journal export was a backup or transfer payload; a Markdown or
-     * HTML export that declared JSON opened in nothing.
-     */
+    /** MIME type the picker declares; defaults to JSON for backup and transfer payloads. */
     var mime: String = "application/json"
 
-    /**
-     * The contents are base64 rather than UTF-8 text. Share cards are PNG bytes;
-     * every older caller leaves this false and keeps writing plain documents.
-     */
+    /** True when `contents` holds base64 PNG bytes instead of UTF-8 text. */
     var base64: Boolean = false
 }
 
@@ -142,14 +135,8 @@ class AndroidStoragePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     /**
-     * Copy a `content://` document the system picker returned into a private
-     * cache file and answer with its path and display name. SAF documents have
-     * no filesystem path; the content resolver is the only safe reader (the
-     * Rust side never treats the URI as one). The display name is queried from
-     * OpenableColumns because the URI itself is an opaque id: multi-file
-     * imports are ordered by the name people see, never by the id. The caller
-     * owns the file and deletes it when done, so the cache never grows with
-     * every pick.
+     * Copy a SAF `content://` URI into a private cache file and return its path and `DISPLAY_NAME`.
+     * Caller owns and deletes the temp file after reading.
      */
     @Command
     fun readUriToCache(invoke: Invoke) = io.execute {
@@ -184,9 +171,7 @@ class AndroidStoragePlugin(private val activity: Activity) : Plugin(activity) {
                     .put("name", queryDisplayName(parsed))
             )
         } catch (error: Exception) {
-            // Every failure above carries a specific message (not a content
-            // URI, document gone, over 64 MiB); surface it instead of one
-            // generic sentence that blames the size for every failure.
+            // Preserve the specific validation failure (scheme, missing stream, or 64 MiB limit).
             invoke.reject(error.message ?: "The selected document could not be read")
         }
     }

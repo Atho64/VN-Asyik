@@ -1,56 +1,31 @@
 //! Turning Android's usage event log into playtime intervals.
 //!
-//! # What Android gives us, and what it does not
-//!
-//! Android cannot tell us that a *game* is in the foreground. It reports activity
-//! lifecycle events per package: `ACTIVITY_RESUMED` (1) and `ACTIVITY_PAUSED` (2),
-//! plus screen state. From those we can only say "this package was on screen from
-//! t1 to t2". A visual novel on Android is one package, so that is the game's
-//! playtime, with no chapter information at all.
-//!
-//! Everything here is pure: it takes a slice of events and produces intervals, so
-//! the awkward parts are unit-tested without a device. The rules come from the
-//! API documentation rather than from guesswork:
-//!
-//! - `ACTIVITY_RESUMED` is 1 and `ACTIVITY_PAUSED` is 2. The older
-//!   `MOVE_TO_FOREGROUND`/`MOVE_TO_BACKGROUND` constants were deprecated in API 29
-//!   *in favour of* these and kept the same values, so reading the numeric values
-//!   works on both old and new devices.
-//! - Events are only retained for a few days, so a gap longer than the retention
-//!   window is not evidence of anything.
-//! - `DEVICE_SHUTDOWN` and `DEVICE_STARTUP` exist precisely so that an interval
-//!   left open across them can be discarded: the documentation says any open
-//!   events between them "should be ignored because the closing time is unknown".
-//!   Crediting that gap would invent hours of playtime for a phone that was off.
-//! - The screen going non-interactive ends the interval. A game left running with
-//!   the screen off is not being played.
+//! Android reports package-level lifecycle events (`ACTIVITY_RESUMED` = 1,
+//! `ACTIVITY_PAUSED` = 2; deprecated `MOVE_TO_*` constants share those numeric values
+//! since API 29) plus screen state, with no chapter signal. Retention is only a
+//! few days, screen-off ends play, and `DEVICE_SHUTDOWN`/`DEVICE_STARTUP` void any
+//! open interval whose closing time is unknown.
 
 /// An event type as it appears in `UsageEvents.Event.getEventType()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UsageEventKind {
-    /// The package's activity came to the foreground (value 1).
+    /// Foreground resume (value 1).
     Resumed,
-    /// The package's activity left the foreground (value 2).
+    /// Foreground pause (value 2).
     Paused,
-    /// The activity became invisible (value 23). Not required for our purposes,
-    /// but it can close an interval that never saw a pause.
+    /// Activity invisible (value 23); closes intervals that never saw a pause.
     Stopped,
     /// Screen became interactive (value 15).
     ScreenInteractive,
     /// Screen stopped being interactive (value 16).
     ScreenNonInteractive,
-    /// Either shutdown or startup; both mean "any open interval is void".
+    /// Shutdown or startup; voids any open interval.
     DeviceBoundary,
-    /// Anything else, which is ignored.
     Other,
 }
 
 impl UsageEventKind {
-    /// Classify the raw integer from the platform.
-    ///
-    /// Deliberately matches numeric values rather than the constants' names,
-    /// because the deprecated and current names share values and the numbers are
-    /// what cross the JNI boundary.
+    /// Classify raw event code numerically so pre- and post-API-29 constants match across JNI.
     pub const fn from_code(code: i32) -> Self {
         match code {
             // ACTIVITY_RESUMED / MOVE_TO_FOREGROUND
@@ -70,16 +45,15 @@ impl UsageEventKind {
     }
 }
 
-/// One event, reduced to what the interval builder needs.
+/// One event reduced to what the interval builder needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsageEvent {
-    /// Package that produced the event. Screen and device events have none.
+    /// Source package (`None` for screen and device events).
     pub package: Option<String>,
-    /// Activity class, when available, to distinguish transitions within one app.
+    /// Activity class to disambiguate transitions within one app.
     pub activity: Option<String>,
-    /// What happened.
     pub kind: UsageEventKind,
-    /// When, in Unix epoch milliseconds.
+    /// Unix epoch milliseconds.
     pub at_ms: i64,
 }
 
@@ -97,39 +71,19 @@ impl UsageInterval {
     }
 }
 
-/// Shortest foreground stretch worth a session row.
-///
-/// `UsageStats` reports every foreground switch, so glancing at a game for two
-/// seconds between two other apps produces a real interval, and writing a row
-/// for it made the session list read as a wall of `0:00` entries for games the
-/// user had not played.
-///
-/// Five seconds, not a minute. A per-interval floor at a minute was tried first
-/// and it deleted real reading: a reader who alt-tabs between VN and chat
-/// produces many legitimate short stretches whose *sum* is meaningful, and seven
-/// existing replay tests measured exactly that. Five seconds discards only the
-/// accidental switch — long enough to rule out a stray tap, short enough that no
-/// plausible reading habit is lost. The list can still show a `0:00` row for a
-/// 30-second glance, which is honest: it happened.
+/// Shortest foreground stretch worth a `play_sessions` row (5 s).
+/// Discards stray switches while keeping alt-tab reading bursts (a 1-minute floor
+/// broke seven replay tests; 5-59 s sessions still record honestly as 0:00).
 pub const MIN_SESSION_MS: i64 = 5_000;
 
-/// Whether a foreground interval deserves a `play_sessions` row.
-///
-/// Pure so the threshold is testable without Android, and so the native path and
-/// the tests cannot disagree about what "long enough" means.
+/// Whether a foreground interval is long enough to record in `play_sessions`.
 #[must_use]
 pub fn is_session_worth_recording(duration_ms: i64) -> bool {
     duration_ms >= MIN_SESSION_MS
 }
 
-/// Build intervals for events belonging to `packages` only.
-///
-/// `end_cap_ms` is the exclusive end of the queried window. An interval still
-/// open at that point is closed there: the alternative is to drop it, which
-/// would lose the game the user is playing *right now*.
-///
-/// Returns intervals ordered by start time. Zero-length intervals are dropped;
-/// they carry no playtime and would only add noise to the session table.
+/// Build ordered, non-zero intervals for `packages` within `[.., end_cap_ms)`.
+/// Open intervals close at `end_cap_ms` so active play is not lost.
 pub fn intervals_for(
     packages: &[String],
     events: &[UsageEvent],

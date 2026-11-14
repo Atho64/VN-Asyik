@@ -257,10 +257,7 @@ describe("game detail accent", () => {
 
 describe("returning to a game", () => {
   it("paints from the library card instead of a skeleton", async () => {
-    // Navigating away unmounts the screen, so its state is gone on return. The
-    // library store still holds every card, and a revisit used to blank to a
-    // skeleton and wait for a round trip while the user was looking at data they
-    // had just seen. The cached card must be usable on the first render.
+    // Render the cached library store card immediately on revisit without blanking to a skeleton.
     useAppStore.setState({ cards: [{ ...detail(), total_ms: 3_600_000 }] });
 
     const { container } = renderDetail();

@@ -15,15 +15,7 @@ import type { LunaSettings, LunaStatus } from "@/lib/ipc/luna";
 /** How many captured lines to preview. Enough to prove text is flowing. */
 const PREVIEW_LINES = 3;
 
-/**
- * The `LunaTranslator` live-text source.
- *
- * Feeding the companion chat what the player is reading needs no hook of ours:
- * `LunaTranslator` already extracts text, and its network service republishes
- * it on a local websocket. This card only points at that address. The panel
- * says what to enable in `LunaTranslator` itself, because the honest setup step
- * ("turn on 网络服务 there") is the one thing this app cannot do for the user.
- */
+/** Local WebSocket endpoint configuration for LunaTranslator live-text ingestion. */
 export function LunaPanel() {
   const { t, locale } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);

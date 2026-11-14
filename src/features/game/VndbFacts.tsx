@@ -27,16 +27,8 @@ interface VndbFactsProps {
 }
 
 /**
- * Everything VNDB knows that is not prose: when it came out, who made it, what it
- * runs on and where to read more.
- *
- * The card is deliberately assembled from what the payload *has* rather than from a
- * fixed row count. A VN with no developer and no release date renders three honest
- * rows, not five rows with two blanks: an empty label looks like a loading bug.
- *
- * The link back to vndb.org is here rather than in the header because this is the
- * block that reads as "the reference entry", and it is the row a reader wants after
- * deciding they need the full page.
+ * Non-prose VNDB metadata card (release date, developer, platforms, links); omits
+ * missing fields instead of showing blank rows.
  */
 export function VndbFacts({ payload, vnId, playtimeMs }: VndbFactsProps) {
   const { t, locale } = useI18n();

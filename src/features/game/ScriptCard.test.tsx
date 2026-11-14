@@ -76,8 +76,7 @@ describe("ScriptCard", () => {
     vi.mocked(scriptApi.list).mockResolvedValue([doc()]);
     renderCard();
 
-    // The list and row carry the layout (AGENTS.md §11): pin the classes, not
-    // just the text, so an unreadable row cannot pass as a working card.
+    // Pin layout classes rather than text alone so broken row styling fails the test.
     const list = await waitFor(() => {
       const found = document.querySelector(".script-list");
       if (!found) throw new Error("script list missing");

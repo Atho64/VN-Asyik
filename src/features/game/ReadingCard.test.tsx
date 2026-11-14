@@ -467,9 +467,7 @@ describe("journal photos and export", () => {
   });
 
   it("renders a pinned photo on an existing checkpoint, fetching each image once", async () => {
-    // A distinct id: the tile cache is module-level and survives between tests,
-    // which is the behaviour being pinned here — one fetch per image, not one per
-    // render.
+    // Distinct id avoids leaking into the module-level tile cache while verifying one fetch per image.
     const pinned = { ...shot, image_id: "sf99999" };
     mocks.screenshotTile.mockResolvedValue(pinned);
     mocks.context.mockResolvedValue({

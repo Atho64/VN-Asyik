@@ -1,24 +1,9 @@
 //! Window-title chapter parsing, under user control.
 //!
-//! # Why
-//!
-//! Some engines write their progress into the window caption. Siglus does, and
-//! the format is verified; other engines may too, in formats nobody here has
-//! seen. Hardcoding one engine means a user with a different game gets nothing
-//! and no way to say so.
-//!
-//! # The design rule
-//!
-//! A pattern that does not match must be **visible**, not silent. A user-supplied
-//! regex that quietly never matches would look exactly like an engine that does
-//! not write titles, and the user would have no way to tell which. So every
-//! saved pattern is exercised against the tester before it is trusted, and the
-//! live parser reports "pattern did not match" rather than "no chapter".
-//!
-//! # Safety of user patterns
-//!
-//! The `regex` crate guarantees linear-time matching, so a pathological pattern
-//! cannot hang the tracking loop. Compiled patterns are length-capped anyway.
+//! Siglus captions are built-in; other engines need user-supplied regexes.
+//! Pattern failures must surface visibly ("pattern did not match") rather than
+//! silently looking like an engine with no title support. User regexes run via
+//! `regex` (linear-time) and are capped at [`MAX_PATTERN_LEN`].
 
 use serde::{Deserialize, Serialize};
 
@@ -26,16 +11,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TitleFormat {
-    /// Do not read titles at all.
     Off,
-    /// The verified Siglus caption format.
     Siglus,
-    /// A pattern supplied by the user.
     Custom,
 }
 
 impl TitleFormat {
-    /// The stored string form.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -45,12 +26,8 @@ impl TitleFormat {
         }
     }
 
-    /// Parse the stored form, falling back to `Off`.
-    ///
-    /// Falling back to `Off` rather than to `Siglus` is deliberate: an unknown
-    /// value means this build does not know what the user chose, and silently
-    /// guessing a format would attribute chapters from a format they did not
-    /// pick.
+    /// Parse stored format, falling back to `Off` (never `Siglus`) so unknown
+    /// values never attribute chapters under an unintended format.
     #[must_use]
     pub fn parse(value: &str) -> Self {
         match value {
@@ -65,19 +42,15 @@ impl TitleFormat {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TitleSettings {
-    /// Which format to use.
     pub format: TitleFormat,
-    /// The user's pattern, when `format` is `Custom`.
-    ///
-    /// Capture groups are taken positionally: the first is the route or section,
-    /// the second is the position. One group is treated as the position alone.
+    /// Custom regex when `format` is `Custom`: capture group 1 = route/section and
+    /// group 2 = position (or a single group for position alone).
     pub pattern: Option<String>,
 }
 
 impl Default for TitleSettings {
     fn default() -> Self {
-        // The verified format, on: this is what the app shipped with, and turning
-        // it off by default would silently regress a working feature.
+        // Default to Siglus so verified title parsing stays enabled out of the box.
         Self {
             format: TitleFormat::Siglus,
             pattern: None,
@@ -85,21 +58,13 @@ impl Default for TitleSettings {
     }
 }
 
-/// Maximum pattern length accepted, in bytes.
-///
-/// Bytes rather than characters because that is what `str::len` measures, and the
-/// point is to bound the work, not to be generous with a script: 512 bytes is
-/// still over 170 Japanese characters. A pattern longer than this is either a
-/// paste accident or an attempt to make the tracker work hard; neither is worth
-/// supporting.
+/// Maximum pattern length in bytes (>170 Japanese chars; bounds compile and match work).
 pub const MAX_PATTERN_LEN: usize = 512;
 
 /// What a matching title yields.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedTitle {
-    /// Route or section label, when the pattern captured one.
     pub route: Option<String>,
-    /// Position or date label.
     pub position: String,
 }
 
@@ -112,13 +77,9 @@ pub struct CustomPattern {
 /// Why a pattern was rejected.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PatternError {
-    /// Empty or whitespace-only.
     Empty,
-    /// Longer than [`MAX_PATTERN_LEN`].
     TooLong,
-    /// Did not compile.
     Invalid(String),
-    /// Compiled, but has no capture group to read.
     NoCapture,
 }
 
@@ -137,10 +98,7 @@ impl std::fmt::Display for PatternError {
 }
 
 impl CustomPattern {
-    /// Compile a user pattern.
-    ///
-    /// # Errors
-    /// [`PatternError`] describing what is wrong, in words a user can act on.
+    /// Validate and compile a user regex requiring at least one capture group.
     pub fn new(source: &str) -> Result<Self, PatternError> {
         let trimmed = source.trim();
         if trimmed.is_empty() {
@@ -157,11 +115,7 @@ impl CustomPattern {
         Ok(Self { regex })
     }
 
-    /// Read a caption with this pattern.
-    ///
-    /// Returns `None` when the pattern does not match **and** when the group it
-    /// matched captured nothing: an empty chapter name would create a row the UI
-    /// cannot show, which is worse than reporting no chapter.
+    /// Match a caption; empty captures return `None` so the UI never creates nameless chapters.
     #[must_use]
     pub fn parse(&self, title: &str) -> Option<ParsedTitle> {
         let captures = self.regex.captures(title)?;
@@ -172,9 +126,7 @@ impl CustomPattern {
             .map(|m| m.as_str())
             .collect();
         let (route, position) = match groups.as_slice() {
-            // Two or more groups: route then position.
             [route, position, ..] => (Some((*route).trim()), *position),
-            // One group: it is the chapter itself.
             [only] => (None, *only),
             [] => return None,
         };
@@ -193,21 +145,14 @@ impl CustomPattern {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PatternTest {
-    /// The caption that was tested.
     pub title: String,
-    /// Whether it matched.
     pub matched: bool,
-    /// What was read, when it matched.
     pub route: Option<String>,
-    /// What was read, when it matched.
     pub position: Option<String>,
 }
 
-/// Run a pattern against sample captions, without saving it.
-///
-/// # Errors
-/// [`PatternError`] when the pattern itself is unusable, so the UI can say why
-/// rather than showing "no match" for a broken pattern.
+/// Run `source` against sample captions; returns [`PatternError`] for broken regexes
+/// instead of reporting "no match".
 pub fn test_pattern(source: &str, titles: &[String]) -> Result<Vec<PatternTest>, PatternError> {
     let pattern = CustomPattern::new(source)?;
     Ok(titles
@@ -229,11 +174,7 @@ pub fn test_pattern(source: &str, titles: &[String]) -> Result<Vec<PatternTest>,
         .collect())
 }
 
-/// Read a caption using the user's settings.
-///
-/// Returns `None` both when the format is off and when nothing matched. The
-/// caller distinguishes them by [`TitleSettings::format`], because "off" is a
-/// choice and "no match" is a finding.
+/// Parse `title` using `settings`; callers check `settings.format` to distinguish `Off` from no match.
 #[must_use]
 pub fn parse_with(settings: &TitleSettings, title: &str, game_title: &str) -> Option<ParsedTitle> {
     match settings.format {
@@ -312,8 +253,7 @@ mod tests {
     #[test]
     fn a_match_that_captures_nothing_is_not_a_chapter() {
         // `Day(\d*)` matches the word and captures "". Storing that would create
-        // a chapter with no name, which the user cannot recognise or delete, so
-        // it reads as no match — the same answer as a caption with no marker.
+        // a nameless chapter row, so it counts as no match.
         let pattern = CustomPattern::new(r"Day(\d*)").unwrap();
         assert!(pattern.parse("Some VN Day").is_none());
         assert_eq!(

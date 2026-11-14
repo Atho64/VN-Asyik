@@ -133,20 +133,12 @@ fn card(row: &sqlx::sqlite::SqliteRow, all: bool) -> Value {
 /// Page size for `search_library`.
 const PAGE: i64 = 20;
 
-/// Find owned games by title, original title, VNDB id or tag name.
-///
-/// Filtering, ordering, paging and the tie count all run in `SQLite`. The previous
-/// version loaded every live game, built a JSON card for each (parsing its tag
-/// blob), then filtered and sorted those values in Rust: on a large library that
-/// decoded thousands of tag arrays to answer a question about twenty titles.
+/// Find owned games by title, original title, VNDB id, or tag/character name in `SQLite`.
 async fn search_library(ctx: &ToolContext<'_>, args: &ToolArgs) -> Result<Value, String> {
     let query = args.query.trim().to_lowercase();
     let offset = i64::from(args.offset.unwrap_or(0));
-    // sqlx binds in call order and SQLite reads `?N` by number, so the numbering
-    // has to stay dense: a skipped `?2` makes an integer scope collide with a NULL
-    // literal and every row fails as a type mismatch. Scope is always `?1`, the
-    // optional filters take the next numbers, and paging stays inline integers so
-    // it cannot shift them.
+    // sqlx binds positionally and SQLite resolves `?N` by index: keep `?N` dense (`?1`
+    // scope, optional filters sequentially) and keep paging inline so numbers never shift.
     let mut where_clause = String::from(" AND (?1 IS NULL OR g.id=?1)");
     let mut next = 2;
     if args.status.is_some() {
@@ -194,9 +186,7 @@ async fn search_library(ctx: &ToolContext<'_>, args: &ToolArgs) -> Result<Value,
         .0;
     let all = ctx.options.spoilers == Spoilers::All;
     let sorting = args.sort.as_deref();
-    // A sort value shared by many games is not a ranking. Reporting the tie size
-    // stops the model presenting seven equal ratings as a meaningful top-seven
-    // list, and lets it say "seven are tied" instead. Only for value sorts.
+    // Report tied leading values so equal scores are not presented as a strict ranking.
     let tie_size = match sorting {
         // Ratings are decivotes, so integers preserve equality exactly.
         Some("rating") => leading_tie(rows.iter().map(|row| row.get::<Option<i64>, _>("rating"))),
@@ -344,9 +334,7 @@ async fn taste(ctx: &ToolContext<'_>) -> Result<Value, String> {
     )
 }
 
-/// Live text-hook capture. These lines are whatever the hooked engine just
-/// displayed, so they are the freshest evidence the companion has — but they
-/// carry no game attribution and no history beyond the ring buffer.
+/// Live text-hook capture from the running engine (no game attribution or history past the ring).
 async fn recent_text(ctx: &ToolContext<'_>) -> Result<Value, String> {
     if let Some(reading) = ctx.reading {
         if ctx.options.game_id.as_deref() != Some(reading.game_id.as_str()) {
@@ -391,9 +379,7 @@ async fn recent_text(ctx: &ToolContext<'_>) -> Result<Value, String> {
     }))
 }
 
-/// The compacted digest of the scoped game's imported script. The digest covers
-/// the whole story from the first line, so it has no spoiler boundary at all —
-/// the same rule that withholds private notes in `get_game`.
+/// Compacted digest of the scoped game's imported script (covers the whole story; no spoiler boundary).
 async fn script_digest(ctx: &ToolContext<'_>) -> Result<Value, String> {
     if ctx.options.spoilers != Spoilers::All {
         return Ok(

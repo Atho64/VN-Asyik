@@ -1,15 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * The living backdrop.
- *
- * Shows the focused game's artwork as a blurred, upscaled wash so text stays
- * readable over any cover. Two layers crossfade, and the outgoing image stays
- * until the incoming one has painted, so there is never a flash of empty
- * background (DESIGN.md §2).
- *
- * The blur is CSS on a fixed, non-scrolling layer over a tiny source image. That
- * is the one place a blur is affordable: it is not on a scrolling surface.
+ * Fixed non-scrolling backdrop that crossfades blurred cover layers so outgoing
+ * artwork stays visible until the incoming image paints (avoiding empty flashes).
  */
 
 const FOCUS_EVENT = "vn:focus-art";

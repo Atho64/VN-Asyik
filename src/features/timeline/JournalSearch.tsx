@@ -10,12 +10,8 @@ import { readingApi, type JournalSearchResult } from "@/lib/ipc/reading";
 import { formatDate } from "@/lib/time";
 
 /**
- * Wrap every case-insensitive occurrence of `query` in the text with a mark.
- *
- * A regex over the original string, not an index walk over a lowercased copy:
- * `toLowerCase` can change a string's length (`İ` becomes two code points), and
- * an index walk would then highlight the wrong slice. The query is escaped so a
- * reader searching for `100%` or `(spoilers)` searches for those characters.
+ * Highlights case-insensitive `query` matches via regex over the raw string
+ * (avoiding index drift from length-changing Unicode lowercasing).
  */
 function Highlight({ text, query }: { text: string; query: string }) {
   const trimmed = query.trim();
@@ -118,15 +114,7 @@ function SearchRow({ result, query }: { result: JournalSearchResult; query: stri
   );
 }
 
-/**
- * Journal search results: checkpoints from every game whose note, route or
- * chapter matches, newest first.
- *
- * The query is debounced so a typed word is one request, not one per keystroke,
- * and a request id drops answers that arrive after the query has moved on.
- * Pages accumulate downward on the same `(created_at, id)` cursor the timeline
- * uses, so a checkpoint saved mid-search never shifts the older results.
- */
+/** Debounced, stale-guarded search across journal checkpoints using `(created_at, id)` pagination. */
 export function JournalSearch({ query }: { query: string }) {
   const { t } = useI18n();
   const [results, setResults] = useState<JournalSearchResult[] | null>(null);

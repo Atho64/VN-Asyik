@@ -11,33 +11,27 @@ use crate::model::{Game, GameStatus, NsfwMode};
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SortKey {
-    /// Most recently touched first.
     #[default]
     Recent,
-    /// Title, case-insensitive.
     Title,
     /// Highest rating first when descending; unrated counts as 0, so ascending
     /// opens with it.
     Rating,
-    /// Most tracked time first.
     Playtime,
-    /// Newest `started_at` first.
     Started,
 }
 
 /// Filter criteria for the library.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryFilter {
-    /// Free text matched against title and alternate title.
+    /// Free text matched against title and original title.
     pub query: String,
-    /// Restrict to these statuses; empty means any.
+    /// Empty means any status.
     pub statuses: Vec<GameStatus>,
-    /// Restrict to rated games only.
     pub rated_only: bool,
 }
 
 impl LibraryFilter {
-    /// True when nothing is being filtered out.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.query.trim().is_empty() && self.statuses.is_empty() && !self.rated_only
@@ -82,7 +76,7 @@ pub fn matches_query(game: &Game, query: &str) -> bool {
         .is_some_and(|alt| normalize_title(alt).contains(&needle))
 }
 
-/// Apply a filter to a slice, returning matching games in original order.
+/// Apply `filter` to live (non-deleted) games, preserving slice order.
 #[must_use]
 pub fn apply_filter<'a>(games: &'a [Game], filter: &LibraryFilter) -> Vec<&'a Game> {
     games
@@ -105,7 +99,6 @@ pub fn apply_filter<'a>(games: &'a [Game], filter: &LibraryFilter) -> Vec<&'a Ga
         .collect()
 }
 
-/// Sort games in place by `key` and `descending`.
 pub fn sort_games(
     games: &mut [&Game],
     key: SortKey,
@@ -127,20 +120,15 @@ pub fn sort_games(
 /// Aggregate play counts per status, for the stats donut.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct StatusBreakdown {
-    /// Games currently reading.
     pub playing: usize,
-    /// Games planned.
     pub wishlist: usize,
-    /// Games finished.
     pub completed: usize,
-    /// Games paused.
     pub on_hold: usize,
-    /// Games abandoned.
     pub dropped: usize,
 }
 
 impl StatusBreakdown {
-    /// Count live games by status.
+    /// Count non-deleted games by status.
     #[must_use]
     pub fn from_games(games: &[Game]) -> Self {
         let mut out = Self::default();
@@ -156,10 +144,8 @@ impl StatusBreakdown {
         out
     }
 
-    /// Build from per-status totals produced by SQL (`GROUP BY status`).
-    ///
-    /// The database does the counting; this maps rows to the shape the UI wants
-    /// so the two paths (in-memory and `SQL`) cannot disagree on field names.
+    /// Build from per-status totals produced by SQL (`GROUP BY status`), keeping
+    /// field mapping identical to [`Self::from_games`].
     #[must_use]
     pub fn from_rows(rows: &[StatusRowTotal]) -> Self {
         let mut out = Self::default();
@@ -175,24 +161,20 @@ impl StatusBreakdown {
         out
     }
 
-    /// Total across all statuses.
     #[must_use]
     pub fn total(&self) -> usize {
         self.playing + self.wishlist + self.completed + self.on_hold + self.dropped
     }
 }
 
-/// One status and how many games carry it.
+/// One status and how many live games carry it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StatusRowTotal {
-    /// The status.
     pub status: GameStatus,
-    /// Number of live games with that status.
     pub count: usize,
 }
 
 impl StatusRowTotal {
-    /// Pair a status with a count.
     #[must_use]
     pub const fn new(status: GameStatus, count: usize) -> Self {
         Self { status, count }

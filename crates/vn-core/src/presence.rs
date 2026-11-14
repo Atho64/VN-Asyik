@@ -11,17 +11,10 @@ pub enum PresenceDetailsMode {
     Manual,
 }
 
-/// User-configurable settings for Discord Rich Presence.
+/// Per-field text transform, ported from `EwE`'s `*_transform` dictionaries.
 ///
-/// `#[serde(default)]` is load-bearing: a stored row can predate a field added
-/// later, and without it that row fails to decode and every saved preference is
-/// silently replaced by the defaults.
-/// A per-field text transform, ported from `EwE`'s `*_transform` dictionaries.
-///
-/// Applied **after** template substitution and **before** Discord sanitizing, in
-/// this order: `remove` substrings, then literal `replace` pairs, then `prefix`
-/// and `suffix`, then `trim`. Order matters: prefixing before replacing would let
-/// a replacement rule rewrite text the user added deliberately as decoration.
+/// Applied **after** template substitution and **before** Discord sanitizing in
+/// order: `remove` substrings, literal `replace` pairs, `trim` body, then `prefix`/`suffix`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TextTransform {
@@ -120,6 +113,10 @@ pub enum RpcImageHost {
     Imgbb,
 }
 
+/// User-configurable settings for Discord Rich Presence.
+///
+/// `#[serde(default)]` is load-bearing: stored rows predate newer fields and
+/// would otherwise reset saved preferences to defaults on decode failure.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -129,22 +126,18 @@ pub struct PresenceSettings {
     pub details_mode: PresenceDetailsMode,
     pub manual_details: String,
     pub manual_state: String,
-    /// The custom details template, used when [`Self::custom_details_items`] is
-    /// empty. Kept so a settings row written before rotation existed still means
-    /// what it meant.
+    /// Fallback custom details template when [`Self::custom_details_items`] is empty.
     pub custom_details: String,
     pub custom_state: String,
-    /// Templates the custom details line rotates through, one per entry.
-    /// An empty list falls back to [`Self::custom_details`].
+    /// Rotating custom details templates; empty falls back to [`Self::custom_details`].
     pub custom_details_items: Vec<String>,
     pub custom_state_items: Vec<String>,
     pub custom_details_rotate: bool,
     pub custom_state_rotate: bool,
     pub custom_details_cycle_seconds: u32,
     pub custom_state_cycle_seconds: u32,
-    /// Templates the VNDB details line rotates through. Empty means the built-in
-    /// four facts (developer → rating → length → year), which is the phase-16
-    /// behaviour and keeps working until the user edits the list.
+    /// Rotating VNDB details templates; empty uses the built-in four facts
+    /// (developer -> rating -> length -> year).
     pub vndb_details_items: Vec<String>,
     /// Template for the VNDB **state** line. Empty means the built-in
     /// route/chapter/status logic.
@@ -158,37 +151,22 @@ pub struct PresenceSettings {
     pub show_cover: bool,
     pub show_buttons: bool,
     pub show_list_button: bool,
-    /// The user's own VNDB profile page, shown as the second button.
-    /// Empty leaves [`Self::show_list_button`] with nothing to link to.
+    /// User's VNDB profile URL for the second button when [`Self::show_list_button`] is enabled.
     pub my_vndb_link: String,
     pub show_timestamps: bool,
-    /// Keep the card on Discord while the game is running but another window has
-    /// focus.
-    ///
-    /// On by default. A reader alt-tabs to a walkthrough, a notes file or Discord
-    /// constantly, and clearing the card on every switch made it blink out for
-    /// most of a session. The card still disappears when the game itself stops,
-    /// so this never advertises a novel that is closed: the threshold is "the
-    /// process is running", not "the window has focus".
-    ///
-    /// Turning it off restores the strict behaviour, where an unfocused game
-    /// clears the card immediately.
+    /// Keep the card while the game process is running even if unfocused (on by
+    /// default so alt-tabbing to walkthroughs/notes does not flicker the card).
     pub show_when_unfocused: bool,
-    /// Template for the card **title**. `None` means "the VN's title", which is
-    /// the `EwE` behaviour and the default.
+    /// Template for the card **title** (`None` defaults to the VN's title, matching `EwE`).
     pub activity_name: Option<String>,
-    /// Rotate the VNDB details line through developer → rating → length → year,
-    /// or cycle custom `vndb_details_items` entries when provided.
-    /// Off by default so linked VNs show a compact rating · year · length summary.
+    /// Rotate the VNDB details line (default off: compact rating · year · length summary).
     pub cycle_vndb_details: bool,
     /// Seconds each VNDB fact stays on screen. Floored at [`MIN_CYCLE_SECONDS`].
     pub cycle_seconds: u32,
-    /// `EwE`'s `details` for a game with no VNDB link: a bare "Reading" reads as a
-    /// status, where a generic word reads as a placeholder.
+    /// `EwE` fallback `details` for unlinked games ("Reading" status rather than generic placeholder).
     pub vndb_loading_details: String,
     pub vndb_loading_state: String,
-    /// Where a cover that Discord cannot fetch directly may be uploaded.
-    /// [`RpcImageHost::None`] means nothing ever leaves the device.
+    /// Upload host for blurred/local covers (`None` keeps all images off-network).
     pub rpc_image_host: RpcImageHost,
 }
 
@@ -248,10 +226,7 @@ pub struct PresenceContext {
     pub large_text: String,
     pub vndb_id: Option<String>,
     pub vndb_url: Option<String>,
-    /// VNDB's community rating, e.g. "8.86". Never the user's own — that is
-    /// [`Self::my_rating`]; the two used to share one tag, which made
-    /// `{vndb_rating}` mean different games depending on whether the user had
-    /// rated it.
+    /// VNDB community rating (e.g. "8.86"), distinct from [`Self::my_rating`].
     pub vndb_rating: Option<String>,
     /// The user's own rating of the game, one decimal like the library UI
     /// ("7.5"). Empty when the user has not rated it.
@@ -278,45 +253,23 @@ pub struct PresenceContext {
     pub route: Option<String>,
     pub cover_url: Option<String>,
     pub is_cover_explicit: bool,
-    /// A cover URL that already went through the concealment policy upstream —
-    /// a blurred upload for explicit art, a hosted copy of a local custom cover.
-    /// When present it wins over [`Self::cover_url`], which only ever carries a
-    /// public URL Discord can fetch as-is.
+    /// Concealment-approved cover URL (blurred upload or hosted custom cover);
+    /// takes precedence over [`Self::cover_url`], which only holds public URLs.
     pub rpc_image: Option<String>,
-    /// Whether this game is linked to a VNDB entry at all.
-    ///
-    /// Two different situations must not collapse into one flag, and they did
-    /// under the old name `vndb_loaded`: a *linked* game whose cached details have
-    /// not arrived yet is genuinely loading, while an *unlinked* game will never
-    /// load anything. The card promises "Loading VNDB data..." only for the first;
-    /// a hand-added or since-unlinked game falls back to the local facts it has,
-    /// instead of a placeholder it can never clear.
+    /// True when linked to VNDB; unlinked games fall back to local library facts
+    /// instead of showing a permanent "Loading VNDB data..." placeholder.
     pub vndb_linked: bool,
-    /// The game is running but another window has focus.
-    ///
-    /// The card is still shown when the settings allow it; this only lets a
-    /// template say so, via `{game_state}`.
+    /// True when running while another window has focus (for `{game_state}`).
     pub is_unfocused: bool,
     pub session_start_epoch: Option<i64>,
-    /// Which VNDB fact the rotating details line shows.
-    ///
-    /// Advanced by the poll loop rather than computed from a clock here: the
-    /// domain crate stays pure, and a wall-clock read would make every call
-    /// disagree with the debouncer's idea of "the same activity".
+    /// Rotating details fact index, advanced by the poll loop so `vn-core` stays pure.
     pub cycle_index: u32,
-    /// Which rotating entry the **state** line shows, when the state field is the
-    /// one rotating. Tracked apart from [`Self::cycle_index`] so the two lines do
-    /// not march in lockstep (`EwE` keeps one cursor per field for the same
-    /// reason).
+    /// Separate cursor for rotating the **state** line so the two fields do not lockstep (`EwE`).
     pub state_cycle_index: u32,
 }
 
 impl PresenceContext {
-    /// Whether any VNDB-sourced fact is actually present.
-    ///
-    /// `vndb_length` is deliberately excluded: it is filled from the game's own
-    /// `length_minutes` for linked and unlinked games alike, so it says nothing
-    /// about whether VNDB answered.
+    /// Whether any VNDB-sourced fact is present (excludes `vndb_length`, which local games also populate).
     #[must_use]
     pub fn has_vndb_facts(&self) -> bool {
         self.vndb_developer.is_some()
@@ -326,16 +279,8 @@ impl PresenceContext {
     }
 }
 
-/// A per-game override of [`PresenceSettings`].
-///
-/// Sparse on purpose: a field left out is inherited from the global settings, so
-/// changing a global template later still reaches every game that did not
-/// override that one field. With 32 settings, a full copy would silently fork a
-/// game's configuration the first time any single field was touched.
-///
-/// Stored as a JSON object of only the overridden keys — which is what
-/// `#[serde(default)]` on the inner struct already produces when serialising a
-/// partially-populated value through [`PresenceOverrides::new`].
+/// Sparse per-game override of [`PresenceSettings`]; serialises only changed
+/// keys via `#[serde(default)]` so untouched fields inherit global updates.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PresenceOverrides {
@@ -902,12 +847,8 @@ pub fn build_activity(settings: &PresenceSettings, ctx: &PresenceContext) -> Pre
     let details = raw_details.or_else(|| Some("Visual Novel".to_string()));
     let state = raw_state;
 
-    // Artwork policy:
-    // Only send public HTTPS URLs for large_image if NOT explicit.
-    // Local files or explicit art are NEVER sent to Discord — unless they arrive
-    // as `rpc_image`, which the Tauri layer already ran through that same policy
-    // (explicit art only ever arrives there as a blurred upload, never the
-    // original bytes).
+    // Artwork policy: send public HTTPS URLs only when safe; raw local files or
+    // explicit art are never sent unless pre-processed upstream into `rpc_image`.
     let large_image = if settings.show_cover {
         if let Some(ref rpc_img) = ctx.rpc_image {
             Some(rpc_img.clone()).filter(|u| u.starts_with("https://") || u.starts_with("http://"))
@@ -1502,7 +1443,7 @@ mod tests {
         assert_eq!(build_tokens(&unrated)["vndb_rating"], "8.20");
     }
 
-    // ---- ported from EwE: rotation lists, transforms, buttons, fallbacks ----
+    // Ported from EwE: rotation lists, transforms, buttons, fallbacks
 
     fn vn_with_facts() -> PresenceContext {
         PresenceContext {

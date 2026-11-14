@@ -1,23 +1,8 @@
-//! Linux process tracking over X11.
+//! Linux process tracking over X11/EWMH (`/proc`, `_NET_ACTIVE_WINDOW`,
+//! `_NET_WM_PID`, `_NET_WM_NAME`/`WM_NAME`, and `XScreenSaverQueryInfo`).
 //!
-//! Everything the tracker needs is EWMH plus one X extension:
-//!
-//! - the process list comes from `/proc`, which every Linux kernel has;
-//! - the focused window is `_NET_ACTIVE_WINDOW` on the root window;
-//! - its process is `_NET_WM_PID`, and its caption is `_NET_WM_NAME` (UTF-8,
-//!   falling back to the older `WM_NAME`);
-//! - idle time is `XScreenSaverQueryInfo`.
-//!
-//! **Wayland.** A Wayland client cannot enumerate windows or read another
-//! window's title — that is the security model, not a missing API. But most
-//! visual novels are X11 programs, and under a Wayland desktop they run through
-//! `XWayland`, where they *are* X11 windows with EWMH properties. So this probe
-//! connects to whatever X display is reachable and works for `XWayland` games on a
-//! Wayland session. When no X display is reachable at all it reports that
-//! honestly instead of pretending tracking is available.
-//!
-//! A native Wayland game window is invisible here. That is a real limit, and it
-//! is the reason the capability stays `Experimental` rather than `Supported`.
+//! Pure Wayland clients cannot inspect other windows, so native Wayland windows
+//! remain invisible (`Experimental` capability); `XWayland` windows are tracked via X11.
 
 use std::sync::Mutex;
 
@@ -132,11 +117,8 @@ impl LinuxProbe {
         Ok(reply.value32().and_then(|mut values| values.next()))
     }
 
-    /// The window's caption, preferring the UTF-8 property.
-    ///
-    /// Visual novel engines write Japanese into these captions, so the legacy
-    /// `WM_NAME` (which is Latin-1 by spec) is only a fallback: reading it first
-    /// would mangle exactly the titles chapter detection needs.
+    /// Reads window caption from UTF-8 `_NET_WM_NAME`, falling back to Latin-1 `WM_NAME`.
+    /// UTF-8 is preferred so Japanese chapter titles are not mangled.
     fn window_title(
         &self,
         connection: &RustConnection,

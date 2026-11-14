@@ -1,11 +1,4 @@
-/**
- * Plain-text rendering of VNDB description text.
- *
- * The API returns descriptions containing VNDB formatting codes such as
- * `[url=https://x]text[/url]`, `[b]` and `[spoiler]`. This app has no rich-text
- * renderer yet, so codes are stripped rather than shown raw. Mirrors
- * `vndb::import::strip_formatting` so both sides agree.
- */
+/** Strips VNDB formatting tags for plain-text display, matching `vndb::import::strip_formatting`. */
 export function stripFormatting(text: string): string {
   let depth = 0;
   let out = "";

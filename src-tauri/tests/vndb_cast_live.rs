@@ -1,16 +1,5 @@
-//! Live check that the cast actually arrives from VNDB.
-//!
-//! Ignored by default: it needs the network. Run with
-//!
-//! ```text
-//! cargo test --test vndb_cast_live -- --ignored --nocapture
-//! ```
-//!
-//! This exists because the cast card shipped with an empty list for every game:
-//! `characters_json` was written as `[]` because `DETAIL_FIELDS` never requested
-//! `va.character.*`, and `POST /vn` has no top-level `characters` field at all.
-//! The unit tests could not catch that — the field list is a string, and a field
-//! missing from it is not a compile error, it is a silently blank row.
+//! Live test checking `DETAIL_FIELDS` fetches cast rows from VNDB (missing fields in the string fail silently in unit tests).
+//! Run manually with `cargo test --test vndb_cast_live -- --ignored --nocapture`.
 
 use vn_tracker_lib::vndb::VndbClient;
 use vn_tracker_lib::vndb::dto::DETAIL_FIELDS;

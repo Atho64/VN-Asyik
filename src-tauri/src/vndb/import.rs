@@ -111,17 +111,9 @@ pub struct DetailPayload {
     pub title: String,
     /// Original-script title.
     pub alttitle: Option<String>,
-    /// Every published title: original script, romanised, and official English.
-    ///
-    /// Carried so the hero can show what a VN is actually called. `alttitle` alone
-    /// was not enough: KANADE stores its own name there, so the page had one string
-    /// to show and printed it twice.
+    /// Published title variants (original, romanised, official English; distinct from `alttitle`).
     pub titles: Vec<TitleVariant>,
-    /// Short names VNDB lists separately from its titles.
-    ///
-    /// Not part of `titles`: an alias carries no language or script, so it cannot
-    /// be represented as a [`TitleVariant`] without inventing values. This is where
-    /// the names people actually use live ("When They Cry 3").
+    /// Short aliases without language/script metadata (e.g. "When They Cry 3").
     pub aliases: Vec<String>,
     /// Average playtime, minutes.
     pub length_minutes: Option<i64>,
@@ -165,12 +157,7 @@ pub struct DetailPayload {
     /// Official, encyclopaedia and store links from the VN's page.
     #[serde(default)]
     pub extlinks: Vec<ExtLink>,
-    /// Cast, in VNDB's own order (main roles first).
-    ///
-    /// Stored since the first import but never read back, which is why the game
-    /// page had no cast to show. `#[serde(default)]` so a payload stored before
-    /// the field was exposed still decodes as an empty list instead of failing
-    /// the whole detail load.
+    /// Cast in VNDB order (main roles first); defaulted for cached payloads written before cast display.
     #[serde(default)]
     pub characters: Vec<crate::vndb::dto::Character>,
 }

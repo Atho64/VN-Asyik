@@ -1,27 +1,18 @@
 //! AFK (away from keyboard) accounting.
 //!
-//! Rule: a session is a sequence of samples of "is the user active". Consecutive
-//! inactive samples are only counted as AFK once they run longer than the
-//! configured threshold. That grace window is what makes this usable for visual
-//! novels: reading a long passage produces no input for tens of seconds, and
-//! treating that as AFK would delete real reading time.
-//!
-//! The rule is expressed as a pure fold so it can be tested without any OS,
-//! clock or window focus involvement.
+//! Consecutive inactive samples count as AFK only once the run exceeds the
+//! configured threshold, so reading a long passage without input is not dropped.
+//! Expressed as a pure fold over samples with no OS or clock dependencies.
 
 use crate::clock::Timestamp;
 
-/// Default grace before inactivity counts as AFK: 60 seconds.
-///
-/// Chosen because VN reading routinely produces 30-45 s of silence; a shorter
-/// window would silently drop legitimate play. Configurable in Settings, clamped
-/// by [`AfkConfig::MIN_THRESHOLD_MS`] and [`AfkConfig::MAX_THRESHOLD_MS`].
+/// Default inactivity grace before counting as AFK (60 s; VN reading often has 30-45 s pauses).
+/// Clamped to [`AfkConfig::MIN_THRESHOLD_MS`]..=[`AfkConfig::MAX_THRESHOLD_MS`].
 pub const DEFAULT_AFK_THRESHOLD_MS: i64 = 60_000;
 
 /// Whether idle stretches are excluded from counted playtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AfkConfig {
-    /// How long the user must be inactive before the stretch counts as AFK.
     pub threshold_ms: i64,
     /// When false, idle time is still measured but folded into active time.
     pub exclude_afk: bool,
@@ -37,18 +28,15 @@ impl Default for AfkConfig {
 }
 
 impl AfkConfig {
-    /// Shortest accepted threshold.
     pub const MIN_THRESHOLD_MS: i64 = 15_000;
-    /// Longest accepted threshold.
     pub const MAX_THRESHOLD_MS: i64 = 1_800_000;
 
-    /// Clamp a threshold into the accepted range.
     #[must_use]
     pub fn clamp_threshold(ms: i64) -> i64 {
         ms.clamp(Self::MIN_THRESHOLD_MS, Self::MAX_THRESHOLD_MS)
     }
 
-    /// Build a config, clamping the threshold rather than rejecting it.
+    /// Build a config, clamping `threshold_ms` into the accepted range.
     #[must_use]
     pub fn new(threshold_ms: i64, exclude_afk: bool) -> Self {
         Self {
@@ -58,44 +46,32 @@ impl AfkConfig {
     }
 }
 
-/// One observation of user activity, taken at a point in time.
+/// One observation of user activity at a point in time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sample {
-    /// When the sample was taken.
     pub at: Timestamp,
-    /// Whether the user produced input recently enough to be considered present.
     pub active: bool,
 }
 
 /// Active and idle totals for a session, in milliseconds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ActivityTotals {
-    /// Time attributed to the user being present.
     pub active_ms: i64,
-    /// Time attributed to the user being away.
     pub afk_ms: i64,
 }
 
 impl ActivityTotals {
-    /// Wall-clock total of the accounted stretch.
     #[must_use]
     pub const fn total_ms(&self) -> i64 {
         self.active_ms + self.afk_ms
     }
 }
 
-/// Fold a sequence of samples into [`ActivityTotals`].
+/// Fold samples into [`ActivityTotals`].
 ///
-/// Time between two consecutive samples is attributed according to the *earlier*
-/// sample: if the user was already away, the gap is idle time.
-///
-/// The grace rule is applied to the accumulated idle run, not per gap: the run
-/// stays as reading time until its total exceeds `config.threshold_ms`. Once it
-/// does, the whole run so far becomes AFK and every further idle gap in the run
-/// accrues to AFK too, so the user is not charged for the first minute of a long
-/// break. A run that ends below the threshold is folded back into active time.
-///
-/// The final sample contributes no duration of its own.
+/// Gaps are attributed to the earlier sample; the final sample contributes no duration.
+/// An idle run stays reading time until its total exceeds `config.threshold_ms`,
+/// when the whole run becomes AFK.
 #[must_use]
 pub fn account(samples: &[Sample], config: AfkConfig) -> ActivityTotals {
     if samples.len() < 2 {
@@ -103,8 +79,6 @@ pub fn account(samples: &[Sample], config: AfkConfig) -> ActivityTotals {
     }
 
     let mut totals = ActivityTotals::default();
-    // Active time and the current idle run are accumulated separately, then the
-    // run is resolved once when the user becomes active again or the samples end.
     let mut active_ms: i64 = 0;
     let mut idle_run_ms: i64 = 0;
 
@@ -112,8 +86,6 @@ pub fn account(samples: &[Sample], config: AfkConfig) -> ActivityTotals {
         let [previous, next] = [pair[0], pair[1]];
         let gap = next.at.saturating_diff_ms(previous.at).max(0);
 
-        // A gap is attributed to the state the user was in for its duration,
-        // which is the state captured by this (earlier) sample.
         if previous.active {
             resolve_idle_run(&mut totals, &mut active_ms, &mut idle_run_ms, config);
             active_ms += gap;
@@ -122,8 +94,6 @@ pub fn account(samples: &[Sample], config: AfkConfig) -> ActivityTotals {
         }
     }
 
-    // The session's own stretch is covered by the last sample, so resolve the
-    // trailing run and commit the active total.
     resolve_idle_run(&mut totals, &mut active_ms, &mut idle_run_ms, config);
     totals.active_ms += active_ms;
 
@@ -131,12 +101,8 @@ pub fn account(samples: &[Sample], config: AfkConfig) -> ActivityTotals {
 }
 
 /// Commit an idle run: AFK if it outlasts the threshold, otherwise reading time.
-///
-/// This is the grace rule for a fold over sampled activity. The live tracker does
-/// not accumulate runs this way: it reads the OS's own idle duration on every poll
-/// and charges only the part past the threshold (`tracker::away_ms_in_gap`), so a
-/// break is away from its first second past the grace and a session that is being
-/// clicked through never becomes a break at all.
+/// Unlike `tracker::away_ms_in_gap` (which uses live OS idle duration per poll),
+/// this sampled fold accounts the whole run once the threshold is crossed.
 pub fn resolve_idle_run(
     totals: &mut ActivityTotals,
     active_ms: &mut i64,
@@ -151,10 +117,7 @@ pub fn resolve_idle_run(
     *idle_run_ms = 0;
 }
 
-/// Settle the buckets at the end of an accounting stretch.
-///
-/// With `exclude_afk` off the user still wants to know they were away, but the time
-/// is credited as play, so the two buckets merge into active.
+/// Merge AFK time into active time when `config.exclude_afk` is false.
 #[must_use]
 pub fn finish(totals: ActivityTotals, config: AfkConfig) -> ActivityTotals {
     if config.exclude_afk {

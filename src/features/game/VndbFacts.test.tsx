@@ -104,10 +104,7 @@ describe("VNDB facts", () => {
     expect(screen.getByText("English, Japanese")).toBeTruthy();
     expect(screen.getByText("Windows, PSP")).toBeTruthy();
     expect(screen.getByText("33h 7m")).toBeTruthy();
-    // VNDB reports these in tenths, exactly like the user's own rating, so 84.5
-    // is 8.45 and renders as 8.4. Rendering the raw value put "84.5" on screen
-    // beside a user rating of "7.5". The value sits in a <dd> beside its vote
-    // count, so match on the leading text rather than the whole node.
+    // VNDB scores arrive in tenths (84.5 -> 8.4); match leading text since vote count follows in the same <dd>.
     expect(ddContaining("8.")).toBeTruthy();
     expect(screen.queryByText(/84\.5/)).toBeNull();
     // The raw average is on the same scale as the score it sits beside.

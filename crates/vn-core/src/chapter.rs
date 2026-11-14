@@ -54,20 +54,16 @@ const SIGLUS_ROUTING_SUFFIXES: &[&str] = &["シナリオフロー", "マップ�
 /// routes by date.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Route {
-    /// The numeric code the engine uses.
     pub code: u32,
-    /// A stable identifier for storage, e.g. `route_20`.
+    /// Storage identifier, e.g. `route_20`.
     pub key: String,
-    /// The route's name, when the engine gives one; otherwise the code.
+    /// Engine-known route name, or `None` when unmapped.
     pub name: Option<String>,
 }
 
 /// Route names verified for Summer Pockets REFLECTION BLUE.
-///
-/// The game never writes these labels into a scene name, so they cannot be read
-/// from the engine. They are recorded here from the game's own structure: the
-/// scenario flow lists the routes, and these are its codes. Any code not listed
-/// keeps its number rather than being given an invented name.
+/// These labels are absent from scene names and come from the scenario flow;
+/// unrecognised codes keep their number rather than inventing a name.
 const SIGLUS_ROUTE_NAMES: &[(u32, &str)] = &[
     (10, "Common"),
     (20, "Shiroha"),
@@ -78,7 +74,6 @@ const SIGLUS_ROUTE_NAMES: &[(u32, &str)] = &[
     (70, "Final"),
 ];
 
-/// Build a route from its numeric code.
 #[must_use]
 pub fn route_from_code(code: u32) -> Route {
     let name = SIGLUS_ROUTE_NAMES
@@ -92,22 +87,14 @@ pub fn route_from_code(code: u32) -> Route {
     }
 }
 
-/// A stable key for a route the user named rather than the engine.
-///
-/// The prefix keeps manual and engine routes in separate key spaces: an engine
-/// route is always `route_<digits>`, so a manual route can never collide with one
-/// by sharing a label.
+/// Stable key for a user-named route (`route:` prefix prevents collision with `route_<digits>`).
 #[must_use]
 pub fn manual_route_key(label: &str) -> String {
     format!("route:{}", label.trim())
 }
 
-/// The label to show for a route code, when it is not one of [`SIGLUS_ROUTE_NAMES`].
-///
-/// Returning `None` here is what keeps [`route_from_code`] honest: an unrecognised
-/// code keeps its number instead of being given an invented name. The UI still has
-/// to render *something*, and a bare number reads as a bug, so this is the one place
-/// that decides how an unnamed route is titled.
+/// Display label for a route, falling back to `"Route <code>"` for unmapped engine codes
+/// so unnamed routes stay distinct from chapter rows with no route.
 #[must_use]
 pub fn route_label(key: Option<&str>, name: Option<&str>) -> String {
     if let Some(name) = name.map(str::trim).filter(|name| !name.is_empty()) {
@@ -116,13 +103,10 @@ pub fn route_label(key: Option<&str>, name: Option<&str>) -> String {
     let Some(key) = key else {
         return String::new();
     };
-    // `route_42` is the engine's own code for a route whose name is not recorded.
-    // Showing the code is truthful; showing nothing makes it indistinguishable
-    // from a chapter with no route at all.
     if let Some(code) = key.strip_prefix("route_") {
         return format!("Route {code}");
     }
-    // A manual route key already carries its label.
+    // Manual route key already carries its label.
     key.strip_prefix("route:").unwrap_or(key).to_owned()
 }
 

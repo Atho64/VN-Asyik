@@ -95,11 +95,8 @@ export function nextIndex(
 export type PadMove = "left" | "right" | "up" | "down" | null;
 
 /**
- * Read the first connected gamepad.
- *
- * The standard mapping puts the D-pad on buttons 12–15 and the left stick on axes
- * 0–1. A stick is only read past 0.5 so a resting thumb does not walk the grid.
- * The caller debounces: one press, one move.
+ * Reads the first connected gamepad (D-pad buttons 12-15, left stick axes 0-1
+ * past 0.5 deadzone); callers debounce edge transitions.
  */
 export function readPad(
   pads: (Gamepad | null | undefined)[],

@@ -1,13 +1,7 @@
-//! Turning a scene name into a chapter.
+//! Scene-name-to-chapter mapping ([`vn_core::chapter`]) and reader trait.
 //!
-//! The name-to-chapter mapping is pure logic and lives in [`vn_core::chapter`];
-//! this module is the thin reader trait the tracking loop calls.
-//!
-//! The in-memory reader that walked an engine's scene table went with the hook:
-//! it read another process's memory at offsets derived from injected byte
-//! patterns, which is precisely the mechanism that was removed. Chapter detection
-//! now comes from the window-title adapter, which needs no reader at all, so
-//! [`UnsupportedChapterReader`] is what every build provides.
+//! In-memory engine reading went with the removed hook; window-title parsing is
+//! the active source, so builds provide [`UnsupportedChapterReader`].
 
 use vn_core::chapter::{self, SceneRole};
 
@@ -71,12 +65,7 @@ pub fn chapter_from_scene(engine: &str, scene: &str) -> Option<Chapter> {
     }
 }
 
-/// A reader for builds with no implementation.
-///
-/// This is every platform now: chapter detection from engine memory went with the
-/// hook. Reading a scene table means reading another process's memory at offsets
-/// derived from injected patterns, and that is exactly what was removed. The
-/// window-title adapter is the path that remains, and it needs no reader.
+/// Fallback reader used on all builds because window-title parsing handles chapter detection.
 #[derive(Debug)]
 pub struct UnsupportedChapterReader;
 

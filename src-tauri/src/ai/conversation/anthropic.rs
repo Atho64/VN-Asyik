@@ -1,16 +1,7 @@
-//! Anthropic Messages API: streaming function calling.
+//! Anthropic Messages API streaming function-calling adapter.
 //!
-//! The Messages API is not OpenAI-shaped, so this translates in both directions:
-//!
-//! * the conversation the chat loop keeps is OpenAI-shaped (`tool_calls` on an
-//!   assistant turn, `role: "tool"` for a result), which maps to `tool_use` and
-//!   `tool_result` blocks;
-//! * the stream is a typed event stream (`content_block_start`,
-//!   `content_block_delta`, ...) rather than `choices[].delta`, which this reads
-//!   back into the same [`CompletionStream`] the `OpenAI` path produces, so the
-//!   loop above does not care which provider answered.
-//!
-//! No provider response body is ever logged.
+//! Translates OpenAI-shaped history and typed SSE events into [`CompletionStream`].
+//! Never logs provider response bodies.
 
 use crate::ai::chat::{ANTHROPIC_VERSION, ChatConfig};
 use crate::secrets::ChatApiKey;
@@ -210,12 +201,9 @@ fn tools(online: bool) -> Vec<Value> {
         .collect()
 }
 
-/// Translate the chat loop's OpenAI-shaped history into system + turns.
+/// Translates OpenAI-shaped chat history into `(system, turns)`.
 ///
-/// `role: "tool"` becomes a `tool_result` block in a user turn, which is how the
-/// Messages API reports a function result. Consecutive tool results share one
-/// user turn because the API rejects a turn with an empty content list and one
-/// turn per result would also break the call/result pairing it expects.
+/// Merges consecutive tool results into one user turn so empty turns and split call/result pairing are avoided.
 pub fn convert(messages: &[Value]) -> Result<(String, Vec<Value>), String> {
     let mut system = String::new();
     let mut turns: Vec<Value> = Vec::new();
@@ -360,9 +348,7 @@ mod tests {
         assert_eq!(stats["input_schema"]["properties"], json!({}));
     }
 
-    /// The streamed events of one reply, folded in order. This is the whole of the
-    /// wire handling: text, a tool call whose JSON arrives in fragments, and the
-    /// stop reason that says the turn was a call rather than an answer.
+    /// Folds streamed text, fragmented tool JSON, and stop reason into one completion.
     #[test]
     fn streamed_text_and_tool_calls_read_back_as_one_completion() {
         let events = [

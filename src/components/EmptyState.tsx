@@ -6,10 +6,7 @@ interface EmptyStateProps {
   action?: ReactNode;
 }
 
-/**
- * Empty state that names the cause and offers the one action that fills it
- * (antislop R-27). No illustration: art here would be decoration.
- */
+/** Empty state naming the cause and offering a single action to populate it. */
 export function EmptyState({ title, body, action }: EmptyStateProps) {
   return (
     <div className="empty">

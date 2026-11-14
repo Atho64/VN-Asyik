@@ -9,17 +9,7 @@ import { api, IpcError } from "@/lib/ipc/client";
 import type { Translator } from "@/i18n";
 import type { LlmProfile, LlmProfiles, LlmProvider } from "@/lib/ipc/types";
 
-/**
- * The optional chat provider, as a list of saved endpoints.
- *
- * Optional is the operative word: the taste profile works without this. The panel
- * says so, because a settings screen that implies the feature needs a key would
- * push users toward a paid API for something that runs locally for free.
- *
- * A profile is a name, an endpoint and a model; its key is stored separately, in
- * the credential store, so switching endpoints does not mean retyping keys and no
- * key is ever written to the database.
- */
+/** Optional chat endpoints; API keys are stored in the OS credential store rather than the database. */
 
 /**
  * Translate a rejected call.

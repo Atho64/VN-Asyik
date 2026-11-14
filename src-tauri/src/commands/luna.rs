@@ -35,10 +35,7 @@ pub async fn luna_status(state: State<'_, AppState>) -> CommandResult<LunaStatus
     Ok(state.luna().status().await)
 }
 
-/// One-shot probe of a base URL (the saved one, or a candidate the user is
-/// typing). Any HTTP response means `LunaTranslator`'s service is listening —
-/// including error statuses, since a listener answering is what we want to
-/// know before enabling.
+/// Probe a `LunaTranslator` base URL (saved or candidate); any HTTP response counts as reachable.
 #[tauri::command]
 pub async fn luna_test(
     state: State<'_, AppState>,

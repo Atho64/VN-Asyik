@@ -96,13 +96,7 @@ fn validate_client_id(raw: &str) -> CommandResult<String> {
     }
 }
 
-/// Normalize the user's VNDB profile link, or reject it.
-///
-/// The link becomes the URL of a Discord button, so it is held to the same rules
-/// as any other outbound link in this app: an `https` URL on `vndb.org`. Blank is
-/// allowed and simply means the second button is not shown. Rejecting here rather
-/// than only at render time is deliberate: a value that silently never appears on
-/// the card leaves the user adjusting the wrong switch.
+/// Validate and normalize an `https://vndb.org/...` profile link for the Discord button (blank hides the button).
 fn validate_profile_link(raw: &str) -> CommandResult<String> {
     let link = raw.trim();
     if link.is_empty() {
@@ -242,22 +236,8 @@ pub async fn presence_preview(
 }
 
 /// Build the activity payload for the in-app settings preview card.
-///
-/// The card's `large_image` is a URL for Discord to fetch, and the preview used
-/// to hand that URL straight to the `WebView`: the hosted one, or the remote
-/// `t.vndb.org` cover. Both made the preview depend on a network the app does not
-/// need — on Android system DNS may filter `files.catbox.moe`, and a filtered or
-/// offline connection leaves `t.vndb.org` unreachable — so the preview showed an
-/// empty art slot for an image already on disk. This replaces either URL with a
-/// `data:` URL of the local bytes:
-///
-/// - hosted (`ctx.rpc_image`): the exact bytes that were uploaded, so the
-///   preview stays gated on a real host success.
-/// - safe VNDB cover (`ctx.cover_url`): the cached cover, downscaled for the
-///   60 px art slot.
-///
-/// A cover that is neither hosted nor cached keeps its remote URL, because
-/// Discord can still fetch it even when this device cannot.
+/// Replaces hosted (`ctx.rpc_image`) and cached (`ctx.cover_url`) images with local `data:` URLs so the `WebView`
+/// renders immediately even offline or when system DNS filters `files.catbox.moe`; uncached covers keep their remote URL.
 async fn preview_card_activity(
     pool: &sqlx::SqlitePool,
     data_dir: &std::path::Path,
@@ -320,12 +300,7 @@ async fn preview_context(
             .map_err(|e| CommandError::new("invalid_id", e.to_string()))?;
         match queries::get_game(pool, entity_id).await? {
             Some(game) => {
-                // The VNDB facts and the link flag come from the same context the
-                // poll builds, not from the preview. It used to force the loading
-                // flag on so an unlinked game would not preview as "Loading VNDB
-                // data..."; that masked the real bug, where the *card itself*
-                // showed that placeholder forever on a game with no VNDB entry.
-                // Unlinked games now fall back to their local facts everywhere.
+                // Reuse the same context resolution as the poll loop so unlinked games fall back to local facts.
                 let mut base = presence::context_for_game(pool, &game).await;
                 let chapter = if game.vndb_id.is_some() {
                     Some("Chapter 1".to_string())
@@ -354,12 +329,7 @@ async fn preview_context(
     Ok(ctx)
 }
 
-/// A made-up session for the settings preview.
-///
-/// It has no cover on purpose: a cover URL here would make the webview fetch an
-/// image from VNDB's CDN every time the settings screen opens, for a game the
-/// user may not own, which is a network request nobody asked for. `date` / `time`
-/// are filled by the caller with the real clock, not stored here.
+/// Synthetic preview session without cover URLs (avoids unrequested VNDB CDN loads on settings open; caller fills `date`/`time`).
 fn sample_preview_context() -> PresenceContext {
     PresenceContext {
         vn_name: "Steins;Gate".to_string(),
@@ -612,10 +582,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    /// A safe VNDB cover is never uploaded, so the card carries the remote URL.
-    /// The preview painted that URL straight into the `WebView`, which left the
-    /// art slot empty on a filtered or offline connection even though the app had
-    /// the cover on disk and the library showed it.
     #[tokio::test]
     async fn the_preview_paints_a_cached_vndb_cover_instead_of_its_remote_url() {
         let db = crate::db::Db::open_memory().await.expect("db");

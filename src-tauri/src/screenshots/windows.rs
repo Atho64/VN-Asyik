@@ -1,9 +1,4 @@
-//! One-shot capture of a running game's window.
-//!
-//! The D3D11 and COM plumbing lives in `companion::vision::windows`; this module
-//! only turns its frame into the shape the screenshot store wants. Duplicating
-//! that capture code here would mean two unsafe implementations of the same
-//! thing, and only one of them would be exercised.
+//! One-shot window capture delegating D3D11/COM plumbing to `companion::vision::windows`.
 
 use super::{Captured, ScreenshotError};
 
@@ -40,19 +35,8 @@ fn classify(code: &'static str) -> ScreenshotError {
 mod tests {
     use super::*;
 
-    /// Live check: a real window, a real frame.
-    ///
-    /// Ignored by default because it opens a GUI window and needs a desktop
-    /// session. Run it by hand when touching the capture path:
-    ///
-    /// ```text
-    /// cargo test --lib capture -- --ignored --nocapture
-    /// ```
-    ///
-    /// Why it exists: a compile check proves the COM plumbing links, not that a
-    /// frame comes out. A wrong pixel format, a frame pool that never produces,
-    /// or a staging copy with the wrong stride all look identical to the app
-    /// ("the button did nothing") and are only visible against a live window.
+    /// Live capture smoke test (ignored by default; needs a desktop GUI session).
+    /// Run with `cargo test --lib capture -- --ignored --nocapture`.
     #[test]
     #[ignore = "opens a window and needs a live desktop session"]
     fn a_real_window_produces_a_non_blank_frame() {

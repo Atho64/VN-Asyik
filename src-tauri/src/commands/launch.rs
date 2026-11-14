@@ -21,12 +21,7 @@ use crate::state::AppState;
 const LE_DIR_KEY: &str = "locale.launcherDir";
 /// Setting key holding the chosen locale profile GUID.
 const LE_GUID_KEY: &str = "locale.guid";
-/// Setting key holding an explicit "do not use Locale Emulator" flag.
-///
-/// Separate from clearing the directory, because the two mean different things:
-/// a configured folder with this set is "I have it, keep it configured, but start
-/// this my own way". Without it the only way to disable the emulator was to forget
-/// where it lived.
+/// Explicit opt-out flag (`locale.disabled`), distinct from clearing `locale.launcherDir` so the path stays saved.
 const LE_DISABLED_KEY: &str = "locale.disabled";
 
 /// What Locale Emulator will do for the next launch.
@@ -35,9 +30,7 @@ const LE_DISABLED_KEY: &str = "locale.disabled";
 pub enum EmulatorState {
     /// No launcher was found in the configured folder or beside the game.
     NotInstalled,
-    /// Found and usable, but no Japanese profile is chosen, so launches go direct.
-    ///
-    /// This is the state that used to render the "Japanese locale" badge.
+    /// Installed and usable, but no Japanese profile is selected so launches run directly.
     NoProfile,
     /// Found, enabled and configured: a launch goes through the emulator.
     Ready,
@@ -59,13 +52,7 @@ impl EmulatorState {
 pub struct LaunchCapability {
     /// Whether a game can be started at all on this platform.
     pub can_launch: bool,
-    /// Whether a locale emulator was found, and what it will actually do.
-    ///
-    /// One value rather than `has_emulator`/`emulator_enabled`/`will_localize`
-    /// booleans, because those three were mutually constrained: only one
-    /// combination is truthful at a time, and keeping them separate let the UI key
-    /// a "starts in Japanese" badge off "a file exists on disk", which is what made
-    /// it promise localization the launch then skipped.
+    /// Resolved Locale Emulator state (single enum instead of independent booleans so UI badges match `will_localize`).
     pub emulator: EmulatorState,
     /// Where it was found, for the UI to show.
     pub emulator_path: Option<String>,
@@ -523,10 +510,7 @@ mod tests {
         );
     }
 
-    /// The reported bug: with the emulator installed and a folder configured but
-    /// no profile chosen, the badge claimed "Japanese locale" while `plan()` started
-    /// the game directly. `has_emulator` is a fact about the disk; `will_localize`
-    /// is the promise the UI needs.
+    /// `will_localize` must stay false when an emulator binary exists without a selected profile.
     #[cfg(target_os = "windows")]
     #[test]
     fn a_found_emulator_without_a_profile_does_not_claim_localization() {

@@ -202,7 +202,7 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
         mainHandler.postDelayed(connectTimeoutRunnable, CONNECT_TIMEOUT_MS)
     }
 
-    /** Resets per-socket state. Caller holds the plugin lock. */
+    /** Caller holds the plugin lock. */
     private fun markSocketDown() {
         isConnected = false
         isConnecting = false
@@ -253,7 +253,6 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
         wakeLock = null
     }
 
-    /** Called once the gateway accepted the session (READY or RESUMED). */
     private fun onSessionEstablished() {
         isConnected = true
         isConnecting = false
@@ -336,10 +335,7 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
             synchronized(this@DiscordGatewayPlugin) {
                 if (ws !== webSocket) return@synchronized
                 if (!heartbeatAcked) {
-                    // Zombied connection (common on mobile networks): the previous
-                    // heartbeat was never acknowledged. Drop the socket without a
-                    // 1000 close so the session stays resumable; `cancel` fires
-                    // onFailure, which schedules the reconnect.
+                    // Unacked heartbeat indicates a zombied mobile socket; cancel without close 1000 so it stays resumable.
                     lastError = "Gateway heartbeat timed out"
                     ws.cancel()
                     return@synchronized
@@ -401,14 +397,8 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     /**
-     * Converts a public image URL into Discord's `mp:external/...` media-proxy key.
-     *
-     * Gateway presence renders only application asset keys and media-proxy keys:
-     * a raw URL in `large_image` is silently ignored, which is why the card had
-     * no artwork on Android. `POST /applications/{id}/external-assets` is the
-     * proxy call the Discord client itself makes; it is resolved once per URL
-     * here and cached for the session. Any failure falls back to the raw URL,
-     * which is exactly the previous behaviour.
+     * Resolves an HTTP(S) image URL to Discord's `mp:external/...` media-proxy key, cached per session.
+     * Gateway presence silently drops raw `large_image` URLs; errors fall back to the raw URL.
      */
     private fun resolveExternalAsset(url: String, authToken: String?, clientId: String?): String {
         val isHttp = url.startsWith("http://") || url.startsWith("https://")
@@ -625,10 +615,7 @@ class DiscordGatewayPlugin(private val activity: Activity) : Plugin(activity) {
             }
             lastActivityJson = null
             if (shouldStayConnected && token != null) {
-                // Keep the gateway session warm instead of tearing it down: a clear is
-                // sent whenever tracking sees "nothing running", including brief gaps
-                // while the user switches apps, and a full reconnect each time looked
-                // like the RPC dropping by itself. Disconnect only after a real idle.
+                // Keep the gateway warm across brief app switches; disconnect only after IDLE_DISCONNECT_MS.
                 PresenceForegroundService.start(activity, "VN Asyik", "Discord Rich Presence idle")
                 mainHandler.removeCallbacks(idleDisconnectRunnable)
                 mainHandler.postDelayed(idleDisconnectRunnable, IDLE_DISCONNECT_MS)

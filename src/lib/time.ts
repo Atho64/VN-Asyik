@@ -13,15 +13,7 @@ export const MS_PER_MINUTE = 60_000;
 export const MS_PER_HOUR = 3_600_000;
 export const MS_PER_DAY = 86_400_000;
 
-/**
- * Whether a duration is real but shorter than one minute.
- *
- * The tracker records in short slices (roughly four seconds of counted time per
- * poll), so a genuine session regularly lands between one and 59 seconds. Flooring
- * that to whole minutes printed "0 min" for time the user actually spent reading,
- * which reads as a tracking failure rather than a short session. Mirrors
- * `vn_core::time_fmt::is_sub_minute`; the two must agree.
- */
+/** True for nonzero durations under one minute (`1s..59s`); mirrors `vn_core::time_fmt::is_sub_minute`. */
 export function isSubMinute(ms: number): boolean {
   return Number.isFinite(ms) && ms > 0 && ms < MS_PER_MINUTE;
 }
@@ -37,21 +29,11 @@ const COMPACT_UNITS: Record<
   { h: string; m: string; s: string; sep: string }
 > = {
   en: { h: "h", m: "m", s: "s", sep: "" },
-  // Indonesian words, abbreviated the way readers write them. Single letters
-  // would be shorter but `d` already means day, so `dtk` cannot be misread, and
-  // the abbreviation takes a space because that is how it is written.
+  // Indonesian uses `dtk` (`d` already denotes days) and space-separated units.
   id: { h: "j", m: "mnt", s: "dtk", sep: " " },
 };
 
-/**
- * Compact duration in units: `45s`, `12m`, `1h 20m` (`45 dtk`, `12 mnt`,
- * `1 j 20 mnt` in Indonesian).
- *
- * The old `0:06` shape was ambiguous in the one place the difference matters:
- * six seconds and six minutes printed identically, and whether a chapter had 6 s
- * or 6 min behind it is exactly the question a playtime tracker must answer.
- * Units say it outright, and they localise: Indonesian reads `dtk`, `mnt`, `j`.
- */
+/** Formats compact durations with explicit units (`45s`, `12m`, `1h 20m` / `45 dtk`, `12 mnt`, `1 j 20 mnt`). */
 export function formatDuration(ms: number, locale: Locale = "en"): string {
   const unit = COMPACT_UNITS[locale] ?? COMPACT_UNITS.en;
   const totalSeconds = Number.isFinite(ms) ? Math.floor(Math.max(ms, 0) / MS_PER_SECOND) : 0;
@@ -68,8 +50,7 @@ export function formatDuration(ms: number, locale: Locale = "en"): string {
 /** `12h 40m`, the readable form for detail headers and stats. */
 export function formatDurationLong(ms: number, locale = "en"): string {
   if (!Number.isFinite(ms) || ms <= 0) return locale === "id" ? "0 menit" : "0 min";
-  // Under a minute, report seconds. This is the fix for sessions shown as
-  // "0 menit" while carrying real counted time.
+  // Report sub-minute sessions in seconds so short active tracking does not show 0 min.
   if (isSubMinute(ms)) {
     const seconds = secondsOf(ms);
     return locale === "id" ? `${seconds} detik` : `${seconds} s`;
@@ -131,12 +112,7 @@ export function parseTimeInput(value: string): { hours: number; minutes: number 
   return { hours, minutes };
 }
 
-/**
- * Build a UTC timestamp from a local date string (`YYYY-MM-DD`) plus a time.
- *
- * Uses the browser's local timezone on purpose: users enter the session they
- * remember, in the clock they remember it by.
- */
+/** Parses local `YYYY-MM-DD` and `HH:MM` into a UTC timestamp (uses local wall-clock timezone). */
 export function localDateTimeToMs(date: string, time: string): number | null {
   const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
   const parsedTime = parseTimeInput(time);

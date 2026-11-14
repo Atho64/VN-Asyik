@@ -52,7 +52,6 @@ async fn collect_candidate_titles(
         }
     };
 
-    // 1. Fetch title, title_original, and vndb_id from `games` table
     let mut game_vn_id = None;
     if let Ok(Some((title, title_orig, db_vn_id))) =
         sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
@@ -64,14 +63,13 @@ async fn collect_candidate_titles(
     {
         game_vn_id = db_vn_id;
 
-        // PRIORITIZE JAPANESE TITLE: add title_original FIRST so Japanese matching ranks at the top!
+        // Prioritize Japanese original title first for higher Seiya-Saiga match rank.
         if let Some(orig) = title_orig {
             add_with_subtitles(&orig, &mut add_candidate);
         }
         add_with_subtitles(&title, &mut add_candidate);
     }
 
-    // 2. VNDB titles and aliases
     let target_vn_id = vn_id.map(ToString::to_string).or(game_vn_id);
     if let Some(ref vid) = target_vn_id {
         let row: Option<VndbDetailsRow> = sqlx::query_as(
@@ -83,7 +81,6 @@ async fn collect_candidate_titles(
         .unwrap_or(None);
 
         if let Some((v_title, alttitle, titles_json, aliases_json)) = row {
-            // Priority to Japanese alttitle
             if let Some(alt) = alttitle {
                 add_with_subtitles(&alt, &mut add_candidate);
             }
@@ -163,7 +160,6 @@ pub async fn walkthrough_fetch(
 ) -> CommandResult<WalkthroughView> {
     let client = build_seiya_client().map_err(error)?;
 
-    // Determine target URL
     let target_url = if let Some(custom_url) = url {
         let trimmed = custom_url.trim().to_string();
         if trimmed.is_empty() {
@@ -219,8 +215,6 @@ pub async fn walkthrough_translate(
     let glossary =
         crate::walkthrough::load_character_glossary(state.db().pool(), vn_id.as_deref()).await;
 
-    // Collect all strings that need translation:
-    // Route titles + item texts
     let mut texts_to_translate = Vec::new();
     for route in &existing.routes {
         texts_to_translate.push(route.title.clone());
@@ -239,7 +233,6 @@ pub async fn walkthrough_translate(
             .await
             .map_err(error)?
     } else {
-        // AI translation, through the active saved profile.
         let chat = crate::ai::profiles::resolve(state.db().pool()).await;
         translate_batch_ai(
             &http,
@@ -253,7 +246,6 @@ pub async fn walkthrough_translate(
         .map_err(error)?
     };
 
-    // Reconstruct translated routes
     let mut str_ptr = 0;
     let mut mapped_routes = Vec::new();
     for route in &existing.routes {

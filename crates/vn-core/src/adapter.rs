@@ -1,44 +1,26 @@
 //! Choosing which chapter-detection strategy to try, and in what order.
 //!
-//! # Why the order is data rather than `if` statements
-//!
-//! Chapter detection has several independent sources, and they are not
-//! interchangeable. A window-title read is cheap, allocates nothing, and cannot
-//! destabilise the game; a memory read opens a handle and walks engine
-//! structures. Which sources exist at all depends on the engine, the platform,
-//! and whether the user opted into hooks.
-//!
-//! Hardcoding the order in the poll loop made those trade-offs invisible and
-//! untestable: every new source meant editing the loop and hoping. Here the
-//! candidates are described as data, so the policy can be unit-tested on a
-//! machine with no games on it, and an adapter that is unavailable on the
-//! current platform reports that instead of silently contributing nothing.
+//! Describing candidates as data makes cost/safety trade-offs explicit and
+//! unit-testable without a running game, and lets unavailable sources report
+//! their platform reason instead of silently failing.
 
 use serde::{Deserialize, Serialize};
 
-/// A source of chapter information.
-///
-/// Ordered by cost, cheapest first: the enum's declaration order is the order
-/// they are tried in, and a test pins that so reordering is a deliberate act.
+/// A source of chapter information, ordered cheapest first (pinned by test).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChapterSource {
-    /// The focused window's caption. No injection, no offsets. Survives game
-    /// updates that break offset chains, so it is tried first wherever an
-    /// engine is known to write chapters there.
+    /// Focused window caption: no injection or offsets; survives game updates.
     WindowTitle,
-    /// The engine's in-memory scene table. Needs a verified, versioned offset
-    /// profile per engine build, and only where the engine keeps such a table.
+    /// Engine's in-memory scene table: needs a verified, versioned offset profile.
     MemoryScene,
 }
 
 impl ChapterSource {
-    /// Why this source might be unavailable, for the UI to explain rather than
-    /// show a dead panel.
+    /// Why this source might be unavailable on `platform`, for UI reporting.
     pub fn unavailable_reason(self, platform: Platform) -> UnavailableReason {
         match (self, platform) {
-            // Reading another process is a Windows-only capability here. It is
-            // not that the code is missing: Android genuinely cannot do it.
+            // Android and macOS prohibit cross-process memory reads.
             (ChapterSource::MemoryScene, Platform::Android | Platform::MacOs) => {
                 UnavailableReason::PlatformCannotReadOtherProcesses
             }
@@ -50,10 +32,8 @@ impl ChapterSource {
     }
 }
 
-/// The platform a decision is being made for.
-///
-/// Passed explicitly rather than read from `cfg!` so the policy can be tested
-/// for every platform from one machine.
+/// Target platform, passed explicitly so every platform's policy can be tested
+/// from one machine without reading `cfg!`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Platform {
@@ -64,7 +44,6 @@ pub enum Platform {
 }
 
 impl Platform {
-    /// The platform this build is running on.
     pub const fn current() -> Self {
         #[cfg(target_os = "windows")]
         {
@@ -94,9 +73,7 @@ impl Platform {
 #[serde(rename_all = "snake_case")]
 pub enum UnavailableReason {
     Available,
-    /// The OS does not let one process read another's memory.
     PlatformCannotReadOtherProcesses,
-    /// The OS does not expose another app's window title.
     PlatformHasNoWindowTitles,
 }
 
@@ -106,22 +83,16 @@ impl UnavailableReason {
     }
 }
 
-/// The sources to try, in order, for one engine on one platform.
-///
-/// `engine` is the detected engine family (`siglus`, `kirikiri`, `artemis`), or
-/// `None` when nothing was detected. An unknown engine still gets the
-/// window-title source, because that needs nothing from the engine: it either
-/// parses or it does not.
+/// Sources to try in order for `engine` (`siglus`, `kirikiri`, `artemis`, or `None`)
+/// on `platform`. Unknown engines still try window titles because parsing needs no engine support.
 pub fn source_order(engine: Option<&str>, platform: Platform) -> Vec<ChapterSource> {
     let mut sources = Vec::new();
 
-    // Title first, always: cheapest, and safest for the game process.
+    // Title first: cheapest and safest for the game process.
     if engine.is_none() || engine_writes_title_chapters(engine) {
         sources.push(ChapterSource::WindowTitle);
     }
 
-    // Memory only for engines with a verified table, and only where the OS
-    // permits it.
     if engine.is_some_and(engine_has_scene_table)
         && ChapterSource::MemoryScene
             .unavailable_reason(platform)
@@ -133,15 +104,10 @@ pub fn source_order(engine: Option<&str>, platform: Platform) -> Vec<ChapterSour
     sources
 }
 
-/// Engines this build can name at all.
-///
-/// Naming an engine is not the same as being able to read a chapter out of it.
-/// Since the in-process hook was removed, no engine can be identified by scanning
-/// a running process, so these names exist for the user's own engine selection and
-/// for the window-title profiles. Nothing here implies detection.
+/// Engine families this build can name for user selection and window-title profiles.
+/// Listing a name does not imply automatic process detection.
 pub const KNOWN_ENGINES: &[&str] = &["siglus", "kirikiri", "artemis"];
 
-/// Whether `engine` is an engine family this build recognises.
 #[must_use]
 pub fn is_known_engine(engine: &str) -> bool {
     KNOWN_ENGINES
@@ -151,11 +117,8 @@ pub fn is_known_engine(engine: &str) -> bool {
 
 /// Engines verified to write a chapter marker into the window title.
 ///
-/// Only Siglus, confirmed live against `Summer Pockets REFLECTION BLUE`, whose
-/// caption is the game, an optional section, then a month and day in full-width
-/// digits. `KiriKiri` sets its caption to the game name alone, so a title read
-/// there would attribute nothing. Do not widen this without a live capture: a
-/// wrong entry silently produces chapters named after the game itself.
+/// Siglus only (`Summer Pockets REFLECTION BLUE`); `KiriKiri` sets its caption to
+/// the game name alone. Do not widen without a live capture.
 pub fn engine_writes_title_chapters(engine: Option<&str>) -> bool {
     matches!(
         engine.map(str::to_ascii_lowercase).as_deref(),
@@ -163,10 +126,7 @@ pub fn engine_writes_title_chapters(engine: Option<&str>) -> bool {
     )
 }
 
-/// Engines with a verified in-memory scene table.
-///
-/// Siglus only. Its table was reverse-engineered and confirmed live; see
-/// `crate::scene` for the offsets and their provenance.
+/// Engines with a verified in-memory scene table (Siglus only; see `crate::scene`).
 pub fn engine_has_scene_table(engine: &str) -> bool {
     matches!(engine.to_ascii_lowercase().as_str(), "siglus")
 }

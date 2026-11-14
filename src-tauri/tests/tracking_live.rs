@@ -1,12 +1,4 @@
-//! Live verification of the tracker against the real Windows probe.
-//!
-//! These are `#[ignore]`d by default because they depend on what is on screen and
-//! how long they run, and a normal `cargo test` must stay deterministic. Run them
-//! with:
-//!
-//! ```text
-//! cargo test --test tracking_live -- --ignored --nocapture
-//! ```
+//! Live Windows tracker tests against `WindowsProbe` (ignored by default; run with `cargo test --test tracking_live -- --ignored --nocapture`).
 
 #![cfg(windows)]
 
@@ -54,13 +46,7 @@ fn the_real_probe_reads_foreground_presence_and_processes() {
     assert!(probe.is_running(std::process::id()).expect("self"));
 }
 
-/// The real service, driven by the real probe, must accrue time for a process it
-/// is told to track.
-///
-/// This is the important one: it exercises the actual poll loop, the real Win32
-/// calls and the real database together. It tracks **this test process**, whose
-/// pid is known, rather than trying to steal focus from a game, which Windows'
-/// foreground lock makes unreliable to automate.
+/// Exercises the real poll loop, Win32 probe, and DB together using this test PID (requires foreground terminal).
 #[tokio::test]
 #[ignore = "runs the real poll loop for a few seconds"]
 async fn the_real_loop_accrues_time_for_a_tracked_process() {
@@ -74,10 +60,7 @@ async fn the_real_loop_accrues_time_for_a_tracked_process() {
     let probe: Arc<dyn SystemProbe> = Arc::new(WindowsProbe::new().expect("probe"));
     let service = TrackingService::with_probe(probe, now());
 
-    // Track ourselves so the pid is guaranteed to exist and be ours. The loop
-    // treats the foreground window as the focus signal, so time only accrues
-    // while this test's terminal owns the foreground; the assertion therefore
-    // checks the plumbing rather than a fixed number of seconds.
+    // Track our own PID; foreground focus determines whether seconds accrue during the run.
     let self_pid = std::process::id();
     let self_exe = std::env::current_exe()
         .expect("exe")

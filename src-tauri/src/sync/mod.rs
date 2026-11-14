@@ -1,31 +1,6 @@
-//! Folder-based synchronisation.
-//!
-//! # Why a folder rather than a server
-//!
-//! The library is personal data. Pushing it through someone else's service means
-//! trusting that service with it, and running one means asking the user to host
-//! something. A folder the user already syncs (Syncthing, Nextcloud, a network
-//! share, a USB stick) needs neither, works offline, and keeps the peer-to-peer
-//! story honest: no account, no telemetry, no hidden requests.
-//!
-//! # The protocol
-//!
-//! Each device writes one file, `vn-asyik-<device_id>.json`, containing its whole
-//! library. Sync reads every peer file in the folder, merges each into local state
-//! with [`vn_core::sync`], then rewrites its own file with the merged result.
-//!
-//! Whole-library payloads are deliberate. A delta protocol would be smaller, but
-//! it needs a change journal that survives crashes and handles compaction; with a
-//! personal library of a few thousand rows the JSON is small, and correctness is
-//! worth more than bytes here. A merge is also idempotent, so a repeated or
-//! interrupted sync converges rather than corrupting.
-//!
-//! # Ordering
-//!
-//! Merging is commutative: every peer's rows are merged in, and the local file is
-//! rewritten from the result. Two devices that sync in either order end with the
-//! same rows, which is what makes an eventually-consistent folder safe. Sessions
-//! are append-only and merge by identity, never overwritten.
+//! Folder-based peer-to-peer sync (no account, server, or telemetry; works over Syncthing, Nextcloud, shares, or USB).
+//! Each device writes `vn-asyik-<device_id>.json` with its whole library, merges peer files via [`vn_core::sync`],
+//! and rewrites its own file; merges are commutative and idempotent, and play sessions remain append-only by ID.
 
 use std::path::{Path, PathBuf};
 
@@ -41,58 +16,40 @@ use vn_core::sync::{self, Conflict, MetaFields, Reason, Side};
 
 use crate::db::{DbError, queries};
 
-/// Prefix and suffix identifying a payload file in a shared folder.
 const FILE_PREFIX: &str = "vn-asyik-";
 const FILE_SUFFIX: &str = ".json";
 
-/// The on-disk payload one device writes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncPayload {
-    /// Schema this payload was written with. A newer one is refused, not guessed.
+    /// A newer schema version is refused rather than guessed.
     pub schema_version: u32,
-    /// Which device wrote the file.
     pub device_id: String,
-    /// When it was written, for the UI to show freshness.
     pub written_at_ms: i64,
-    /// Incremented by the writer each time it rewrites the file.
     pub generation: u64,
-    /// Live and deleted games. Tombstones travel so deletes propagate.
+    /// Includes tombstones so deletes propagate.
     pub games: Vec<Game>,
-    /// Live and deleted routes.
-    ///
-    /// Defaulted so a version-20 file written before this field existed still
-    /// loads: the incoming library simply has no routes to contribute, and the
-    /// local ones survive untouched.
+    /// Defaulted so pre-route v20 payloads load without dropping local routes.
     #[serde(default)]
     pub routes: Vec<Route>,
-    /// Live and deleted chapters.
     pub chapters: Vec<Chapter>,
-    /// Sessions are append-only and are never tombstoned.
+    /// Append-only; never tombstoned.
     pub sessions: Vec<PlaySession>,
-    /// Live and deleted endings.
     pub endings: Vec<Ending>,
-    /// User-written checkpoints; absent in pre-journal payloads.
+    /// Absent in pre-journal payloads.
     #[serde(default)]
     pub reading_entries: Vec<ReadingEntry>,
 }
 
-/// What one sync run did.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncOutcome {
-    /// Peers read from the folder.
     pub peers: usize,
-    /// Rows written locally because a peer's copy won.
     pub pulled: usize,
-    /// Rows this device's file now carries that a peer did not have.
     pub pushed: usize,
-    /// Conflicts resolved, in the order they were applied.
     pub conflicts: Vec<AppliedConflict>,
-    /// Peer files that could not be read, with the reason.
     pub skipped: Vec<SkippedPeer>,
 }
 
-/// A conflict that was resolved and logged.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppliedConflict {
@@ -103,7 +60,6 @@ pub struct AppliedConflict {
     pub discarded_updated_at_ms: i64,
 }
 
-/// A peer file that was ignored.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkippedPeer {
@@ -111,41 +67,27 @@ pub struct SkippedPeer {
     pub reason: String,
 }
 
-/// Errors a sync can fail with.
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
-    /// The folder does not exist or is not a directory.
     #[error("sync folder is not usable: {0}")]
     BadFolder(String),
-    /// A payload was written by a newer version of the app.
     #[error("payload schema {found} is newer than this app supports ({max})")]
-    PayloadTooNew {
-        /// Schema found in the file.
-        found: u32,
-        /// Highest schema this build understands.
-        max: u32,
-    },
-    /// Filesystem trouble.
+    PayloadTooNew { found: u32, max: u32 },
     #[error("sync i/o failed: {0}")]
     Io(#[from] std::io::Error),
-    /// Database trouble.
     #[error(transparent)]
     Db(#[from] DbError),
-    /// Serialisation trouble.
     #[error("could not encode payload: {0}")]
     Encode(#[from] serde_json::Error),
-    /// No device id has been created yet.
     #[error("device id is not initialised")]
     NoDeviceId,
 }
 
-/// The file name for a device's payload.
 #[must_use]
 pub fn payload_file_name(device: &str) -> String {
     format!("{FILE_PREFIX}{device}{FILE_SUFFIX}")
 }
 
-/// Whether a path is a payload file.
 #[must_use]
 fn is_payload(path: &Path) -> bool {
     path.file_name()
@@ -308,10 +250,7 @@ pub async fn sync_folder(
         apply_payload(pool, &payload, &mut outcome).await?;
     }
 
-    // Always publish our own file, even when there was no peer to merge with.
-    // Writing only after a successful merge left the first device on a fresh
-    // folder with nothing to publish, so the second device had nothing to read and
-    // the two never converged.
+    // Always publish our own file, even with no peers yet, so a second device has something to read.
     {
         let local = collect_local(pool, device).await?;
         let generation = read_generation(folder, &own_file).map_or(1, |value| value + 1);
@@ -327,7 +266,6 @@ pub async fn sync_folder(
     Ok(outcome)
 }
 
-/// Read the generation counter from our existing file, if any.
 fn read_generation(folder: &Path, own_file: &str) -> Option<u64> {
     let text = std::fs::read_to_string(folder.join(own_file)).ok()?;
     let payload: SyncPayload = serde_json::from_str(&text).ok()?;
@@ -349,7 +287,6 @@ async fn local_row_count(pool: &SqlitePool) -> Result<usize, DbError> {
     Ok(games)
 }
 
-/// Merge one peer's payload into the database.
 async fn apply_payload(
     pool: &SqlitePool,
     payload: &SyncPayload,
@@ -466,7 +403,6 @@ async fn apply_payload(
     Ok(())
 }
 
-/// Whether `merged` differs from what is stored, so a write is needed.
 fn should_write<T: MetaFields + PartialEq>(local: &[T], merged: &T) -> bool {
     match local.iter().find(|row| row.meta().id == merged.meta().id) {
         None => true,

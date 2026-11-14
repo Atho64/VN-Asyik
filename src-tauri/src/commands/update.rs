@@ -1,11 +1,5 @@
-//! Checking GitHub Releases for a newer build, and installing one on request.
-//!
-//! The app has no signed update channel: releases are published by a tag push and
-//! every one of them is a pre-release, so `/releases/latest` (which skips them) is
-//! the wrong endpoint and the version numbers have to be compared here.
-//!
-//! Nothing here runs on startup on its own. The library asks once per launch
-//! through [`update_check`], which answers from a cached result most of the time.
+//! GitHub Releases update checker and optional Windows installer launcher.
+//! Compares semver manually against pre-releases (since `/releases/latest` skips tag pre-releases); only triggered explicitly via [`update_check`].
 
 use std::io::Write as _;
 
@@ -338,11 +332,7 @@ fn has_extension(name: &str, extensions: &[&str]) -> bool {
         })
 }
 
-/// The file name an asset download may use.
-///
-/// Asset names come from the release, which is not a trusted path: a name with a
-/// separator, a parent link or a leading dot is refused rather than joined onto
-/// the download folder.
+/// Sanitize a release asset filename, rejecting path separators, traversal segments, and leading dots.
 fn safe_file_name(name: &str) -> Option<&str> {
     let base = std::path::Path::new(name).file_name()?.to_str()?;
     // `is_separator` covers both separators on Windows and the one elsewhere,

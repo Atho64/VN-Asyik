@@ -26,34 +26,19 @@ use serde::{Deserialize, Serialize};
 pub const MAX_LINE_CHARS: usize = 4_000;
 /// Longest accepted speaker label, in characters.
 pub const MAX_SPEAKER_CHARS: usize = 120;
-/// Most accepted lines per document. Real whole-game scripts reach a few
-/// hundred thousand lines; past that the file is almost certainly not a script.
+/// Most accepted lines per document; past this the file is unlikely to be a script.
 pub const MAX_LINES: usize = 300_000;
-/// Default chunk budget for compaction, in UTF-8 bytes. Roughly 12k tokens of
-/// Japanese text. Each chunk costs one provider call, and whole-game scripts
-/// were spending hundreds of calls at the old 12 KB (3k tokens) budget, so the
-/// budget was quadrupled (phase 19B): 12k tokens still leaves a 16k-token
-/// context room for the outline. Pinned by a test because stored compaction
-/// progress counts chunks against this budget.
+/// Default UTF-8 compaction chunk budget (~12k Japanese tokens; leaves 16k context room
+/// for the outline). Pinned by a test because stored progress counts chunks against it.
 pub const DEFAULT_CHUNK_BYTES: usize = 48_000;
 /// Most summarizer agents one compaction runs in parallel (owner cap).
 pub const MAX_AGENTS: usize = 10;
-/// Default summarizer agent count when the user has not chosen one. Modest on
-/// purpose: every agent is a concurrent provider call, and small endpoints
-/// rate-limit long before ten agents pay off.
+/// Default summarizer agent count; kept modest because each agent is a concurrent call.
 pub const DEFAULT_AGENTS: usize = 3;
-/// Version of the compaction pipeline (prompts, context strategy, agent
-/// layout). Stored with each run's progress: bumping it restarts in-flight
-/// compactions exactly like a model change does, so summaries from two
-/// pipelines never mix. 3 = expanded generation token budget (8192) and
-/// clean sentence boundary truncation guards; 2 = question-oriented story
-/// digests that preserve branches, chronology and uncertainty; 1 = the
-/// phase 19C multi-agent pipeline with rolling context; 0 marks phase
-/// 18/19B single-threaded rows.
+/// Compaction pipeline version; bumping restarts in-flight runs so outputs from
+/// different prompts or context layouts never mix.
 pub const COMPACTOR_VERSION: u32 = 3;
-/// Characters of the previous chunk's outline passed to the next map call as
-/// rolling context: enough to carry names and scene threads across a chunk
-/// boundary without re-feeding whole outlines.
+/// Characters of the previous chunk's outline passed to the next map call as rolling context.
 pub const ROLLING_CONTEXT_CHARS: usize = 1_500;
 
 /// One normalized dialogue line. `speaker` is `None` for narration.
@@ -493,43 +478,21 @@ pub fn plan_agents(chunk_count: usize, agents: usize) -> Vec<(usize, usize)> {
     ranges
 }
 
-/// Map-step prompt: compress one chunk. Summaries feed later question
-/// answering, so the prompt forbids interpretation for the same reason the
-/// chat system prompt does — an invented motive is indistinguishable from a
-/// real one once it is in the digest. The word cap scales with the chunk
-/// budget (400 words for the 48 KB default) so a bigger chunk does not silently
-/// lose the density the reduce step depends on. Each call after the first in a
-/// segment also receives the previous chunk's outline as rolling context; the
-/// prompt scopes it to resolving who is being discussed, never re-summarizing
-/// it, so an agent's memory cannot leak into another chunk's outline.
+/// Map-step prompt for one chunk (400-word cap scales with the 48 KB default
+/// budget; forbids speculation and scopes rolling context to resolving references).
 pub const MAP_SYSTEM_PROMPT: &str = "You create a factual story index for one chunk of a visual novel script. A later assistant answers detailed questions using only your index, so preserve evidence instead of writing a polished summary. Record in story order: exact speaker labels, named characters present, setting and scene transitions, important actions and revelations, choices shown to the player, and route or branch labels only when the text supplies them. Preserve short distinctive details, named objects, promises, conflicts, and changes in stated relationships. Distinguish dialogue, narration, dreams, recollections, and hypotheses; never turn a character's belief into a fact, and do not invent anything. When the text does not establish a motive, identity, chronology or route, write that it is unknown instead of inferring it. You may receive the preceding chunk's index for continuity only: use it to resolve references, never repeat or extend it. Do not add outside knowledge, predictions, literary analysis or invented quotations. Use compact plain text, no headers, at most 400 words.";
 
-/// Segment-reduce prompt: one summarizer agent merges its own segment's
-/// outlines into that segment's digest.
+/// Segment-reduce prompt: merges one agent's segment outlines into its digest.
 pub const SEGMENT_REDUCE_SYSTEM_PROMPT: &str = "You merge chunk indexes from one contiguous segment of a visual novel into a factual story index for later question answering. Preserve exact character names, chronology, scene transitions, player choices, explicit route or branch labels, important revelations, and unresolved questions. Keep a relationship change only when the evidence states or demonstrates it. Distinguish observed events from dialogue, recollections, dreams and speculation. Remove repeated wording without erasing distinct events or branches. If two indexes conflict, retain the conflict as unresolved. Do not add facts, motives, interpretations or outside knowledge. Use compact plain text, no headers, at most 700 words.";
 
-/// Final-reduce prompt: the segment digests of several summarizer agents, who
-/// worked in parallel and cannot see each other's segments, become one story
-/// digest. Overlapping accounts of the same events are expected and must be
-/// resolved, not averaged.
+/// Final-reduce prompt: merges parallel agents' segment digests and resolves overlaps.
 pub const REDUCE_SYSTEM_PROMPT: &str = "You merge ordered segment indexes from one visual novel into a factual story index for later question answering. The segment writers could not see each other's material. Preserve exact character names, chronology, scene transitions, player choices, explicit route or branch labels, revelations, and unresolved questions. Do not merge separate branches into one timeline, and do not call a branch canonical unless the source says so. Distinguish observed events from dialogue, recollections, dreams and speculation. Resolve only genuine overlaps; retain conflicts as unresolved instead of choosing a version. Remove repetition without erasing distinct events, relationships or consequences. Do not add facts, motives, interpretations or outside knowledge. Use compact plain text with these labels where evidence exists: CHARACTERS, CHRONOLOGY, CHOICES AND BRANCHES, UNRESOLVED. Omit empty labels. At most 1200 words.";
 
-/// Most name pairs one mapping block carries. A whole-game cast can be large,
-/// but the digest only needs the names the script actually uses, and the block
-/// rides along on every reduce call.
+/// Most name pairs carried in one reduce call.
 pub const MAX_NAME_PAIRS: usize = 80;
 
-/// Build the name-mapping paragraph prepended to a reduce call's input.
-///
-/// Extracted scripts write character names the way the engine does — in the
-/// game's original script — so a digest that quotes them verbatim mentions
-/// names the user knows in another form. The pairs come from VNDB's character
-/// data (`original` → romaji `name`), and the instruction scopes them to the
-/// digest being written: the outlines themselves stay untouched, so a mapping
-/// can never rewrite what a chunk actually said.
-///
-/// Empty input, or no usable pairs, produces an empty string so callers can
-/// skip the block entirely.
+/// Prepends VNDB character name pairs (`original` -> romaji `name`) for reduce calls
+/// without altering the underlying chunk outlines. Returns empty when no pairs are usable.
 #[must_use]
 pub fn romaji_block(pairs: &[(&str, &str)]) -> String {
     let usable: Vec<(&str, &str)> = pairs

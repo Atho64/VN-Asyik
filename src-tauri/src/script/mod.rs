@@ -107,16 +107,13 @@ impl AgentSettings {
     }
 }
 
-/// Load agent settings from `sync_state`. A missing key answers the default;
-/// a real database error or an unreadable blob is an error, never a silent
-/// default — the agent count is part of the compaction resume key, so
-/// compaction would quietly reset an in-flight run's stored progress instead
-/// of mixing layouts. A corrupt blob is fixed by re-saving the setting in the
-/// UI, which rewrites it.
+/// Load agent settings from `sync_state`.
+///
+/// Missing keys default, but DB/parse errors fail instead of defaulting
+/// because `agent_count` is part of the compaction resume key.
 ///
 /// # Errors
-/// `db_error` when the store cannot be read, `agent_settings_invalid` when the
-/// blob does not parse.
+/// `db_error` or `agent_settings_invalid`.
 pub async fn load_agent_settings(pool: &SqlitePool) -> Result<AgentSettings, String> {
     let found: Result<Option<(String,)>, _> =
         sqlx::query_as("SELECT value FROM sync_state WHERE key = ?")
@@ -162,23 +159,16 @@ fn now() -> i64 {
         .unwrap_or(0)
 }
 
-/// Import one or many script files for a game as a single document, so a
-/// script extracted as many part files imports in one pick instead of being
-/// combined by hand first. The format of each file is detected from its
-/// content (plain text, VNTP name/message JSON, or the Asyik JSON interchange
-/// format); the parts are merged in natural display-name order (`scene2`
-/// before `scene10`), which is the order extractors number their output in.
+/// Import one or more script files for a game as a single document.
 ///
-/// Importing the same set of files for the same game twice returns the
-/// existing row (content hash over the files in merge order plus the rendered
-/// body, which the concatenating hash alone cannot tell apart) instead of
-/// storing a second copy.
+/// Formats (plain text, VNTP JSON, Asyik JSON) are auto-detected per file and
+/// merged in natural display-name order (`scene2` before `scene10`). Re-importing
+/// matching content returns the existing document instead of duplicating it.
 ///
 /// # Errors
-/// Stable codes: `no_files`, `game_missing`, `invalid_game`, `read_failed`,
-/// `file_too_large`, `invalid_utf8`, plus the parse and merge codes from
-/// `vn_core::script`, `db_error`, `script_limit`. Any bad file fails the whole
-/// import; nothing is stored from a partial set.
+/// `no_files`, `game_missing`, `invalid_game`, `read_failed`, `file_too_large`,
+/// `invalid_utf8`, `vn_core::script` parse/merge codes, `db_error`, or
+/// `script_limit`. Any bad file fails the entire import.
 pub async fn import(
     pool: &SqlitePool,
     game_id: &str,
@@ -197,11 +187,7 @@ pub async fn import(
         return Err("game_missing".into());
     }
 
-    // Resolve what the picker returned before touching the filesystem: on
-    // Android these are `content://` URIs, which the resolver copies through
-    // the content resolver into cache files (AGENTS.md §9); on every other
-    // platform the path passes through unchanged. The guards delete the
-    // copies when they drop at the end of the import.
+    // Resolve picker paths first: Android `content://` URIs copy into cache files cleaned up on drop (AGENTS.md §9).
     let mut resolved = Vec::with_capacity(paths.len());
     for path in paths {
         let uri = path.clone();
@@ -214,11 +200,7 @@ pub async fn import(
         resolved.push(guard);
     }
 
-    // The parts are merged in the order the file manager shows, sorted by the
-    // picker's display names — never by the raw picked strings, which on
-    // Android are `content://` URIs whose numeric ids say nothing about the
-    // files they name. `scene2` before `scene10` is the promise; a stable sort
-    // keeps the picker's order when two files share a name.
+    // Sort by picker display name (`scene2` before `scene10`), never raw Android `content://` URIs.
     resolved.sort_by(|a, b| natural_cmp(a.display_name(), b.display_name()));
 
     let mut parts = Vec::with_capacity(resolved.len());
@@ -241,12 +223,7 @@ pub async fn import(
     let body = render_body(&parsed.lines);
     let source_sha256 = sha256_hex(&raws);
 
-    // Same content for the same game is the same script; return what exists so
-    // re-importing after an interrupted compaction cannot fork progress. The
-    // body answers the hash too: the hash covers concatenated file contents,
-    // so two different sets (one file vs several that happen to concatenate
-    // into the same bytes) can share one hash while rendering different
-    // documents — only both agreeing means "the same script".
+    // Require both `source_sha256` and rendered `body` to match so different splits cannot collide on concatenated bytes.
     if let Some(row) = sqlx::query(
         "SELECT d.id FROM script_documents d WHERE d.game_id=? AND d.source_sha256=? AND d.body=?",
     )
@@ -261,9 +238,7 @@ pub async fn import(
         return get(pool, &id).await;
     }
 
-    // The per-game cap sits behind the dedupe so re-importing a stored script
-    // stays the no-op it promises to be even at the cap; only a genuinely new
-    // document counts against it.
+    // Enforce the per-game cap after dedupe so re-importing an existing script succeeds at the cap.
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM script_documents WHERE game_id=?")
         .bind(game_id)
         .fetch_one(pool)
@@ -275,16 +250,12 @@ pub async fn import(
 
     let id = uuid::Uuid::new_v4().to_string();
     let line_count = i64::try_from(parsed.lines.len()).map_err(|_| "too_many_lines")?;
-    // The chunk plan is derived from the body, which never changes after import,
-    // so it is computed once here. Re-planning it on every compaction call meant
-    // walking the whole script to answer a question about the next eight chunks.
+    // Precompute the chunk plan once; the body is immutable after import.
     let plan = plan_chunks(&body, DEFAULT_CHUNK_BYTES);
     if plan.len() > MAX_CHUNKS {
         return Err("script_too_large".into());
     }
     let chunk_count = i64::try_from(plan.len()).map_err(|_| "script_too_large")?;
-    // A JSON array of [start, end) line ranges: hundreds of numbers for a whole
-    // game, and nothing joins on an individual chunk.
     let chunks_json = serde_json::to_string(&plan).map_err(|_| "db_error")?;
     sqlx::query(
         "INSERT INTO script_documents(id,game_id,engine,source_kind,source_path,source_sha256,line_count,body,chunk_plan_json,chunk_count,created_at,updated_at) \
@@ -313,8 +284,7 @@ pub async fn import(
     get(pool, &id).await
 }
 
-/// Human-facing label for where a document came from: the picker's file names,
-/// and from the fourth on a count, so a 30-part import does not store an essay.
+/// Display label for source filenames, truncated after the third entry.
 fn display_source_path(names: &[&str]) -> String {
     if names.len() <= 3 {
         names.join(", ")
@@ -622,9 +592,6 @@ fn cap_reduce_input(text: String) -> String {
     capped
 }
 
-/// Everything a compaction task needs besides its own segment: the provider
-/// call surface and the shared run state. Exists to keep the task functions'
-/// argument lists honest.
 struct CallCtx<'a> {
     pool: &'a SqlitePool,
     client: &'a reqwest::Client,
@@ -632,25 +599,18 @@ struct CallCtx<'a> {
     key: Option<&'a crate::secrets::ChatApiKey>,
     id: &'a str,
     state: &'a Arc<Mutex<RunState>>,
-    /// VNDB romaji mapping for the document's game, empty when the cache has
-    /// none. Prepended to every reduce input so the digest writes names the
-    /// way the user knows them (see [`vn_core::script::romaji_block`]).
+    /// VNDB romaji name mapping prepended to reduce inputs (empty if uncached).
     romaji: String,
 }
 
 impl CallCtx<'_> {
-    /// Run a pure function over the shared state under the lock.
     async fn with_state<T>(&self, inspect: impl FnOnce(&RunState) -> T) -> T {
         let guard = self.state.lock().await;
         inspect(&guard)
     }
 }
 
-/// VNDB's cached character rows carry both spellings of every name (`original`
-/// in the game's script, `name` romaji); the mapping block lets the digest
-/// write the spelling the user knows. A game with no cache row, a cache
-/// predating the characters field, or a cast with no original names simply
-/// gets an empty block.
+/// Build the VNDB `original -> name` character mapping block for reduce prompts.
 async fn character_romaji_block(pool: &SqlitePool, game_id: &str) -> String {
     let Ok(row) = sqlx::query(
         "SELECT d.characters_json AS characters_json \
@@ -682,7 +642,6 @@ async fn character_romaji_block(pool: &SqlitePool, game_id: &str) -> String {
     vn_core::script::romaji_block(&pairs)
 }
 
-/// One agent's slice of the work.
 struct AgentJob<'a> {
     index: usize,
     start: usize,
@@ -808,20 +767,12 @@ async fn initial_state(
     })
 }
 
-/// Documents with a compaction call in flight, keyed by document id.
-///
-/// The UI allows one summarize loop per card instance, but a loop survives
-/// unmount until its batch finishes — navigating away and back can start a
-/// second call while the first is still in flight. Two concurrent calls each
-/// evolve their own copy of the progress row and clobber each other's saves,
-/// after which the resume guard discards the whole run and every provider call
-/// spent on those chunks is wasted. The lease makes the second call report
-/// `compaction_busy` instead of racing.
+/// In-flight compaction leases by document ID so overlapping UI runs fail
+/// with `compaction_busy` instead of clobbering stored progress.
 static ACTIVE_COMPACTIONS: std::sync::LazyLock<
     std::sync::Mutex<std::collections::HashSet<String>>,
 > = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
 
-/// Releases the document lease when dropped, however `compact` exits.
 #[derive(Debug)]
 struct CompactLease(String);
 
@@ -833,11 +784,6 @@ impl Drop for CompactLease {
     }
 }
 
-/// Take the document's compaction lease, or fail with `compaction_busy` when
-/// another call already holds it.
-///
-/// # Errors
-/// `compaction_busy` when the document is already compacting.
 fn try_acquire_lease(id: &str) -> Result<CompactLease, String> {
     let mut active = ACTIVE_COMPACTIONS
         .lock()
@@ -848,14 +794,10 @@ fn try_acquire_lease(id: &str) -> Result<CompactLease, String> {
     Ok(CompactLease(id.to_owned()))
 }
 
-/// What one compaction call may do. Grouped rather than passed as loose
-/// arguments: `rebuild` is destructive, and a bare `true` at a call site is the
-/// kind of flag that gets passed to the wrong function.
 #[derive(Debug, Clone, Copy)]
 pub struct RunOptions {
     /// Chunks summarized per agent in this call.
     pub step: u32,
-    /// Summarizer agents (parallel provider calls).
     pub agents: usize,
     /// Discard stored progress first, including a finished digest.
     pub rebuild: bool,
@@ -871,31 +813,16 @@ impl Default for RunOptions {
     }
 }
 
-/// Advance compaction of one document by up to `step` chunks **per agent**,
-/// then reduce when every chunk has a summary. Safe to call repeatedly;
-/// progress persists after each chunk so an interrupted run resumes where it
-/// stopped. One call per document at a time: a second concurrent call fails
-/// with `compaction_busy` rather than racing the same progress row.
+/// Summarize up to `step` chunks per agent and reduce once all outlines finish.
 ///
-/// `rebuild` discards this document's stored run first, including a finished
-/// digest. That is how a digest produced by an older pipeline is replaced: its
-/// summaries must not be reused, because the prompts that produced them are
-/// gone and their output reads differently from the current map step.
-///
-/// The story is split into `agents` contiguous segments. The agents summarize
-/// their segments concurrently, each carrying the tail of its previous outline
-/// as rolling context; when every segment is done, each agent compresses its
-/// own outlines into a segment digest and one final call merges the segment
-/// digests into the story digest. With one agent the middle step is skipped
-/// and the outlines reduce directly.
-///
-/// A run belongs to one (model, chunk plan, agent layout, pipeline version)
-/// key: any of those changing resets progress rather than mixing summaries
-/// from two incompatible runs.
+/// Progress checkpoints after each chunk and is keyed by `(model, chunk_count,
+/// agent_count, compactor_version)`; changing any key restarts unless `rebuild`
+/// already cleared it. Overlapping calls on the same document fail with
+/// `compaction_busy`.
 ///
 /// # Errors
 /// `compaction_busy`, `script_missing`, `script_too_large`, `chat_key_missing`,
-/// plus provider errors from [`crate::ai::chat::complete`], and `db_error`.
+/// provider errors from [`crate::ai::chat::complete`], or `db_error`.
 pub async fn compact(
     pool: &SqlitePool,
     client: &reqwest::Client,
@@ -1027,12 +954,7 @@ async fn summarize_segments(
         .map_or(Ok(()), Err)
 }
 
-/// Load the body, the chunk plan and the name mapping for one document.
-///
-/// The plan is stored at import, so a repeat call costs one row read instead of
-/// re-splitting the script. Documents imported before the plan existed compute it
-/// once and the plan is written back, which also keeps the stored chunk count in
-/// step with what this run actually uses.
+/// Load body, chunk plan, and name mapping; backfills `chunk_plan_json` for older imports.
 async fn load_document(
     pool: &SqlitePool,
     id: &str,
@@ -1146,9 +1068,7 @@ async fn make_segment_digest(call: &CallCtx<'_>, index: usize) -> Result<(), Str
     Ok(())
 }
 
-/// SHA-256 over the concatenated file contents in merge order, hex encoded.
-/// Contents, not paths: the same files re-imported from another folder are the
-/// same script, and a renamed file is still the same script.
+/// SHA-256 over concatenated file contents in merge order (ignores paths/filenames).
 fn sha256_hex(parts: &[String]) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -1207,10 +1127,7 @@ mod tests {
 
     #[tokio::test]
     async fn agent_settings_error_when_the_store_is_missing() {
-        // No migrations on this pool: the query itself must fail rather than
-        // answer a default. The agent count is part of the compaction resume
-        // key, so a silent default would reset an in-flight run's stored
-        // progress instead of surfacing the problem.
+        // Must surface `db_error` rather than silently defaulting `agent_count`.
         let pool = sqlx::SqlitePool::connect("sqlite::memory:")
             .await
             .expect("pool");
@@ -1232,9 +1149,7 @@ mod tests {
         .execute(&pool)
         .await
         .expect("seed");
-        // A corrupt blob errors too: compaction proceeding with the default
-        // count would wipe stored progress. Re-saving the setting in the UI
-        // rewrites the blob and clears the error.
+        // Corrupt JSON must error rather than resetting in-flight compaction progress.
         assert_eq!(
             load_agent_settings(&pool).await,
             Err("agent_settings_invalid".to_owned())
@@ -1340,9 +1255,6 @@ mod tests {
 mod plan_tests {
     use super::*;
 
-    /// The chunk plan is derived from a body that never changes after import, so
-    /// it is stored and reused. Compaction used to re-plan the whole script on
-    /// every call, which re-walked up to 300k lines to find the next eight chunks.
     #[tokio::test]
     async fn an_imported_document_keeps_its_chunk_plan() {
         let pool = sqlx::SqlitePool::connect("sqlite::memory:")

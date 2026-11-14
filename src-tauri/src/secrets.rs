@@ -15,43 +15,26 @@ use std::fmt;
 
 use thiserror::Error;
 
-/// Service name used in the OS credential store.
+// Desktop keychain service and entry names; Android uses its own storage plugin.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 const SERVICE: &str = "com.atho.vnasyik";
-/// Entry name for the VNDB token.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 const VNDB_TOKEN_USER: &str = "vndb-api-token";
-
-/// Keychain entry for the optional chat API key.
-///
-/// Desktop only: Android and iOS store keys through their own plugin, so this
-/// constant would be dead code there.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 const CHAT_KEY_USER: &str = "chat-api-key";
-
-/// Keychain entry for the optional Tavily search key.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 const TAVILY_KEY_USER: &str = "tavily-api-key";
-
-/// Keychain entry for the optional Discord user token.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 const DISCORD_TOKEN_USER: &str = "discord-user-token";
-
-/// Keychain entry for the optional imgbb API key, used by the presence image
-/// host upload.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 const IMGBB_KEY_USER: &str = "imgbb-api-key";
 
-/// Failures from the credential store.
 #[derive(Debug, Error)]
 pub enum SecretError {
-    /// The platform has no supported credential store in this build.
     #[error("secure storage is not available on this platform yet")]
     Unsupported,
-    /// No credential is stored.
     #[error("no token is stored")]
     NotFound,
-    /// The credential store refused the operation.
     #[error("the credential store failed: {0}")]
     Store(String),
 }
@@ -122,10 +105,6 @@ fn is_zbase32(ch: char) -> bool {
     matches!(ch, 'a'..='z' | '0'..='9')
 }
 
-/// Write the VNDB token to the OS credential store.
-///
-/// # Errors
-/// Returns [`SecretError::Unsupported`] where no store exists, or the store error.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn store_vndb_token(token: &VndbToken) -> Result<(), SecretError> {
     let entry = entry()?;
@@ -134,7 +113,6 @@ pub fn store_vndb_token(token: &VndbToken) -> Result<(), SecretError> {
         .map_err(|err| SecretError::Store(err.to_string()))
 }
 
-/// Refuse credential writes on platforms without a secure storage backend.
 #[cfg(not(any(
     target_os = "windows",
     target_os = "macos",
@@ -145,11 +123,6 @@ pub fn store_vndb_token(_token: &VndbToken) -> Result<(), SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Read the VNDB token, if one is stored.
-///
-/// # Errors
-/// Returns [`SecretError::NotFound`] when nothing is stored, and
-/// [`SecretError::Unsupported`] on platforms without a store.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn load_vndb_token() -> Result<VndbToken, SecretError> {
     let entry = entry()?;
@@ -169,10 +142,6 @@ pub fn load_vndb_token() -> Result<VndbToken, SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Remove the stored token.
-///
-/// # Errors
-/// Returns the store error, or [`SecretError::NotFound`] when there was nothing.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn clear_vndb_token() -> Result<(), SecretError> {
     let entry = entry()?;
@@ -271,21 +240,15 @@ impl fmt::Debug for TavilyApiKey {
 }
 
 impl TavilyApiKey {
-    /// Validate a pasted key.
-    ///
-    /// # Errors
-    /// A message describing what is wrong with the key.
     pub fn parse(raw: &str) -> Result<Self, String> {
         validate_key(raw).map(Self)
     }
 
-    /// The raw key, for the one place that builds a request header.
     #[must_use]
     pub fn expose(&self) -> &str {
         &self.0
     }
 
-    /// A form safe to show in the UI.
     #[must_use]
     pub fn masked(&self) -> String {
         let chars: Vec<char> = self.0.chars().collect();
@@ -300,10 +263,6 @@ impl TavilyApiKey {
     }
 }
 
-/// Write the Tavily key to the OS credential store.
-///
-/// # Errors
-/// [`SecretError::Unsupported`] where no store exists, or the store error.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn store_tavily_key(key: &TavilyApiKey) -> Result<(), SecretError> {
     let entry = tavily_entry()?;
@@ -322,11 +281,6 @@ pub fn store_tavily_key(_key: &TavilyApiKey) -> Result<(), SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Read the Tavily key, if one is stored.
-///
-/// # Errors
-/// [`SecretError::NotFound`] when nothing is stored, or
-/// [`SecretError::Unsupported`] on platforms without a store.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn load_tavily_key() -> Result<TavilyApiKey, SecretError> {
     let entry = tavily_entry()?;
@@ -346,10 +300,6 @@ pub fn load_tavily_key() -> Result<TavilyApiKey, SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Remove the stored Tavily key.
-///
-/// # Errors
-/// The store error, or [`SecretError::NotFound`] when there was nothing.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn clear_tavily_key() -> Result<(), SecretError> {
     let entry = tavily_entry()?;
@@ -376,13 +326,7 @@ fn tavily_entry() -> Result<keyring::Entry, SecretError> {
     keyring::Entry::new(SERVICE, TAVILY_KEY_USER).map_err(|err| SecretError::Store(err.to_string()))
 }
 
-/// Write a chat key to the OS credential store, in the slot of one profile.
-///
-/// An empty slot is the entry used before saved profiles existed, so a key
-/// stored by an older build is still found by the migrated profile.
-///
-/// # Errors
-/// [`SecretError::Unsupported`] where no store exists, or the store error.
+/// Empty slot maps to the pre-profile entry so migrated keys stay readable.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn store_chat_key(slot: &str, key: &ChatApiKey) -> Result<(), SecretError> {
     let entry = chat_entry(slot)?;
@@ -401,11 +345,6 @@ pub fn store_chat_key(_slot: &str, _key: &ChatApiKey) -> Result<(), SecretError>
     Err(SecretError::Unsupported)
 }
 
-/// Read the chat key, if one is stored.
-///
-/// # Errors
-/// [`SecretError::NotFound`] when nothing is stored, or
-/// [`SecretError::Unsupported`] on platforms without a store.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn load_chat_key(slot: &str) -> Result<ChatApiKey, SecretError> {
     let entry = chat_entry(slot)?;
@@ -425,10 +364,6 @@ pub fn load_chat_key(_slot: &str) -> Result<ChatApiKey, SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Remove the stored chat key.
-///
-/// # Errors
-/// The store error, or [`SecretError::NotFound`] when there was nothing.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn clear_chat_key(slot: &str) -> Result<(), SecretError> {
     let entry = chat_entry(slot)?;
@@ -474,10 +409,6 @@ impl fmt::Debug for DiscordToken {
 }
 
 impl DiscordToken {
-    /// Validate a pasted token.
-    ///
-    /// # Errors
-    /// Returns a message describing what is wrong with the token.
     pub fn parse(raw: &str) -> Result<Self, String> {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
@@ -498,13 +429,11 @@ impl DiscordToken {
         Ok(Self(trimmed.to_owned()))
     }
 
-    /// The raw token, for Gateway authentication only.
     #[must_use]
     pub fn expose(&self) -> &str {
         &self.0
     }
 
-    /// A form safe to show in the UI: enough to recognize, not enough to use.
     #[must_use]
     pub fn masked(&self) -> String {
         let chars: Vec<char> = self.0.chars().collect();
@@ -517,7 +446,6 @@ impl DiscordToken {
     }
 }
 
-/// Write the Discord token to the OS credential store.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn store_discord_token(token: &DiscordToken) -> Result<(), SecretError> {
     let entry = discord_entry()?;
@@ -536,7 +464,6 @@ pub fn store_discord_token(_token: &DiscordToken) -> Result<(), SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Read the Discord token, if one is stored.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn load_discord_token() -> Result<DiscordToken, SecretError> {
     let entry = discord_entry()?;
@@ -556,7 +483,6 @@ pub fn load_discord_token() -> Result<DiscordToken, SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Remove the stored Discord token.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn clear_discord_token() -> Result<(), SecretError> {
     let entry = discord_entry()?;
@@ -597,10 +523,6 @@ impl fmt::Debug for ImgbbApiKey {
 }
 
 impl ImgbbApiKey {
-    /// Validate a pasted key.
-    ///
-    /// # Errors
-    /// Returns a message describing what is wrong with the key.
     pub fn parse(raw: &str) -> Result<Self, String> {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
@@ -621,13 +543,11 @@ impl ImgbbApiKey {
         Ok(Self(trimmed.to_owned()))
     }
 
-    /// The raw key, for imgbb upload requests only.
     #[must_use]
     pub fn expose(&self) -> &str {
         &self.0
     }
 
-    /// A form safe to show in the UI: enough to recognize, not enough to use.
     #[must_use]
     pub fn masked(&self) -> String {
         let chars: Vec<char> = self.0.chars().collect();
@@ -640,7 +560,6 @@ impl ImgbbApiKey {
     }
 }
 
-/// Write the imgbb API key to the OS credential store.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn store_imgbb_key(key: &ImgbbApiKey) -> Result<(), SecretError> {
     let entry = imgbb_entry()?;
@@ -659,7 +578,6 @@ pub fn store_imgbb_key(_key: &ImgbbApiKey) -> Result<(), SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Read the imgbb API key, if one is stored.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn load_imgbb_key() -> Result<ImgbbApiKey, SecretError> {
     let entry = imgbb_entry()?;
@@ -679,7 +597,6 @@ pub fn load_imgbb_key() -> Result<ImgbbApiKey, SecretError> {
     Err(SecretError::Unsupported)
 }
 
-/// Remove the stored imgbb API key.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 pub fn clear_imgbb_key() -> Result<(), SecretError> {
     let entry = imgbb_entry()?;
@@ -706,7 +623,6 @@ fn imgbb_entry() -> Result<keyring::Entry, SecretError> {
     keyring::Entry::new(SERVICE, IMGBB_KEY_USER).map_err(|err| SecretError::Store(err.to_string()))
 }
 
-/// Whether this build can store secrets at all.
 #[must_use]
 pub fn is_supported() -> bool {
     cfg!(any(

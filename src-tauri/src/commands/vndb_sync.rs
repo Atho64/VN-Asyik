@@ -1,15 +1,9 @@
-//! VNDB account and list-sync commands.
+//! VNDB account and two-way list-sync commands.
 //!
-//! The split of responsibility matters here:
-//!
-//! * `vndb_connect` verifies the token and stores it in the OS credential store;
-//!   the token never reaches the database or the frontend.
-//! * `vndb_pull` fetches the remote list and stores it as sync state, producing a
-//!   list of comparisons the UI can show. It does **not** rewrite local games by
-//!   itself: every difference becomes something the user can see.
-//! * `vndb_apply_sync` takes the decisions (or the policy) and performs the two
-//!   directions: local updates and/or a queued push.
-//! * `vndb_push_pending` replays the queue, so an offline session recovers.
+//! - `vndb_connect`: verifies token and saves it in OS credentials (never DB/frontend).
+//! - `vndb_pull`: fetches remote list into sync state and computes diffs without overwriting local games.
+//! - `vndb_apply_sync`: applies user-chosen conflict resolutions locally and/or queues pushes.
+//! - `vndb_push_pending`: replays queued pushes after offline sessions.
 
 use serde::{Deserialize, Serialize};
 use tauri::State;

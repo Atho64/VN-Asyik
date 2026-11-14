@@ -1,17 +1,11 @@
 //! Title search: query normalisation, matching and relevance ranking.
 //!
-//! Two different jobs live here because they must agree:
-//!
-//! - **Matching** decides whether a title is worth showing. A bare substring
-//!   test fails on the ways visual novel titles actually vary: diacritics and
-//!   full-width Latin (`ＣＬＡＮＮＡＤ`), Japanese punctuation (`9-nine-` vs
-//!   `9 nine`), decorative subtitles (`CLANNAD -Hikari Mimamoru Sakamichi de-`),
-//!   and word order in long titles.
-//! - **Ranking** decides what appears first. VNDB's own `searchrank` puts an
-//!   obscure spin-off above the work the user obviously meant — searching
-//!   `umineko` returns `Umineko Kareru` (11 votes) above `Umineko no Naku Koro
-//!   ni` (14,050). Popularity is the tiebreaker that a title match alone cannot
-//!   provide.
+//! - **Matching** handles visual novel title quirks: diacritics, full-width
+//!   Latin (`ＣＬＡＮＮＡＤ`), Japanese punctuation (`9-nine-` vs `9 nine`),
+//!   subtitles, and word order.
+//! - **Ranking** uses community popularity to break ties because VNDB's
+//!   `searchrank` can rank an 11-vote spin-off (`Umineko Kareru`) above the
+//!   main work (`Umineko no Naku Koro ni`, 14,050 votes).
 
 use serde::{Deserialize, Serialize};
 
@@ -191,9 +185,7 @@ fn classify_one(needle: &str, candidate: &str) -> Match {
 /// A searchable row: the fields ranking needs, without the UI payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate<'a> {
-    /// Display title.
     pub title: &'a str,
-    /// Original-script title.
     pub alt_title: Option<&'a str>,
     /// Community vote count, used only to break ties between equal matches.
     pub votes: u32,

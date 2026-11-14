@@ -15,11 +15,8 @@ import { ShareCard } from "./ShareCard";
 import { SHARE_PLACEHOLDER_GAME, yearShareModel } from "./shareModels";
 
 /**
- * Years the reader actually read in, newest first, plus the current one — the
- * current year belongs in the list even before anything is recorded, or a
- * first-time user would have no chip to press. A day index encodes a calendar
- * date as-if-UTC (the heatmap tooltip relies on the same encoding), so the
- * year comes out of a UTC read.
+ * Active reading years newest-first, always including `currentYear`.
+ * Reads UTC year because day indexes encode local dates as-if-UTC.
  */
 export function yearsWithDays(
   byDay: Array<{ day: number }>,
@@ -139,14 +136,7 @@ function Rhythm({
   );
 }
 
-/**
- * Year in review: one card that sums up a calendar year of reading. Days and
- * years are the reader's local calendar, the same unit the heatmap beside this
- * card uses, so the two can never disagree about where a session landed.
- *
- * The year chips come from the by-day playtime the Stats page already fetched;
- * the aggregates themselves are one dedicated IPC call per selected year.
- */
+/** Yearly reading summary card aligned to the reader's local calendar days. */
 export function YearReview({ byDay }: { byDay: Array<{ day: number }> }) {
   const { t, locale } = useI18n();
   const cards = useAppStore((state) => state.cards);

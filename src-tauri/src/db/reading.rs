@@ -215,15 +215,8 @@ struct ExportRow {
     played_date: Option<String>,
 }
 
-/// Live checkpoints in reading order, with local dates, for the journal document.
-///
-/// Separate from [`list_all`] on purpose: that one keeps tombstones because sync
-/// and backups must carry them, while an exported document must not resurrect a
-/// note the user deleted. Oldest first, because a diary is read forwards.
-///
-/// The calendar is `SQLite`'s `'localtime'`, the same authority `playtime_by_day`
-/// and the heatmap use, so a checkpoint written at 00:30 lands on the day the
-/// reader experienced rather than on the UTC date the timestamp carries.
+/// Live checkpoints in chronological reading order with `SQLite` `'localtime'` dates for export.
+/// Excludes tombstones (unlike [`list_all`]) so exported diaries never resurrect deleted notes.
 pub async fn list_for_export(
     pool: &SqlitePool,
     game: EntityId,
@@ -254,16 +247,8 @@ pub async fn list_for_export(
         .collect()
 }
 
-/// Live checkpoints matching a plain-text query, newest first, in bounded pages.
-///
-/// Search stays plain text (ADR 0005): `LIKE` folds ASCII case, which covers the
-/// Latin scripts, and matches CJK exactly — a reader typing a Japanese phrase
-/// wants that phrase, not a stemmed approximation. `%`, `_` and `\` in the query
-/// are escaped so they search for themselves.
-///
-/// The note is the primary target; route and chapter snapshots are searched too,
-/// because "everything I wrote on Mio's route" is the same question. The parent
-/// game is joined live, so a deleted game's checkpoints cannot surface.
+/// Searches live checkpoints (note, route, and chapter snapshots) newest first in 50-row pages.
+/// Joins live `games`, escapes `%`/`_`/`\`, and uses `LIKE` (ASCII case-folding, exact CJK; ADR 0005).
 pub async fn search(
     pool: &SqlitePool,
     query: &str,

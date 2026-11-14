@@ -481,11 +481,8 @@ mod migration_0021_tests {
         );
     }
 
-    /// Both halves of a route must be backfilled, and are never auto-merged.
-    ///
-    /// The two inserts number their ids from 1, so before the offset the ending half
-    /// collided with the engine half of the same ordinal and `INSERT OR IGNORE`
-    /// dropped it without a word -- every ending link came out NULL.
+    /// Both halves of a route must be backfilled without merging; an offset prevents ending
+    /// ordinals from colliding with engine ordinals in `INSERT OR IGNORE`.
     #[tokio::test]
     async fn the_ending_half_of_a_route_is_backfilled_and_linked() {
         let pool = schema_20_pool().await;

@@ -15,17 +15,7 @@ interface Position {
   y: number;
 }
 
-/**
- * The app's own right-click menu.
- *
- * WebView2's built-in menu (Back, Refresh, Save as, Print, Inspect) is turned
- * off at startup, so right-click would otherwise do nothing. This replaces it
- * with entries that mean something here.
- *
- * The menu is positioned in viewport coordinates and flipped when it would
- * overflow the bottom or right edge, because a menu that opens off-screen is
- * the same as no menu.
- */
+/** Viewport-clamped custom right-click menu replacing WebView2's disabled native menu. */
 export function ContextMenu({
   position,
   items,

@@ -8,16 +8,7 @@ import { Sheet } from "@/components/Sheet";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { ScreenshotCard } from "@/lib/ipc/types";
 
-/**
- * Full-size view of one capture, with delete.
- *
- * Shared by the per-game section and the cross-game library so the two cannot
- * drift: a shot opened from either place behaves the same, and deleting from one
- * refreshes the other through the caller's callback.
- *
- * The image is fetched on open rather than with the list, because a full-size
- * JPEG per row would be several MB for a grid that renders at a few hundred px.
- */
+/** Shared capture lightbox fetching the full-size image on open and supporting deletion. */
 export function ScreenshotLightbox({
   shot,
   onClose,

@@ -1,50 +1,26 @@
-//! Locale Emulator integration.
+//! Locale Emulator integration (`LEProc.exe`).
 //!
-//! Japanese visual novels written before Unicode commonly mojibake on a
-//! non-Japanese Windows: they ask for the system ANSI code page and get the
-//! local one. Locale Emulator runs such a game with a simulated Japanese
-//! locale, which is what "run in Japanese" means for these titles.
-//!
-//! # What this module does and does not do
-//!
-//! It **detects** an installation and builds the arguments for it. It does not
-//! ship, download, or patch anything. Locale Emulator is a separate program the
-//! user installs; its core binaries have no stated redistribution terms, so
-//! bundling them is not something this project can verify.
-//!
-//! Nothing here injects into another process: `LEProc.exe` is a launcher that
-//! the operating system runs, exactly as the user would.
-//!
-//! The profile parsing is pure, but this module is the crate's one sanctioned
-//! exception to its no-filesystem rule: [`read_profiles`] and the launcher
-//! lookup read Locale Emulator's own files with portable `std` calls, nothing
-//! platform-specific.
+//! Detects an existing install and builds `-runas` launch plans for non-Unicode
+//! Japanese games. Never bundles or patches binaries (unverified redistribution
+//! terms) and never injects into processes. [`read_profiles`] and [`find`] are
+//! the crate's sanctioned portable `std::fs` exceptions.
 
 use std::path::{Path, PathBuf};
 
-/// The launcher executable's file name.
 pub const LE_PROC: &str = "LEProc.exe";
-
-/// The profile file Locale Emulator writes beside `LEProc.exe`.
 pub const LE_CONFIG: &str = "LEConfig.xml";
 
 /// A profile as defined in `LEConfig.xml`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeProfile {
-    /// Display name, for the user to pick from.
     pub name: String,
-    /// `Guid` attribute, which is what `-runas` takes.
+    /// `Guid` attribute passed to `-runas`.
     pub guid: String,
     /// `Location`, such as `ja-JP`.
     pub location: String,
 }
 
-/// Read the profiles from `LEConfig.xml` in `dir`.
-///
-/// This is the file Locale Emulator itself writes, so it is the only reliable
-/// source for its profile GUIDs. Returns an empty list rather than an error when
-/// the file is missing or unreadable: a malformed config means "no profiles
-/// known", and the caller falls back to reporting that.
+/// Read profiles from `LEConfig.xml` in `dir`; returns empty if missing or unreadable.
 #[must_use]
 pub fn read_profiles(dir: &Path) -> Vec<LeProfile> {
     let Ok(text) = std::fs::read_to_string(dir.join(LE_CONFIG)) else {
@@ -53,12 +29,8 @@ pub fn read_profiles(dir: &Path) -> Vec<LeProfile> {
     parse_profiles(&text)
 }
 
-/// Extract profiles from `LEConfig.xml` contents.
-///
-/// Deliberately a small scan rather than an XML parser: the file has one flat
-/// `<Profile ...>` list with no nesting quirks, and a dependency for eleven
-/// attributes is not worth it. A `<Profile>` without a `Guid` is skipped, since
-/// it cannot be launched.
+/// Scan flat `<Profile>` tags from `LEConfig.xml` without a full XML parser;
+/// entries missing `Guid` are skipped because they cannot be launched.
 #[must_use]
 pub fn parse_profiles(xml: &str) -> Vec<LeProfile> {
     let mut profiles = Vec::new();
@@ -81,8 +53,7 @@ pub fn parse_profiles(xml: &str) -> Vec<LeProfile> {
     profiles
 }
 
-/// The value of `key="..."` inside a tag, unescaped for the two entities the
-/// config actually uses.
+/// Extract `key="..."` inside a tag and unescape XML entities.
 fn attribute(tag: &str, key: &str) -> Option<String> {
     let needle = format!("{key}=\"");
     let start = tag.find(&needle)? + needle.len();
@@ -109,37 +80,23 @@ fn unescape(text: &str) -> String {
         .replace("&apos;", "'")
 }
 
-/// The GUID used when the user has not chosen a profile.
-///
-/// This was a zero GUID, on the theory that Locale Emulator would treat it as a
-/// default. It does not: `LEProc.exe -runas {00000000-...}` exits immediately
-/// and starts nothing, with no message, so pressing Play silently did nothing.
-/// The caller now asks the user to pick a profile instead of guessing one.
+/// Empty sentinel when no profile is chosen; Locale Emulator exits silently on a zero GUID.
 pub const NO_PROFILE: &str = "";
 
-/// Where Locale Emulator is found, and how confident that is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocaleEmulator {
-    /// Full path to `LEProc.exe`.
     pub launcher: PathBuf,
-    /// Which candidate location matched, for the UI to explain.
     pub source: InstallSource,
 }
 
-/// How the installation was located.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstallSource {
-    /// A directory the user configured.
     Configured,
-    /// Next to the game's own executable, which some portable copies use.
+    /// Next to the game's executable (portable installs).
     BesideGame,
 }
 
-/// Locate `LEProc.exe` without running anything.
-///
-/// Checked in order: the configured directory, then beside the game. Both are
-/// compared case-insensitively on the file name because Windows file systems
-/// are, and a portable copy may ship `leproc.exe`.
+/// Locate `LEProc.exe` in `configured_dir` then `game_dir`, matching names case-insensitively.
 #[must_use]
 pub fn find(configured_dir: Option<&Path>, game_dir: Option<&Path>) -> Option<LocaleEmulator> {
     if let Some(dir) = configured_dir
@@ -161,14 +118,12 @@ pub fn find(configured_dir: Option<&Path>, game_dir: Option<&Path>) -> Option<Lo
     None
 }
 
-/// The launcher inside `dir`, if there is one.
 fn launcher_in(dir: &Path) -> Option<PathBuf> {
     let direct = dir.join(LE_PROC);
     if direct.is_file() {
         return Some(direct);
     }
-    // A portable copy may use different casing; read the directory rather than
-    // guessing names.
+    // Portable copies may use different casing; scan entries rather than guessing.
     let entries = std::fs::read_dir(dir).ok()?;
     for entry in entries.flatten() {
         let name = entry.file_name();
@@ -183,27 +138,21 @@ fn launcher_in(dir: &Path) -> Option<PathBuf> {
     None
 }
 
-/// The directory a game executable lives in.
 #[must_use]
 pub fn game_directory(exe: &Path) -> Option<&Path> {
     exe.parent()
 }
 
-/// How to launch a game, and whether a locale was simulated.
+/// Command and explanation for launching a game directly or via Locale Emulator.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchPlan {
-    /// Program to run.
     pub program: PathBuf,
-    /// Arguments, in order.
     pub args: Vec<String>,
-    /// Whether this goes through Locale Emulator.
     pub localized: bool,
-    /// One sentence the UI shows so the user knows which happened.
     pub explanation: String,
 }
 
 impl LaunchPlan {
-    /// The arguments as a single display string, for logs and the UI.
     #[must_use]
     pub fn command_line(&self) -> String {
         if self.args.is_empty() {
@@ -213,16 +162,9 @@ impl LaunchPlan {
     }
 }
 
-/// Build the command that starts `exe`.
-///
-/// With a locale emulator, the launch is `LEProc.exe -runas <guid> <exe>`;
-/// without one it is the executable itself. The non-localized case is not an
-/// error: a translated or Unicode build runs fine, and saying so is better than
-/// refusing.
-///
-/// A localized plan with no `guid` is refused rather than guessed. Locale
-/// Emulator accepts any well-formed GUID and exits silently when no profile
-/// matches it, so a placeholder produces a Play button that does nothing.
+/// Build the launch command for `exe` (`LEProc.exe -runas <guid> <exe>` or direct).
+/// Falls back to direct launch when `guid` is absent because Locale Emulator exits
+/// silently on unknown GUIDs instead of falling back to a default profile.
 #[must_use]
 pub fn plan(exe: &Path, emulator: Option<&LocaleEmulator>, guid: Option<&str>) -> LaunchPlan {
     match emulator {
@@ -434,10 +376,8 @@ mod tests {
         assert!(plan.explanation.contains("Locale Emulator"));
     }
 
-    // Both tests below assert Windows path semantics, which is the only place
-    // Locale Emulator runs. On Linux `Path` is POSIX, so `C:\Games\VN\game.exe`
-    // is a single file name with no separator and `parent()` is `Some("")` — the
-    // assertion would be testing the host, not the function.
+    // Assert Windows path semantics only on Windows; on POSIX `C:\...` has no
+    // separator so `parent()` returns `Some("")` and tests the host instead.
     #[cfg(windows)]
     #[test]
     fn the_game_directory_is_the_executables_parent() {

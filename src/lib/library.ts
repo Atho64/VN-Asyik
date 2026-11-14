@@ -23,13 +23,8 @@ export const emptyFilter: LibraryFilter = {
 };
 
 /**
- * Everything that decides what the library shows: the search text, the status
- * chips, the rated-only toggle, the view and the sort.
- *
- * It lives in the app store, not in `LibraryScreen`, because the router unmounts
- * the screen on every navigation. Search "fate", open a game or another menu,
- * come back, and the query (with the results it produced) was gone — the state
- * died with the component, exactly as the VNDB detail cache once did.
+ * Library browse filters and sort state. Persisted in the app store because
+ * navigating away unmounts `LibraryScreen`.
  */
 export interface LibraryBrowse extends LibraryFilter {
   view: LibraryView;
@@ -61,13 +56,8 @@ export function normalizeTitle(text: string): string {
 const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]/;
 
 /**
- * Fold a title for comparison, mirroring `vn_core::search::fold`.
- *
- * Visual novel titles vary in ways a plain lowercase comparison misses:
- * full-width Latin (`ＣＬＡＮＮＡＤ`), diacritics, and decorative punctuation
- * (`9-nine-` vs `9 nine`). Everything non-alphanumeric becomes a single space,
- * so `CLANNAD -Hikari-` still matches `clannad hikari`. Kana and CJK ideographs
- * are kept because they are meaningful, not decoration.
+ * Folds titles (full-width Latin, diacritics, punctuation) for search matching while
+ * preserving kana and CJK characters, mirroring `vn_core::search::fold`.
  */
 export function foldTitle(text: string): string {
   let out = "";
@@ -176,7 +166,7 @@ export function rankGames(games: Game[], query: string): Game[] {
     .map((entry) => entry.game);
 }
 
-/// Cards are what the library renders, so the filter works on them directly.
+/** Filters rendered library cards directly, excluding soft-deleted entries. */
 export function filterCards<T extends { game: Game }>(
   cards: T[],
   filter: LibraryFilter,
@@ -192,8 +182,7 @@ export function filterCards<T extends { game: Game }>(
   });
 }
 
-/// Sort entries by key, descending by default because "recent" and "rating" both
-/// read best newest/highest first.
+/** Sorts entries by key (descending by default so recent/highest-rated items appear first). */
 export function sortCards<T extends { game: Game; total_ms: number }>(
   entries: T[],
   key: SortKey,
@@ -254,19 +243,8 @@ export function formatRating(decivotes: number): string {
 }
 
 /**
- * Explicit art policy check. `blur` and `hide` both treat explicit art as
- * hidden; the difference is only how it is presented.
- *
- * Level 1 is "the community voted this explicit at all", which is the point a
- * cover should stop being shown in full. Requiring 2 meant only a unanimous
- * vote counted, so the filter did nothing for the ordinary case: Sanoba Witch
- * is rated 0.93 and was treated as clear.
- *
- * The same threshold applies to a screenshot, which is rated per image: a tile
- * and a cover at level 1 are concealed together. See
- * `EXPLICIT_FLAG_LEVEL` in the backend (`vn_core::model`), which this mirrors —
- * that duplication is deliberate because the browser cannot read the Rust
- * constant, and `library.test.ts` pins the two to the same value.
+ * Explicit art flag threshold (`1` = community voted explicit). Mirrors
+ * `vn_core::model::EXPLICIT_FLAG_LEVEL`, pinned together by `library.test.ts`.
  */
 export const EXPLICIT_FLAG_LEVEL = 1;
 
@@ -276,14 +254,8 @@ export function isExplicitAtLevel(level: number | null | undefined): boolean {
 }
 
 /**
- * Round a VNDB average vote in hundredths (0..200) onto the 0..2 flag level the
- * database stores.
- *
- * Rounds, not floors, and mirrors `flag_level` in `vn-core`/`vndb::dto` exactly. This
- * is the browser half of a pair that must not disagree: the backend decides what to
- * conceal for a cached cover and a cached screenshot, and the search sheet decides for
- * a hit that has not been imported yet. A `>= 100` test here would call 0.99 explicit
- * in Rust and clear in the sheet, which is the mismatch this exists to prevent.
+ * Rounds a VNDB average vote in hundredths (`0..200`) to `0..2`, matching Rust
+ * `vn_core`/`vndb::dto::flag_level` so unimported hits match cached games.
  */
 export function flagLevelFromVote(hundredths: number | null | undefined): number {
   if (hundredths === null || hundredths === undefined || !Number.isFinite(hundredths)) {

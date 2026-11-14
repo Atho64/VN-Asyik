@@ -128,13 +128,7 @@ pub async fn add_executable(
         return Err(DbError::Corrupt("executable name is empty".to_owned()));
     }
     let normalized = crate::platform::probe::normalize_path(exe_path);
-    // One mapping per path: re-adding the same exe to the same game is a no-op,
-    // and adding it to a different game moves it, which is what a user means.
-    //
-    // The comparison normalises separators in SQL, not in Rust. Comparing the
-    // stored `F:\Games\game.exe` against a pre-normalised `f:/games/game.exe`
-    // never matched, so every add inserted a new row: this produced duplicate
-    // mappings, including the same executable pointing at two different games.
+    // One mapping per path: normalize separators in SQL so `F:\Games\game.exe` matches `f:/games/game.exe`.
     let existing: Option<(String, String)> = sqlx::query_as(
         r"SELECT id, game_id FROM game_executables
           WHERE replace(replace(lower(exe_path), '\', '/'), '//', '/') = ?
@@ -364,10 +358,8 @@ pub async fn executables_for_process(
 ) -> Result<Vec<GameExecutable>, DbError> {
     if let Some(path) = exe_path {
         let normalized = crate::platform::probe::normalize_path(path);
-        // The join is what stops a deleted game from being tracked: the
-        // executable rows survive soft-delete (they are not synced rows), so
-        // without it the poll keeps writing sessions for a game the user
-        // removed — time no UI aggregate shows.
+        // Join `games` so soft-deleted games stop accruing unshown sessions
+        // while keeping executable rows across restore.
         let rows: Vec<ExecutableRow> = sqlx::query_as(
             "SELECT ge.id, ge.game_id, ge.exe_name, ge.exe_path, ge.enabled, ge.runner_kind, ge.launch_target, ge.title_match, ge.extra_args \
              FROM game_executables ge \
@@ -459,7 +451,6 @@ pub async fn game_for_executable(
     game_for_executable_with_title(pool, exe_path, exe_name, None).await
 }
 
-// scan folders
 /// Remember a folder to scan.
 pub async fn add_scan_folder(pool: &SqlitePool, path: &str, now: Timestamp) -> Result<(), DbError> {
     sqlx::query(
@@ -489,7 +480,6 @@ pub async fn remove_scan_folder(pool: &SqlitePool, path: &str) -> Result<(), DbE
     Ok(())
 }
 
-// tracker state
 /// The open run, as persisted for crash recovery.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenRunState {
@@ -830,13 +820,8 @@ pub async fn upsert_chapter(
         // database was edited by hand; treat it as a fresh chapter rather than
         // failing the poll.
         if let Ok(id) = EntityId::parse(&id) {
-            // Only touch bookkeeping, and only when it changes: this runs on
-            // every 2-second poll while the chapter stays detected, and chapters
-            // sync by `updated_at` last-write-wins — writing on every poll would
-            // let this device's no-op bookkeeping out-date a rename or route
-            // link made on another device and silently revert it. The display
-            // name is the user's, and route labels may have been learned since;
-            // neither is overwritten here.
+            // Only write on `reached = 0`->1: polling every 2s bumps `updated_at`
+            // otherwise and causes LWW sync to revert renames or route links.
             sqlx::query(
                 "UPDATE chapters SET reached = 1, updated_at = ? WHERE id = ? AND reached = 0",
             )
@@ -868,15 +853,9 @@ async fn insert_chapter(
     .await?;
 
     let id = EntityId::new();
-    // `sort_index` is the position in this game's chapter list, and the engine's
-    // route code used to be written here instead. That collided with the counter
-    // manual chapters use: a chapter from route 10 landed on `sort_index` 10 while
-    // the eleventh manual chapter also landed on 10, so the list interleaved two
-    // unrelated orderings. The code is an ordering *within* a route, so it belongs
-    // in `route_order`; `sort_index` stays a plain append counter for both.
+    // Keep `sort_index` as a global append order across detected and manual chapters; `route_order` holds per-route ordering.
     sqlx::query(
-        // `display_name` starts as the detected name so a new chapter is readable
-        // immediately; a user rename overwrites it later and is never reset here.
+        // Seed `display_name` with the detected name; later user edits never get overwritten here.
         "INSERT INTO chapters (id, game_id, name, sort_index, reached, first_seen_at,             updated_at, device_id, deleted, display_name, route_key, route_name, route_order, position, manual)          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0)",
     )
     .bind(id.to_string())
@@ -1252,11 +1231,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_detected_chapter_does_not_collide_with_a_manual_chapter_index() {
-        // Regression: `insert_chapter` wrote the engine's route code into
-        // `sort_index` (route 10 became sort_index 10), while manual chapters used
-        // MAX+1. Ten manual chapters and a route-10 scene therefore shared an index,
-        // so the list interleaved two unrelated orderings. The code now lives in
-        // `route_order` and `sort_index` is a plain append for both.
+        // Engine route codes belong in `route_order` while `sort_index` remains a plain append counter.
         let (db, device, game_id) = fixture().await;
 
         let scene = detected(
@@ -1304,10 +1279,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_chapter_added_inside_a_route_lands_on_that_route() {
-        // The Routes card creates a chapter from inside a route. The route label and
-        // the route row are two different things, so a chapter that carried only the
-        // label fell into the unlinked bucket even though it was added from a route,
-        // which left the new route with nothing to time.
+        // Ensure a chapter created from a route links by `route_id` rather than dropping into the unlinked bucket via label alone.
         let (db, device, game_id) = fixture().await;
         let route = vn_core::model::Route::new(&device, now(), game_id, "Shiroha").unwrap();
         crate::db::queries::upsert_route(db.pool(), &route)

@@ -56,8 +56,7 @@ function ConcealedArt({
 }) {
   return (
     <div className={className}>
-      {/* The blur itself is the cached backdrop image behind this scrim: DESIGN.md
-          forbids a large CSS blur on a scrolling surface. */}
+      {/* Backdrop behind this scrim is pre-blurred to avoid heavy CSS blur on scrolling lists. */}
       <span className="cover__reveal-label">{label}</span>
       <RevealButton art={art} />
     </div>
@@ -82,13 +81,7 @@ function RevealButton({ art }: { art: Artwork }) {
   );
 }
 
-/**
- * A game as art.
- *
- * The identity motif in component form: the cover supplies the accent for the
- * whole screen, so pointing at a card changes the room. Explicit artwork obeys
- * the content setting and is revealed only on an explicit action.
- */
+/** Renders a game cover that publishes its extracted accent and respects content concealment. */
 export function CoverCard({ card, size = "grid" }: CoverCardProps) {
   const { t, locale } = useI18n();
   const { openMenu } = useContextMenu();
@@ -98,8 +91,7 @@ export function CoverCard({ card, size = "grid" }: CoverCardProps) {
   const { policy, imageUrl, artUrl, palette, fallback, publishAccent } = art;
   const concealed = policy !== "visible";
 
-  // Persist the extracted accent the first time it is computed, so the database
-  // carries it and later launches skip the bitmap decode entirely.
+  // Persist the extracted accent on first decode so later launches skip bitmap parsing.
   useEffect(() => {
     if (concealed || !artUrl || game.accent_color === palette.accent) return;
     const timer = window.setTimeout(() => {
@@ -147,8 +139,7 @@ export function CoverCard({ card, size = "grid" }: CoverCardProps) {
     >
       <div className="cover__frame">
         {imageUrl ? (
-          // The blurred variant is painted through the same element as the sharp
-          // cover: it already fits the frame, so this costs no layout change.
+          // Reuse the cover element for the blurred variant so layout dimensions stay identical.
           <img
             className={concealed ? "cover__art cover__art--blurred" : "cover__art"}
             src={imageUrl}

@@ -8,23 +8,11 @@ import type { RecommendOutcome, RecommendSettings } from "@/lib/ipc/types";
 import { ForYouPanel } from "@/features/recommend/ForYouPanel";
 
 /**
- * Discover, in two tabs.
- *
- * "Ask" answers "what to read next?" from what people wrote: every suggestion
- * carries the pages it came from, because a recommendation without a source is
- * a confident guess. "For you" answers the same question from VNDB's own
- * catalogue, matched against the library's taste; it needs no key and no
- * network beyond VNDB itself. See `ForYouPanel` for that half.
- *
- * Layout: one centred column of readable width. The previous version stretched
- * every control across the full window, which put the submit button 1400px from
- * the input it submits and left the screen looking like an unfinished form.
+ * Discover view: "Ask" pairs Tavily sources with chat recommendations, and
+ * "For you" matches the VNDB catalogue against local taste.
  */
 
-/// Open a citation through Rust's scheme allowlist.
-///
-/// Tavily supplies these URLs, so they are third-party text and must not reach an
-/// `href` the webview can navigate to.
+/** Open a Tavily citation via Rust's scheme allowlist rather than a raw webview href. */
 async function openSource(url: string): Promise<void> {
   try {
     await api.openExternal(url);

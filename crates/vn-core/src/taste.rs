@@ -1,21 +1,8 @@
-//! Describing a library's taste from its own data.
+//! Describing a library's taste deterministically from its own VNDB tags.
 //!
-//! # Why this is deterministic
-//!
-//! The panel is a plain count of the VNDB tags the library carries most, with no
-//! model and no network, so it works with no API key and says exactly what it
-//! counts. Every tag names the games behind it.
-//!
-//! # What makes a claim honest
-//!
-//! Every statement this module produces is traceable to a count. Nothing here
-//! guesses, and nothing is invented to fill a paragraph.
-//!
-//! # Spoilers
-//!
-//! VNDB tags carry a `spoiler` level. A tag that only exists to reveal plot is
-//! excluded from the profile, because a taste summary is shown regardless of how
-//! far through a game the user is.
+//! Every claim is traceable to a direct tag count (no model, no network).
+//! Spoiler tags (`spoiler > 0`) are excluded because taste summaries show
+//! regardless of reading progress.
 
 use serde::{Deserialize, Serialize};
 
@@ -23,44 +10,31 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TagWeight {
-    /// Tag id, e.g. `g505`, when the source row carried one. Counting stays by
-    /// name (an alias must not split a theme), but the "For you" query needs
-    /// the id to name the tag in a VNDB filter.
+    /// Tag id, e.g. `g505` (counting uses `name` so aliases do not split; "For you" uses `id`).
     #[serde(default)]
     pub id: Option<String>,
-    /// Tag name as VNDB labels it.
     pub name: String,
-    /// VNDB's own weight for how much this tag defines the work, 0 to 3.
+    /// VNDB weight (0 to 3) for how strongly this tag defines the work.
     pub rating: f32,
-    /// VNDB spoiler level: 0 none, 1 mild, 2 major. Above zero is excluded.
+    /// VNDB spoiler level: 0 none, 1 mild, 2 major (> 0 excluded).
     pub spoiler: u8,
 }
 
-/// One named person or company, identified by its stable VNDB id.
-///
-/// `p8`/`s123` rather than a name: names change (aliases, romanisations), ids
-/// do not, and a query to VNDB is written against the id.
+/// One named person or company identified by its stable VNDB id (`p8`, `s123`),
+/// because display names change via aliases and romanisations.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NamedEntity {
-    /// Stable id, e.g. `p8` for a developer, `s123` for a person.
     pub id: String,
-    /// Name as VNDB displays it.
     pub name: String,
 }
 
-/// A staff credit as it contributes to a profile.
-///
-/// Like [`NamedEntity`] but carrying the role, because a composer and a
-/// scenario writer are different signals even at the same id.
+/// A staff credit carrying `role` (composer vs scenario writer are distinct signals).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaffCredit {
-    /// Staff id, e.g. `s123`.
     pub id: String,
-    /// Name as VNDB displays it.
     pub name: String,
-    /// Role on the work, e.g. `scenario`, `art`.
     pub role: String,
 }
 
@@ -68,29 +42,19 @@ pub struct StaffCredit {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfiledGame {
-    /// Stable id, so a statement can point at the game it came from.
+    /// Stable id so a claim can point at the source game.
     pub id: String,
-    /// Display title.
     pub title: String,
-    /// `playing`, `completed`, `wishlist` and so on.
     pub status: String,
     /// 1 to 10, when rated.
     pub rating: Option<u8>,
-    /// Tags from VNDB, if the game has been described.
     pub tags: Vec<TagWeight>,
-    /// VNDB id when linked, used to collapse duplicates.
-    ///
-    /// A library can hold the same work twice under different titles, which is
-    /// exactly what this library did. Two entries for one game must not double a
-    /// tag's weight and invent a preference out of a single work.
+    /// VNDB work id used to collapse duplicate entries for the same work before tallying.
     pub work_id: Option<String>,
-    /// Developers of the work, when its VNDB details are cached.
     #[serde(default)]
     pub developers: Vec<NamedEntity>,
-    /// Production staff credits, when the details carry them.
     #[serde(default)]
     pub staff: Vec<StaffCredit>,
-    /// Voice actors, when the details carry them.
     #[serde(default)]
     pub voices: Vec<NamedEntity>,
 }
@@ -99,51 +63,35 @@ pub struct ProfiledGame {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Theme {
-    /// Tag name.
     pub name: String,
-    /// How many games carry it.
     pub count: usize,
-    /// Titles of the games, newest evidence first, capped for display.
+    /// Game titles, newest evidence first, capped for display.
     pub examples: Vec<String>,
-    /// Share of the library, 0 to 1.
+    /// Share of considered games, 0 to 1.
     pub share: f32,
 }
 
-/// The computed profile.
+/// The computed taste profile.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TasteProfile {
-    /// Games considered, after excluding anything unusable.
     pub considered: usize,
-    /// Games skipped for having no tags, with titles.
+    /// Titles skipped for having no usable tags.
     pub undetermined: Vec<String>,
-    /// Tags, most games carrying them first.
     pub themes: Vec<Theme>,
 }
 
-/// Tags below this VNDB rating are technical boilerplate.
-///
-/// Measured on a real library: `ADV` sits at 2.86, `Built-in Encyclopedia` and
-/// `Protagonist with a Face` lower still, and all of them appear on nearly every
-/// visual novel. Counting them made the profile read "100% Genre: visual novel",
-/// which describes the medium rather than the reader. Real taste signal sits
-/// higher: `Nakige` at 2.98, `Family` at 2.94.
+/// Tags below this VNDB rating are medium boilerplate (`ADV` 2.86, `Built-in Encyclopedia` < 2.86;
+/// real taste signals sit higher: `Nakige` 2.98, `Family` 2.94).
 pub const BOILERPLATE_BELOW: f32 = 2.88;
 
-/// Minimum absolute count, so a one-game library produces no themes at all rather
-/// than a confident statement built on nothing.
+/// Minimum game count so a single-game library never invents a pattern.
 pub(crate) const MINIMUM_COUNT: usize = 2;
 
-/// How many tags to report, strongest first.
 const MAX_THEMES: usize = 12;
-
-/// How many example titles per tag.
 const MAX_EXAMPLES: usize = 3;
 
-/// Share of a whole, as a fraction.
-///
-/// One place for the narrowing, so the reason is stated once: library sizes are
-/// thousands at most, far inside `f32`'s exact integer range.
+/// Library sizes are thousands at most, well inside `f32`'s exact integer range.
 fn share_of(count: usize, whole: usize) -> f32 {
     #[allow(clippy::cast_precision_loss)]
     let (count, whole) = (count as f32, whole as f32);
@@ -188,7 +136,6 @@ pub fn profile(games: &[ProfiledGame]) -> TasteProfile {
         }
     }
 
-    // Per-tag evidence: count and examples.
     let mut tally: Vec<(String, usize, Vec<String>)> = Vec::new();
     for game in &usable {
         let mut seen_here: Vec<&str> = Vec::new();
@@ -216,14 +163,9 @@ pub fn profile(games: &[ProfiledGame]) -> TasteProfile {
     }
 
     let considered = usable.len();
-    // Ordered by how many games carry the tag. A tag on every game at the minimum
-    // rating is weaker evidence than one on half the library at the maximum, but
-    // the panel shows counts, so the count is the sort; ties break by name so the
-    // output is stable between runs.
+    // Sort by game count descending (matching displayed counts), breaking ties by name.
     let mut themes: Vec<Theme> = tally
         .into_iter()
-        // A single shared game is a coincidence, not a pattern, however big the
-        // library is.
         .filter(|(_, count, _)| *count >= MINIMUM_COUNT)
         .map(|(name, count, examples)| Theme {
             name,

@@ -1,32 +1,16 @@
 //! Known engine profiles for capability reporting.
 //!
-//! # What this is
-//!
-//! A small table answering one question: is this engine family one this build
-//! has a verified profile for, so capability reporting can say "known,
-//! unavailable" instead of "unknown".
-//!
-//! # What this is not
-//!
-//! The in-process reader that used these scene tables was removed with the
-//! hook. Reading a scene table means reading another process's memory at
-//! offsets derived from injected byte patterns, and that is exactly the
-//! mechanism that was removed, so the offsets themselves are absent from
-//! code. Nothing here touches a game process; a profile is metadata, not an
-//! access path.
+//! Reports whether an engine family is known so capability status can distinguish
+//! "known, unavailable" from "unknown". Profiles are static metadata only;
+//! nothing here reads another process's memory.
 
-/// An engine family this build has a verified profile for.
-///
-/// Every profile names the build it was verified against, as the binary
-/// reports it: a claim about one specific binary, kept as provenance for the
-/// capability report rather than as an access path.
+/// Verified engine family metadata for capability reporting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EngineProfile {
     /// Engine family, matching `chapter::is_chapter`.
     pub engine: &'static str,
-    /// The build this profile was verified against, as the binary reports it.
+    /// Binary build identifier kept as provenance for the capability report.
     pub verified_build: &'static str,
-    /// The engine module the profile was verified against.
     pub module: &'static str,
 }
 
@@ -41,10 +25,9 @@ pub const SIGLUS_SPRB: EngineProfile = EngineProfile {
     module: "SiglusEngine.exe",
 };
 
-/// Every profile this build knows about.
 pub const PROFILES: &[EngineProfile] = &[SIGLUS_SPRB];
 
-/// Find the profile for an engine and module, if one exists.
+/// Case-insensitive lookup by engine and module.
 #[must_use]
 pub fn profile_for(engine: &str, module: &str) -> Option<&'static EngineProfile> {
     PROFILES.iter().find(|profile| {

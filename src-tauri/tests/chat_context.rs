@@ -1,9 +1,4 @@
-//! Follow-up context, citation remapping and interrupted-answer persistence.
-//!
-//! These cover the failure modes that only appear on the *second* turn: a
-//! replayed [S1] that now points at a different page, retrieved evidence being
-//! dropped on the next question, and a stopped/truncated answer being replayed
-//! to the model as if it were fact.
+//! Integration tests for multi-turn chat follow-up context, citation remapping (`[S1]`), and truncated-answer persistence.
 
 use serde_json::Value;
 use vn_core::chat::ChatOptions;
@@ -271,10 +266,7 @@ fn an_earlier_answer_with_a_figure_is_labelled_as_aging() {
 
 #[tokio::test]
 async fn a_long_thread_rolls_instead_of_refusing_new_messages() {
-    // The old cap rejected every message once a thread reached 200 rows, and the
-    // list query read the *oldest* 200, so the thread was unusable in both
-    // directions. The window now rolls: the newest exchange always lands and the
-    // oldest one is dropped.
+    // Rolling window drops the oldest exchange once capacity is reached.
     let db = Db::open_memory().await.expect("in-memory db");
     let thread = store::create(db.pool(), options()).await.expect("thread");
 

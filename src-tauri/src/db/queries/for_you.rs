@@ -1,10 +1,5 @@
-//! Queries for the "For you" recommendations.
-//!
-//! The library's games joined with whatever people data their cached VNDB
-//! details carry. One view for both consumers — `ai_taste_profile` and the
-//! for-you commands — because a recommendation built from a different view of
-//! the library than the profile shown beside it would be two answers to one
-//! question.
+//! Queries for "For you" recommendations and `ai_taste_profile`.
+//! Both consumers share this view of live games and cached VNDB credits.
 
 use sqlx::SqlitePool;
 use vn_core::taste::{NamedEntity, ProfiledGame, StaffCredit, TagWeight};
@@ -12,12 +7,7 @@ use vn_core::taste::{NamedEntity, ProfiledGame, StaffCredit, TagWeight};
 use crate::db::pool::DbError;
 use crate::vndb::dto;
 
-/// Every live game, in the shape the taste profile and the for-you seeds need.
-///
-/// A malformed or missing cache blob degrades to an empty list for that one
-/// field, the way the detail screen treats its own cache: the game then
-/// simply has no tags (or people) and the profile says so, instead of the
-/// whole query failing over one row.
+/// Live games with cached VNDB tags and credits; malformed or missing JSON blobs degrade to empty.
 pub async fn seeded_games(pool: &SqlitePool) -> Result<Vec<ProfiledGame>, DbError> {
     use sqlx::Row as _;
     let rows = sqlx::query(
@@ -81,10 +71,7 @@ pub async fn seeded_games(pool: &SqlitePool) -> Result<Vec<ProfiledGame>, DbErro
     Ok(games)
 }
 
-/// Decode one JSON column, degrading to empty rather than failing the row.
-///
-/// Rows written before a column existed carry NULL here — the same rule the
-/// detail read path applies (AGENTS.md §6: assume old rows lack the field).
+/// Decodes a JSON column; missing/legacy `NULL` or malformed values degrade to empty (AGENTS.md §6).
 fn decode<T: serde::de::DeserializeOwned>(row: &sqlx::sqlite::SqliteRow, column: &str) -> Vec<T> {
     use sqlx::Row as _;
     row.get::<Option<String>, _>(column)

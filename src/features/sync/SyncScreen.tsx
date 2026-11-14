@@ -251,7 +251,6 @@ export function SyncScreen() {
         </p>
       ) : null}
 
-      {/* ---------------- account ---------------- */}
       <Card>
         <CardHeader title={t("sync.title")} />
         <p className="body" style={{ marginBottom: "var(--space-4)" }}>
@@ -351,7 +350,6 @@ export function SyncScreen() {
         )}
       </Card>
 
-      {/* ---------------- conflicts ---------------- */}
       {account ? (
         <Card>
           <CardHeader
@@ -423,8 +421,7 @@ export function SyncScreen() {
               <p className="caption">
                 {t("sync.notImported", { count: summary.notImported })}
               </p>
-              {/* Telling someone 37 entries are missing and stopping there is a
-                  dead end. The pull already knows which ones. */}
+              {/* Offer direct batch import from the pull results rather than leaving a count-only dead end. */}
               <Button
                 variant="secondary"
                 disabled={busy === "import"}
@@ -448,7 +445,6 @@ export function SyncScreen() {
         </Card>
       ) : null}
 
-      {/* ---------------- queue ---------------- */}
       {account ? (
         <Card>
           <CardHeader
@@ -492,7 +488,6 @@ export function SyncScreen() {
         </Card>
       ) : null}
 
-      {/* ---------------- log ---------------- */}
       {account ? (
         <Card>
           <CardHeader title={t("sync.logTitle")} />

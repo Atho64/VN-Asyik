@@ -13,20 +13,8 @@ interface FeedShot extends ScreenshotCard {
 }
 
 /**
- * Every capture in the library, grouped by game.
- *
- * A panel rather than a screen: it lives in a tab on the Timeline page, which
- * already owns the heading and the navigation entry. Giving it its own rail item
- * made an eleven-entry navigation for a feature that is a way of looking at the
- * same reading history.
- *
- * Grouped rather than chronological: a screenshot library is something you scan
- * to find a picture of a particular game, and a flat feed of fifty tiles from six
- * games is harder to search by eye than six short rows.
- *
- * Distinct from the VNDB gallery on purpose — those are reference images with a
- * content rating and a disposable cache behind them, these are the reader's own
- * pictures. The tiles are 16:9 and uncropped for that reason.
+ * Game-grouped feed of the reader's local captures (16:9 uncropped), distinct
+ * from the disposable VNDB reference gallery. Lives inside the Timeline screen tabs.
  */
 export function ScreenshotsPanel() {
   const { t, locale } = useI18n();

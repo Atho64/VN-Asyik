@@ -226,10 +226,7 @@ describe("explicit art policy", () => {
   });
 
   it("conceals a level-1 cover and a level-1 screenshot together", () => {
-    // The divergence this change removed: the library compared `>= 2` while the
-    // screenshot gallery compared the rounded level `>= 1`, so one scene could be
-    // blurred as a screenshot and shown in full as a cover. Both now resolve through
-    // `isExplicitAtLevel`, and the Rust side pins the same constant.
+    // Ensure covers and screenshots apply the same EXPLICIT_FLAG_LEVEL threshold as Rust.
     expect(EXPLICIT_FLAG_LEVEL).toBe(1);
     for (const level of [0, 1, 2, 3]) {
       const concealed = level >= EXPLICIT_FLAG_LEVEL;
