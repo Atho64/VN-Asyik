@@ -1,10 +1,4 @@
-/*
- * components.css — base components.
- *
- * Radius is a hierarchy tool, not a default (R-11): buttons use --radius-m,
- * inputs --radius-m, cards --radius-l, sheets only the top corners.
- * Shadow marks elevation only (R-12): one floating layer exists at a time.
- */
+/* Base UI components: radius hierarchy (`--radius-m` controls, `--radius-l` cards) and single-layer elevation shadows. */
 
 /* Button */
 
@@ -84,6 +78,7 @@
 /* Chip */
 
 .chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -100,25 +95,24 @@
     border-color var(--dur-fast) var(--ease);
 }
 
+button.chip::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
+}
+
 button.chip:hover {
   color: var(--text);
   border-color: var(--border-strong);
 }
 
-/* Metadata, not status: an engine/ending origin tag beside a route name. It
-   must read quieter than the status chips around it, so it drops the surface
-   and lets the border carry the shape. */
+/* Quiet outline tag for engine/ending metadata beside a route name. */
 .chip--quiet {
   background: transparent;
   color: var(--text-faint);
 }
 
-/* A chip that leaves the app: the VNDB entry id in the hero facts row.
- *
- * Marked as a link by the accent on hover rather than by an underline. It sits in
- * a row of status and rating chips, so its shape must not shout, but clicking it
- * must not be a surprise either: the accent is the app's established "this goes
- * somewhere" signal. */
+/* External VNDB link chip; accent hover marks it as a link without an underline. */
 .chip--link {
   cursor: pointer;
   font-family: var(--font-mono, var(--font-ui));
@@ -137,8 +131,7 @@ button.chip--link:hover {
   color: var(--text);
 }
 
-/* Status chips carry meaning through a 6px ring in the status hue, not a
-   coloured stripe or a glowing dot (R-01, R-13). */
+/* Status chips use a 6px dot in the status hue rather than a coloured stripe or glow. */
 .chip__status {
   width: 6px;
   height: 6px;
@@ -162,8 +155,7 @@ button.chip--link:hover {
   background: var(--danger);
 }
 
-/* Touch: every chip becomes a real 44px target. A 32px chip is fine under a
-   cursor and hostile under a thumb (antislop-layoutmobile). */
+/* Keep chips at a 44px minimum touch target below desktop breakpoints. */
 @media (max-width: 1023px) {
   .chip {
     min-height: var(--touch-target);
@@ -173,47 +165,32 @@ button.chip--link:hover {
 
 /* Card */
 
-/* Cards are glass over the artwork while effects are on: a 5% wash alone reads as
- * a flat panel floating on nothing, which is what made the page look unstyled.
- * With effects off they fall back to a solid surface. */
+/* Cards use an elevated solid surface over the backdrop for clean contrast. */
 .card {
   border-radius: var(--radius-l);
   border: 1px solid var(--border);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  background: var(--bg-elevated);
 }
 
 :root[data-reduce-effects="true"] .card {
   background: var(--bg-elevated);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 .card__body {
   padding: var(--space-4);
 }
 
-/* A card whose content lays itself out with its own padding (the presence
-   panel): the body default would double it. */
+/* Presence panel supplies its own inner padding; avoid doubling card body padding. */
 .settings__card > .card__body {
   padding: 0;
 }
 
-/* The header lives inside that zeroed body, above the padded panel, so it must
-   replace the lost top and side padding itself — otherwise the title sits on
-   the card edge. The panel's own top padding keeps the gap below it. */
+/* Restore header top/side padding inside the zeroed presence body. */
 .settings__card .card__header {
   padding: var(--space-4) var(--space-4) 0;
 }
 
-/* The aside (a status badge or a small action) sits beside the title: pinned to
- * the far edge of a wide card it reads as floating in empty space. Centered,
- * not baseline-aligned: a pill's border-box rides ~one padding above its text
- * baseline, so baseline alignment makes the badge hang above the title line. */
-/* Title on the left, aside on the right. Left-aligned, an aside button sat
- * right after the title and read as a second heading: "Skrip" and "Impor
- * skrip" looked like two titles on one line. */
+/* Center vertically so pill badges stay aligned with the title text, and spread title/aside across the header. */
 .card__header {
   display: flex;
   align-items: center;
@@ -222,11 +199,9 @@ button.chip--link:hover {
   margin-bottom: var(--space-3);
 }
 
-/* One or two lines of orientation under a card title. Muted, never a wall of
-   text: the card body is where the work happens. */
+/* Concise subtitle under a card title. */
 @media (max-width: 599px) {
-  /* A title plus a few controls does not fit one line; wrapping keeps the
-   * aside readable instead of squeezing the title to one word per line. */
+  /* Allow wrapping on narrow screens so long titles do not crush the aside. */
   .card__header {
     flex-wrap: wrap;
     align-items: flex-start;
@@ -352,11 +327,7 @@ button.chip--link:hover {
   }
 }
 
-/* A 5% white wash over artwork reads as a grey slab, not as a field: on a dark
- * backdrop the tint darkens rather than lifts. Blurring the backdrop instead lets
- * the artwork show through, so the field belongs to the surface it sits on. The
- * tint stays as a fallback for reduce-effects, where blur is off.
- */
+/* Solid field backing ensures crisp legibility without expensive backdrop blur. */
 .input,
 .textarea,
 .select {
@@ -365,24 +336,18 @@ button.chip--link:hover {
   min-height: var(--touch-target);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-m);
-  border: 1px solid var(--border);
-  background: var(--field-bg);
-  backdrop-filter: blur(12px) saturate(1.2);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-solid);
   color: var(--text);
   font-size: var(--text-s);
   width: 100%;
 }
 
-/* No blur, so an 8% tint would be invisible: the field needs an opaque backing.
- * This is also what a low-end Android device gets, where blur is expensive. */
 :root[data-reduce-effects="true"] .input,
 :root[data-reduce-effects="true"] .textarea,
 :root[data-reduce-effects="true"] .select {
   background: var(--surface-solid);
   border-color: var(--border-strong);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 .textarea {
@@ -398,10 +363,7 @@ button.chip--link:hover {
 
 .input:focus-visible,
 .textarea:focus-visible,
-/* The dropdown list itself is drawn by the platform, not by this document, so it
- * ignores the translucent field styling and would otherwise paint white on a
- * dark theme. `color-scheme` handles the scrollbar and menus on most engines;
- * explicit option colours cover the rest. */
+/* Style native option popups explicitly where platform rendering ignores translucent input styles. */
 select option,
 select optgroup {
   background-color: var(--surface-solid);
@@ -518,10 +480,7 @@ select optgroup {
   animation: sheet-in var(--dur) var(--ease);
 }
 
-/* A sheet whose content is an image rather than a column of text (the screenshot
- * lightbox). At the default 560px an 800x600 screenshot renders smaller than the
- * tile that opened it. Bounded by both viewport width and height so the footer
- * controls stay reachable on a short laptop screen. */
+/* Wider sheet sizing for image lightboxes so screenshots fit comfortably within laptop viewports. */
 .sheet--wide {
   width: min(960px, 100%);
   max-height: min(92dvh, 900px);
@@ -619,7 +578,7 @@ select optgroup {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 36px;
+  min-height: var(--touch-target);
   padding: 0 var(--space-3);
   border-radius: var(--radius-s);
   color: var(--text-muted);
@@ -745,12 +704,11 @@ select optgroup {
   outline: none;
 }
 
-/* The input suppresses its own ring so the modal, the focused surface, carries
-   it: same pattern as .discover__field, one visible indicator per focus stop. */
 .palette:focus-within {
-  box-shadow:
-    var(--shadow-2),
-    0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+  border-color: var(--accent-strong);
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  box-shadow: var(--shadow-2);
 }
 
 .palette__list {
@@ -796,24 +754,14 @@ select optgroup {
 
 /* Chapters */
 
-/* A chapter list grouped by route.
- *
- * Rows are pick-buttons rather than checkboxes: the selection decides which
- * chapter the manual timer records, so it behaves like a radio group without
- * needing one. Each row keeps a 44px hit area for touch. */
+/* Radio-style chapter selector; each row keeps a 44px touch target. */
 .chapter-groups {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
 
-/* The route is the primary unit and its chapters are the detail, so the route
- * header carries the weight: larger name, the time in the display face, and a
- * rule under it that the chapter rows hang from.
- *
- * No `text-transform: uppercase`: route names are usually Japanese, which has
- * no case, so only the Latin ones would shout and the two headings would stop
- * looking like the same element. */
+/* No text-transform: uppercase because Japanese route names have no case, which would leave only Latin titles uppercased. */
 .chapter-group__title {
   display: flex;
   align-items: baseline;
@@ -829,7 +777,6 @@ select optgroup {
   letter-spacing: 0;
 }
 
-/* The route total: the number someone actually came to see. */
 .chapter-group__total {
   display: flex;
   align-items: baseline;
@@ -849,13 +796,7 @@ select optgroup {
   font-weight: 400;
 }
 
-/* The merge offer under a route that duplicates another one.
- *
- * This used to be `row row--wrap`, borrowing the library's list-row class, which
- * is a three-column card grid with a 44 px art column. A bare Button dropped into
- * that grid got the art cell and was clipped to 44 px, so the label read
- * "…e route as Misaki's Route" hanging off the left edge. A container with its own
- * name, not another surface's. */
+/* Standalone flex container (instead of the 3-column .row card grid) so merge labels are not clipped to the 44px art track. */
 .chapter-group__merge {
   display: flex;
   flex-wrap: wrap;
@@ -869,9 +810,7 @@ select optgroup {
   text-align: left;
 }
 
-/* A phone has no room for a route name and its counts side by side. The counts
- * became a 30 px column and wrapped to one word per line ("0 / 1 of 1" stacked
- * six deep), which also forced the header to 101 px tall. */
+/* Stack route title and totals on narrow viewports so counts do not wrap into a narrow column. */
 @media (max-width: 599px) {
   .chapter-group__title {
     flex-wrap: wrap;
@@ -880,8 +819,7 @@ select optgroup {
   }
 
   .chapter-group__total {
-    /* Full width under the name, and it keeps its own line rather than being
-     * squeezed by whatever the name claims. */
+    /* Give totals a full-width row below the route title. */
     flex: 1 0 100%;
     flex-wrap: wrap;
     gap: var(--space-1) var(--space-2);
@@ -897,7 +835,7 @@ select optgroup {
   flex-direction: column;
   gap: var(--space-1);
   margin: 0;
-  /* Indented from the route heading so the nesting is visible, not implied. */
+  /* Indent chapters under the route heading. */
   padding: 0 0 0 var(--space-3);
   border-left: 2px solid var(--border);
   list-style: none;
@@ -979,9 +917,7 @@ select optgroup {
   padding: var(--space-2) 0;
 }
 
-/* Two actions in one card header or row end: add a past session, add a
-   chapter, mark an ending. The rule was deleted in a later redesign while the
-   markup kept using the name, which left the buttons bunched after the text. */
+/* Header and row-end action group. */
 .chapter-head__actions {
   display: flex;
   flex-wrap: wrap;
@@ -995,12 +931,7 @@ select optgroup {
   min-width: 8rem;
 }
 
-/* A phone cannot fit a chapter name, a rename chip, the detected name, the
- * recorded time and the rename button on one line. The meta block refused to
- * shrink while the name clipped to nothing, so the row grew wider than the
- * card and the name ran off its right edge: the screenshot that started this
- * fix showed "Diganti nama" and the detected name overlapping while the
- * title spilled out. The row wraps now and the name gets its own line. */
+/* Wrap chapter name and meta onto separate lines on narrow viewports so long titles do not overflow. */
 @media (max-width: 599px) {
   .chapter-row {
     flex-wrap: wrap;
@@ -1034,18 +965,14 @@ select optgroup {
     flex: 1 1 100%;
   }
 
-  /* The row's own action keeps one column of its own instead of stacking under
-   * the row: the name and the meta wrap inside the pick, and the rename button
-   * sits beside them rather than adding a third line to every chapter. */
+  /* Keep the rename button inline beside the wrapped name/meta block on phones. */
   .chapter-row > .btn {
     flex: 0 0 auto;
     align-self: center;
   }
 }
 
-/* The route card's header carries two actions. On a phone they stacked into a
- * tall column and the title was centred between them, so "Tambah waktu" floated
- * above "Rute". The header wraps as a unit: title first, actions underneath. */
+/* Stack header actions below the route title on narrow viewports. */
 @media (max-width: 599px) {
   .card__header {
     flex-wrap: wrap;
@@ -1192,10 +1119,7 @@ select optgroup {
   justify-self: end;
 }
 
-/* The reason a game was suggested. Without this the score is a bare number.
-   It sits under the title so the score keeps one column, and it reads as a
-   badge rather than a footnote: muted small print under a title looks like a
-   subtitle and the eye skips it. */
+/* Suggestion reason badge placed beneath the title so the score keeps its column. */
 .similar-row__why {
   display: inline-flex;
   align-items: center;
@@ -1303,10 +1227,25 @@ select optgroup {
   list-style: none;
 }
 
+/* One seed category inside the taste panel. The heading is a caption, not a
+   card header, so the four categories read as one panel; named for what it
+   contains rather than borrowed from another feature's layout. */
+.taste-section {
+  margin-top: var(--space-4);
+}
+
+.taste-section__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* Recommendations */
 
-/* A key field and its submit sharing one row. Used wherever a settings form is
- * a single value plus a button; it used to borrow Discover's class name. */
+/* Shared single-value input + submit row layout. */
 .settings__row-form {
   display: flex;
   flex-wrap: wrap;
@@ -1318,11 +1257,7 @@ select optgroup {
   min-width: 0;
 }
 
-/* Discover: one centred reading column.
- *
- * The screen previously stretched its key row and search row across the whole
- * window, so the submit button sat a screen away from the input it submits. A
- * bounded column keeps the action next to what it acts on. */
+/* Centered reading column keeping actions close to their inputs. */
 .discover {
   display: flex;
   flex-direction: column;
@@ -1332,8 +1267,7 @@ select optgroup {
   padding-block: var(--space-2);
 }
 
-/* The For-you results are a card grid: a wider measure than the ask flow's
- * readable column, so the grid actually fits a few cards per line. */
+/* Wider grid column for For-you recommendation cards. */
 .discover--wide {
   max-width: 62rem;
 }
@@ -1353,7 +1287,7 @@ select optgroup {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 40px;
+  min-height: var(--touch-target);
   cursor: pointer;
   list-style: none;
   font-size: var(--text-s);
@@ -1415,13 +1349,12 @@ select optgroup {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
   background: var(--bg-elevated);
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
+  transition: border-color 120ms ease;
 }
 .discover__field:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+  border-color: var(--accent-strong);
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 .discover__field > svg {
   flex: none;
@@ -1445,7 +1378,7 @@ select optgroup {
   font: inherit;
   font-size: var(--text-m);
   padding: var(--space-2) 0;
-  min-height: 40px;
+  min-height: var(--touch-target);
 }
 .discover__input:focus {
   outline: none;
@@ -1554,7 +1487,7 @@ select optgroup {
 .discover__sources > summary {
   display: flex;
   align-items: center;
-  min-height: 36px;
+  min-height: var(--touch-target);
   cursor: pointer;
   list-style: none;
   font-size: var(--text-s);
@@ -1623,7 +1556,7 @@ select optgroup {
 .rec-card__sources {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1632,7 +1565,7 @@ select optgroup {
 .rec-card__source {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
+  min-height: var(--touch-target);
   font-size: var(--text-xs);
   color: var(--text-faint);
   overflow-wrap: anywhere;
@@ -1731,7 +1664,7 @@ select optgroup {
   padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--glass-bg);
+  background: var(--bg-elevated);
 }
 
 .foryou-card__rank {
@@ -1787,8 +1720,8 @@ select optgroup {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  min-height: 28px;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
   margin-left: auto;
   border-radius: var(--radius-xs);
   color: var(--text-faint);
@@ -1871,7 +1804,7 @@ select optgroup {
 
 .play__button:disabled {
   opacity: 0.6;
-  cursor: default;
+  cursor: not-allowed;
 }
 
 .play__button:focus-visible {
@@ -1934,6 +1867,13 @@ select optgroup {
   color: var(--text);
 }
 
+@media (max-width: 1023px) {
+  .rating,
+  .input--rating {
+    min-height: var(--touch-target);
+  }
+}
+
 .input--rating:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
@@ -1993,7 +1933,7 @@ select optgroup {
 
 .ctxmenu__item:disabled {
   color: var(--text-faint);
-  cursor: default;
+  cursor: not-allowed;
 }
 
 .ctxmenu__item:focus-visible {
@@ -2123,6 +2063,18 @@ select optgroup {
   overflow-wrap: anywhere;
 }
 
+/* A spoiler-tagged character until the reveal: the tile stays in place, but
+   neither the name nor the portrait may hint at who it is. */
+.cast__spoiler-name {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.cast__summary[data-spoiler="true"] .cast__art {
+  opacity: 0.55;
+}
+
 .cast__original,
 .cast__role {
   color: var(--text-muted);
@@ -2180,10 +2132,7 @@ select optgroup {
   padding-block-start: var(--space-1);
 }
 
-/* Labelled alternate titles: the role on the left, the name on the right.
-   `max-content` sizes the label column to its longest word ("Japanese", "Also
-   called") instead of a fixed 6.5rem, which left a gulf between a short label and
-   its value. The gap does the separating, not empty space. */
+/* Alternate title row: size the role column to max-content rather than a fixed width so spacing stays tight. */
 .detail__alt {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -2204,10 +2153,7 @@ select optgroup {
 }
 
 @media (max-width: 480px) {
-  /* Keep the label and the name on one line. Stacking them was right when
-   * the pill spanned the whole head; the pill now sits in the text column
-   * beside the cover, where "JEPANG アネモイ" fits, and two stacked lines
-   * made the header taller for no gain. */
+  /* Keep role label and name inline beside the cover on narrow phones. */
   .detail__alt {
     gap: var(--space-2);
   }
@@ -2221,6 +2167,12 @@ select optgroup {
   object-position: top;
   border-radius: var(--radius-md);
   background: var(--surface-2);
+}
+
+/* The concealed sheet portrait: the same frame, nothing inside it. */
+.cast__portrait--empty {
+  display: block;
+  block-size: 12rem;
 }
 
 .cast__sheet-original {

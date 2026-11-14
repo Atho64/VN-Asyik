@@ -1,12 +1,6 @@
 /*
- * backdrop.css
- *
- * The identity motif: the focused cover is the light source (DESIGN.md §0).
- * Layering, bottom to top: blurred art -> functional scrim -> content.
- *
- * Performance rule (§2): the backdrop image is pre-blurred and downscaled in
- * Rust, then upscaled here. No CSS filter blur on a scrolling surface, which
- * is what keeps Android WebView at frame rate.
+ * Fixed backdrop stack: pre-blurred downscaled cover (generated in Rust) -> scrim -> content.
+ * Keeping blur off scrolling layers maintains frame rate on Android WebView.
  */
 
 .backdrop {
@@ -75,7 +69,7 @@
   background: var(--bg);
 }
 
-/* Accent bloom behind the focused cover: the one allowed glow (R-13). */
+/* Accent bloom behind the focused cover. */
 .backdrop__bloom {
   position: absolute;
   inset: auto 0 0 0;
@@ -88,14 +82,7 @@
   opacity: 0.9;
 }
 
-/* Reduced effects: no artwork at all.
- *
- * "Less effects" previously only removed the grain, leaving a 30px blur over a
- * full-window image -- still the most expensive thing on screen, and still a
- * moving background behind every word. Someone who asks for fewer effects wants
- * a plain surface, so the artwork and every overlay that decorates it are gone
- * and the base colour remains.
- */
+/* Reduced effects: hide artwork and decorative overlays, leaving plain bg. */
 :root[data-reduce-effects="true"] .backdrop__layer,
 :root[data-reduce-effects="true"] .backdrop__bloom,
 :root[data-reduce-effects="true"] .backdrop__grain {

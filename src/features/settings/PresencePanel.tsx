@@ -63,11 +63,8 @@ type TransformKey =
   | "vndb_state_transform";
 
 /**
- * A rotation list: one template per line.
- *
- * Kept as text rather than a `string[]` while editing so a half-typed line is not
- * silently dropped on every keystroke, which is what made an empty entry
- * impossible to write and then delete.
+ * Line-based template list editor backed by a plain text draft so partial entries
+ * survive typing and deletion mid-keystroke.
  */
 function RotationListEditor({
   id,
@@ -316,21 +313,15 @@ export function PresencePanel() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [activeField, setActiveField] = useState<WhichField>("details");
-  // Which entry of each rotation list the preview is showing.
   const [previewCycle, setPreviewCycle] = useState(0);
-  // Which game the preview renders. Until now the backend was always called
-  // with no id, so the panel previewed the built-in sample no matter what the
-  // user's library held -- {vn_name} could never show their own title.
+  // Active library game id for live token preview so `{vn_name}` resolves a real title.
   const [previewGameId, setPreviewGameId] = useState<string>("");
-  // Which scope the form edits. "" means the global default; a game id means
-  // that game's overrides. The backend stores only the fields that differ from
-  // global, so untouched fields keep following the global row.
+  // `""` edits global defaults; a game id edits per-game overrides (untouched fields inherit global).
   const [scopeGameId, setScopeGameId] = useState<string>("");
   const [games, setGames] = useState<{ id: string; title: string }[]>([]);
   const [previewStateCycle, setPreviewStateCycle] = useState(0);
   const [linkError, setLinkError] = useState<string | null>(null);
 
-  // Discord Token state for Android Gateway
   const [hasToken, setHasToken] = useState(false);
   const [tokenPreview, setTokenPreview] = useState<string | null>(null);
   const [showTokenModal, setShowTokenModal] = useState(false);
@@ -390,8 +381,7 @@ export function PresencePanel() {
           title: card.game.title,
         }));
         setGames(options);
-        // Default to the first game so the preview is about a real title from
-        // the moment the panel opens.
+        // Seed preview with the first real title so template tokens expand on open.
         setPreviewGameId((current) => current || (options[0]?.id ?? ""));
       })
       .catch(() => undefined);
@@ -400,7 +390,6 @@ export function PresencePanel() {
     };
   }, []);
 
-  // Update live preview when settings or the previewed rotation entry change.
   useEffect(() => {
     if (!settings) return;
     let active = true;
@@ -421,16 +410,12 @@ export function PresencePanel() {
     };
   }, [settings, previewCycle, previewStateCycle, previewGameId, imageKeyPreview]);
 
-  // A saved-to-play switch is not a field; the reset keeps the preview honest about
-  // where a fresh rotation starts.
   const resetPreview = useCallback(() => {
     setPreviewCycle(0);
     setPreviewStateCycle(0);
   }, []);
 
-  // How many entries each line can actually rotate through, or zero when the field
-  // is not rotating. Zero hides the pager rather than offering to step through a
-  // list the card is currently ignoring.
+  // Rotation entry counts; 0 hides the preview pager when rotation is disabled.
   const rotationLengths = useMemo(() => {
     if (!settings) return { details: 0, state: 0 };
     const usable = (list: string[]) => list.filter((entry) => entry.trim() !== "").length;
@@ -451,9 +436,7 @@ export function PresencePanel() {
     };
   }, [settings]);
 
-  // Switching scope loads that scope's effective settings into the form, so the
-  // fields show what the card will really render rather than a blank override
-  // panel the user has to guess the baseline of.
+  // Load effective baseline values for the selected scope so inherited fields remain visible.
   const switchScope = useCallback(
     (gameId: string) => {
       setScopeGameId(gameId);
@@ -806,9 +789,7 @@ export function PresencePanel() {
 
           {settings.enabled ? (
             <>
-              {/* Stacked rather than a label/control row: three mode chips are
-                  wider than a 360 px phone's content box, so side by side they
-                  overflowed the card. */}
+              {/* Stack label above mode chips so three chips never overflow narrow mobile cards. */}
               <div className="presence-mode">
                 <span className="settings__label">{t("settings.presenceMode")}</span>
                 <div className="settings__control">
@@ -830,7 +811,6 @@ export function PresencePanel() {
                 </div>
               </div>
 
-              {/* The title line is what Discord bolds at the top of the card. */}
               <div className="settings__field">
                 <label htmlFor="activity-name" className="settings__label">
                   {t("settings.presenceCardTitle")}
@@ -990,9 +970,7 @@ export function PresencePanel() {
 
               {settings.details_mode === "vndb" ? (
                 <>
-                  {/* The list owns the interval and the on/off switch for this
-                      mode: a separate toggle or seconds field above it would be
-                      the same value rendered twice. */}
+                  {/* RotationListEditor owns the per-mode toggle and interval so controls aren't duplicated. */}
                   <RotationListEditor
                     id="vndb-details-items"
                     label={t("settings.presenceVndbDetailsItems")}
@@ -1107,9 +1085,7 @@ export function PresencePanel() {
 
               {settings.show_cover ? (
                 <>
-                  {/* Opt-in, EwE-style: a host lets the card show art Discord
-                      cannot fetch itself (explicit covers as a local blur,
-                      custom covers). "none" keeps every image local. */}
+                  {/* Opt-in cover host for blurred/custom artwork Discord cannot fetch; "none" stays local. */}
                   <div className="presence-mode">
                     <span className="settings__label">
                       {t("settings.presenceImageHost")}
@@ -1309,6 +1285,7 @@ export function PresencePanel() {
                 <div className="settings__scope">
                   <select
                     className="input"
+                    aria-label={t("settings.presenceScope")}
                     value={scopeGameId}
                     onChange={(event) => switchScope(event.target.value)}
                   >
@@ -1457,13 +1434,7 @@ export function PresencePanel() {
   );
 }
 
-/**
- * The card as Discord draws it.
- *
- * Deliberately hard-coded to Discord's own palette: this is a picture of another
- * application, and rendering it in the app's theme tokens would make the preview
- * a lie about what the user will see on their profile.
- */
+/** Fixed Discord-palette preview card representing how the activity appears on Discord. */
 function DiscordCardPreview({
   activity,
   label,

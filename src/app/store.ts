@@ -1,11 +1,4 @@
-/**
- * Application store.
- *
- * Kept deliberately small: identity (prefs, library index, toasts) lives here
- * because several screens read it, and so does state the user typed but that must
- * outlive a navigation (the library's search/filter set, the VNDB detail cache).
- * Everything else stays in the screen.
- */
+/** Shared store for cross-screen identity, persistent filters, and the VNDB detail cache. */
 
 import { create } from "zustand";
 import {
@@ -19,6 +12,7 @@ import type {
   GameCard,
   PlatformInfo,
   Prefs,
+  StartupPrefsView,
   UiPrefs,
   UpdateView,
 } from "@/lib/ipc/types";
@@ -45,47 +39,18 @@ interface AppState {
   cards: GameCard[];
   libraryLoaded: boolean;
   libraryError: string | null;
-  /**
-   * Search text, status chips, rated-only, view and sort for the library.
-   *
-   * In the store because the screen unmounts on navigation: a search typed in
-   * the library was still applied to the cards, but the query that produced it
-   * lived in the component and died on the way to another menu, so coming back
-   * showed the whole collection again.
-   */
+  /** Stored in app state because the screen unmounts on navigation. */
   libraryBrowse: LibraryBrowse;
-  /**
-   * The timeline's journal search text. In the store for the same reason as
-   * `libraryBrowse`: the screen unmounts on navigation, and a reader who opens a
-   * result and comes back must find their search, not an empty box.
-   */
+  /** Stored in app state so Timeline search survives route changes. */
   timelineQuery: string;
-  /**
-   * Which Timeline tab is open. In the store for the same reason as the search
-   * text: opening a screenshot and coming back must land on the tab you left.
-   */
+  /** Stored in app state so the active Timeline tab survives route changes. */
   timelineTab: "journey" | "screenshots";
   setTimelineTab: (tab: "journey" | "screenshots") => void;
   toasts: Toast[];
   paletteOpen: boolean;
-  /**
-   * Game ids whose VNDB metadata refresh is in flight.
-   *
-   * In the store rather than component state because the game page unmounts on
-   * navigation: a refresh started before leaving kept running, but the flag that
-   * said so died with the component, so coming back showed "Refresh" again over a
-   * request that was still going.
-   */
+  /** In-flight VNDB refreshes tracked here because game pages unmount on navigation. */
   refreshingVndb: string[];
-  /**
-   * VNDB detail payloads already fetched, keyed by VN id.
-   *
-   * The game page unmounts on navigation and its local copy dies with it, so
-   * returning re-requested a row that had not changed. A metadata refresh is the
-   * only thing that invalidates an entry, and it writes the new value here.
-   * `null` records "asked, nothing cached": without it, a game with no VNDB id
-   * detail asked again on every visit.
-   */
+  /** Cached VNDB details keyed by VN id; `null` marks "checked, nothing cached" to avoid re-fetching. */
   vndbDetails: Record<string, DetailPayload | null>;
 
   setPrefs: (prefs: Prefs) => void;
@@ -121,6 +86,9 @@ interface AppState {
   setSidebarCompact: (compact: boolean) => void;
   setUiPrefs: (prefs: UiPrefs) => void;
   hydrateUiPrefs: (prefs: UiPrefs) => void;
+  /** Window behaviour on launch: mode, close action, OS autostart state. */
+  startupPrefs: StartupPrefsView | null;
+  hydrateStartupPrefs: (view: StartupPrefsView) => void;
 }
 
 const SIDEBAR_COMPACT_STORAGE_KEY = "vn_asyik_sidebar_compact";
@@ -175,6 +143,7 @@ export const useAppStore = create<AppState>((set) => ({
   uiPrefs: null,
   uiPrefsLoaded: false,
   sidebarCompact: readStoredSidebarCompact(),
+  startupPrefs: null,
 
   setUpdate: (update) => set({ update }),
   setAppearance: (appearance) => set({ appearance }),
@@ -208,6 +177,8 @@ export const useAppStore = create<AppState>((set) => ({
       };
     });
   },
+
+  hydrateStartupPrefs: (startupPrefs) => set({ startupPrefs }),
 
   setPrefs: (prefs) => set({ prefs, prefsLoaded: true }),
   setPlatform: (platform) => set({ platform }),

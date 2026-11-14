@@ -92,7 +92,7 @@ describe("timeline screen", () => {
   it("renders mixed events of one day under a shared header", async () => {
     mocks.timelinePage.mockResolvedValueOnce(page([session, journal], false));
     mount();
-    expect(screen.getByLabelText("Laying out your journey")).toBeInTheDocument();
+    expect(screen.getByLabelText("Loading reading log")).toBeInTheDocument();
     expect((await screen.findAllByText("Summer Pockets")).length).toBe(2);
     expect(screen.getByText("Read for 1h")).toBeInTheDocument();
     expect(screen.getByText("Chapter 3 was heavy")).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("timeline screen", () => {
     mocks.timelinePage.mockResolvedValueOnce(page([], false));
     mount();
     expect(
-      await screen.findByText("The journey starts with a first session"),
+      await screen.findByText("Your reading log starts with a first session"),
     ).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
@@ -230,6 +230,6 @@ describe("timeline screen", () => {
       </StrictMode>,
     );
     expect(await screen.findByText("Read for 1h")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Laying out your journey")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Loading reading log")).not.toBeInTheDocument();
   });
 });

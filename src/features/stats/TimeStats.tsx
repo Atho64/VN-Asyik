@@ -21,11 +21,7 @@ function spanLabel(startMs: number | undefined, locale: string): string {
 }
 
 /**
- * Time played over time, plus the derived figures.
- *
- * The chart and the numbers come from one payload so they cannot disagree. The
- * period is a switch rather than four charts: the question is "how has my
- * reading gone lately", and one chart answering it beats four competing ones.
+ * Period-switched playtime chart and summary figures backed by a single payload so totals stay consistent.
  */
 export function TimeStats() {
   const { t, locale } = useI18n();
@@ -125,7 +121,7 @@ export function TimeStats() {
               nothing: the reader cannot tell whether the tall one is a day, a
               week or a year, or where in the window it sits. */}
             <span className="caption time__span">
-              {spanLabel(series[0]?.startMs, locale)} –{" "}
+              {spanLabel(series[0]?.startMs, locale)} -{" "}
               {spanLabel(series[series.length - 1]?.startMs, locale)}
             </span>
             <span className="caption">

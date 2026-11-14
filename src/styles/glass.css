@@ -1,10 +1,4 @@
-/*
- * glass.css
- *
- * Glass is an accent, not a character trait (DESIGN.md §0, antislop R-10).
- * Dose cap: at most two glass layers visible at once, nav plus one panel.
- * `.glass-strong` is reserved for a surface that must read above artwork.
- */
+/* Translucent glass surfaces; cap simultaneous glass layers to two (nav + active overlay). */
 
 .glass {
   background: var(--glass-bg);

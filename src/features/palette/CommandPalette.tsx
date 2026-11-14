@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Icon } from "@/components/Icon";
 import { rankGames } from "@/lib/library";
+import { useModalFocusTrap } from "@/lib/useModalFocusTrap";
 import { AddGameSheet } from "@/features/library/AddGameSheet";
 import { api } from "@/lib/ipc/client";
 
@@ -34,6 +35,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const close = useCallback((): void => setOpen(false), [setOpen]);
@@ -185,16 +187,9 @@ export function CommandPalette() {
     return [...matchedActions, ...matchedGames];
   }, [beta, cards, close, isAndroid, navigate, query, t]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useModalFocusTrap(panelRef, true, close, inputRef);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      close();
-      return;
-    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setActiveIndex((index) => Math.min(index + 1, actions.length - 1));
@@ -221,6 +216,7 @@ export function CommandPalette() {
         }}
       >
         <div
+          ref={panelRef}
           className="palette"
           role="dialog"
           aria-modal="true"

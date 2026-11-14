@@ -1,12 +1,4 @@
-/*
- * Display face: Inter Tight, bundled rather than assumed.
- *
- * The previous serif read as a literary book jacket, which fought a grid of
- * manga and anime covers. Inter Tight is a neutral grotesque: the title is the
- * same on every platform, and nothing about the face competes with the art.
- *
- * SIL Open Font License 1.1; the complete notice and licence are in README.md.
- */
+/* Display face: bundled Inter Tight (SIL Open Font License 1.1; full license in README.md). */
 @font-face {
   font-family: "Inter Tight";
   src: url("./fonts/InterTight-Variable.ttf") format("truetype-variations");
@@ -18,13 +10,7 @@
   unicode-range: U+0000-00FF, U+0100-024F, U+2000-206F;
 }
 
-/*
- * typography.css
- *
- * Two voices. UI text is the workhorse; the display serif appears only on game
- * titles and screen headings, which is the editorial part of the identity.
- * Japanese titles rely on the CJK fallback stack in tokens.css.
- */
+/* Typography scale utilities; CJK titles fall back through the stack in tokens.css. */
 
 .display {
   font-family: var(--font-display);

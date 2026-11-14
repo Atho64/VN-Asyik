@@ -1,10 +1,4 @@
-/*
- * app.css — shell layout.
- *
- * Three real states, not two (antislop-layoutmobile): compact under 600,
- * medium 600-1024, expanded above 1024. The medium state exists because a
- * phone stack stretched across a tablet is its own failure.
- */
+/* Shell layout with three breakpoints: compact (<600px), medium (600-1024px), expanded (>1024px). */
 
 .app {
   position: relative;
@@ -35,11 +29,7 @@
   padding: var(--space-5) var(--space-5) var(--space-6);
 }
 
-/* desktop rail */
-
-/* The rail is glass so the artwork shows through it, which is the whole point of
- * the backdrop. With effects off it becomes a plain surface, matching the plain
- * background behind it. */
+/* Desktop rail: translucent glass over the backdrop unless reduced-effects mode is active. */
 .rail {
   position: relative;
   z-index: 2;
@@ -65,9 +55,6 @@
   padding-inline: var(--space-2);
 }
 
-/* Glass is what the blurred artwork needs to stay readable, so it only exists
- * while effects are on. Without it the rail would be a translucent pane over a
- * flat colour, which is just a slightly wrong grey. */
 :root[data-reduce-effects="true"] .rail {
   background: var(--bg-elevated);
   backdrop-filter: none;
@@ -113,8 +100,8 @@
 .rail__toggle {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   flex-shrink: 0;
   padding: 0;
   border: 1px solid transparent;
@@ -305,9 +292,7 @@
   }
 }
 
-/* Now playing bar.
-   Sticky above the page, but below the mobile bottom nav (z 4), and it sits
-   clear of that nav by its own height instead of covering it. */
+/* Sticky bar above the page and clear of the mobile bottom nav (z 4). */
 .nowplaying {
   position: relative;
   flex-shrink: 0;

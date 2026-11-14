@@ -1,9 +1,5 @@
 /**
- * i18n resources. English is the source of truth; Indonesian mirrors its keys,
- * and the type of `en` forces `id` to stay complete (a missing key is a build
- * error, not a runtime fallback).
- *
- * No component may contain a user-visible literal. See AGENTS.md §11.
+ * English i18n source of truth. Its type enforces key completeness in `id` at compile time.
  */
 
 export const en = {
@@ -248,7 +244,10 @@ export const en = {
   "tracking.titleMatch": "Window title keyword (optional)",
   "tracking.titleMatchHint":
     "Used to tell games apart when multiple games run through the same emulator.",
+  "tracking.titleMatchPlaceholder": "Window title keyword",
   "tracking.extraArgs": "Extra launch arguments (optional)",
+  "tracking.extraArgsPlaceholder": "e.g. --fullscreen",
+  "tracking.folderPlaceholder": "F:/Visual Novels",
   "tracking.browseEmulator": "Browse emulator",
   "tracking.browseTarget": "Browse ROM / game file",
   "tracking.mapRunner": "Save runner mapping",
@@ -316,7 +315,7 @@ export const en = {
   "sync.tokenHelp":
     "Create a token on VNDB under My Profile, then Applications. It needs listread to see private labels and listwrite to push changes.",
   "sync.tokenUnsupported":
-    "This build cannot store a token securely on this platform yet. Sync stays off rather than writing it somewhere unsafe.",
+    "This build cannot store a token securely on this platform yet, so sync stays off to avoid writing it somewhere unsafe.",
   "sync.connect": "Connect",
   "sync.connecting": "Checking token",
   "sync.disconnect": "Disconnect",
@@ -409,7 +408,7 @@ export const en = {
   "field.started": "Started",
   "field.finished": "Finished",
 
-  "nav.recommend": "Discover",
+  "nav.recommend": "Recommendations",
   "play.play": "Play",
   "play.playVia": "Play via {{runner}}",
   "play.starting": "Starting",
@@ -610,6 +609,15 @@ export const en = {
   "detail.ratingLabel": "Rating",
   "detail.ratingValue": "Rate {{value}} out of 10",
   "detail.addSession": "Add time",
+  "detail.adjustPlaytime": "Adjust playtime",
+  "detail.adjustIntro":
+    "Time you know about that no session records: hours read before tracking existed, or a stretch that was counted twice. The adjustment is added to tracked sessions and stays with the game.",
+  "detail.adjustTracked": "Tracked by sessions",
+  "detail.adjustCurrent": "Current adjustment",
+  "detail.adjustMinutes": "Adjustment in minutes",
+  "detail.adjustHint":
+    "Negative minutes subtract. The total never goes below zero.",
+  "detail.adjustInvalid": "Enter a whole number of minutes.",
   "detail.chapters": "Chapters",
   "detail.chaptersEmpty": "No chapters yet. Chapter detection arrives in a later phase.",
   "detail.alsoKnownAs": "Also known as",
@@ -681,7 +689,7 @@ export const en = {
   "detail.cancel": "Cancel",
   "detail.notFound": "That game is no longer in your library.",
 
-  // ---- VN facts, gallery and VNDB links ----
+  // VN facts, gallery and VNDB links
   "detail.facts": "Details",
   "detail.released": "Released",
   "detail.developer": "Developer",
@@ -718,6 +726,11 @@ export const en = {
   "detail.castTraitsMore": "{{count}} more groups",
   "detail.castShowSpoilers": "Show {{count}} spoiler traits",
   "detail.castHideSpoilers": "Hide spoiler traits",
+  "detail.castSpoiler": "Spoiler",
+  "detail.castSpoilerTile": "Spoiler character. Open, then reveal to see who this is.",
+  "detail.castSpoilerBody":
+    "VNDB marks this character as a spoiler for this story. Reveal to see the name, portrait and details.",
+  "detail.castRevealCharacter": "Reveal character",
   "detail.titleRole.english": "English",
   "detail.titleRole.romaji": "Romaji",
   "detail.titleRole.japanese": "Japanese",
@@ -833,7 +846,7 @@ export const en = {
   "catalog.owned": "In your library",
   "catalog.none": "Nothing close enough",
   "catalog.noneBody":
-    "No catalogue entry reads similarly enough to suggest. That is a real answer, not a failure.",
+    "No catalogue entry reads similarly enough to suggest.",
   "catalog.missingBody":
     "The VNDB catalogue is not downloaded, so this game can only be compared against your own library.",
   "catalog.missingHow":
@@ -844,14 +857,14 @@ export const en = {
   "similar.because": "Shares {{tags}}",
   "similar.noSharedTags": "Close in wording, no tags in common",
   "similar.placeholder":
-    "This build uses a stand-in comparison that ignores meaning, so treat these as a wiring test rather than advice.",
+    "This build uses a stand-in comparison that ignores meaning, so treat these results as a wiring test only.",
   "similar.notIndexed": "Not compared yet",
   "similar.notIndexedBody":
     "This game has not been prepared for comparison. Preparing takes a moment and stays on your device.",
   "similar.index": "Prepare comparisons",
   "similar.none": "Nothing close enough",
   "similar.noneBody":
-    "No game in your library reads similarly enough to suggest. That is a real answer, not a failure.",
+    "No game in your library reads similarly enough to suggest.",
   "similar.modelTitle": "Comparison model",
   "similar.modelMissing":
     "The comparison model is not downloaded, so nothing can be compared yet. It is about 330 MB and runs offline.",
@@ -894,6 +907,8 @@ export const en = {
   "stats.heatmap": "Play days, last 12 months",
   "stats.heatmapLegend": "Less",
   "stats.heatmapLegendMore": "More",
+  "stats.heatmapLegendDot": "Dot = finished a VN that day",
+  "stats.heatmapFinished": "finished a VN",
   "stats.streakCurrent": "Streak: {{days}}",
   "stats.streakLongest": "Longest: {{days}}",
   "stats.onThisDay": "On this day",
@@ -970,11 +985,11 @@ export const en = {
   "stats.errorTitle": "Stats could not be loaded",
 
   "timeline.tabs": "Timeline views",
-  "timeline.tabJourney": "Journey",
+  "timeline.tabJourney": "Feed",
   "timeline.tabScreenshots": "Screenshots",
   "timeline.title": "Timeline",
-  "timeline.loading": "Laying out your journey",
-  "timeline.emptyTitle": "The journey starts with a first session",
+  "timeline.loading": "Loading reading log",
+  "timeline.emptyTitle": "Your reading log starts with a first session",
   "timeline.emptyBody": "Sessions, journal notes, endings and finished games from every game will appear here as one feed.",
   "timeline.errorTitle": "The timeline could not be loaded",
   "timeline.loadOlder": "Older events",
@@ -987,13 +1002,13 @@ export const en = {
   "timeline.searchLoading": "Searching your journal",
   "timeline.searchEmptyTitle": "No matching checkpoints",
   "timeline.searchEmptyBody":
-    "Try another word, or clear the search to see the whole journey.",
+    "Try another word, or clear the search to see the full reading log.",
   "timeline.searchCount_one": "{{count}} match",
   "timeline.searchCount_other": "{{count}} matches",
 
   "settings.betaTitle": "Beta features",
   "settings.betaLabel": "Enable Beta features",
-  "settings.betaHint": "Show Companion, Discover (VN search with an API key), and VN Chat, plus their setup tools. Off by default. Turning this off pauses the companion and keeps your saved settings and history.",
+  "settings.betaHint": "Show Companion, Recommendations (VN search with an API key), and VN Chat, plus their setup tools. Off by default. Turning this off pauses the companion and keeps your saved settings and history.",
   "settings.betaOn": "On",
   "settings.betaOff": "Off",
   "settings.betaSaving": "Saving…",
@@ -1011,6 +1026,23 @@ export const en = {
   "settings.libraryDefaultSortLabel": "Default sort order",
   "settings.libraryDefaultSortHint":
     "Applied when launching the app if filter & sort memory is turned off.",
+  "settings.startupTitle": "Startup",
+  "settings.startupAutostartLabel": "Launch at startup",
+  "settings.startupAutostartHint":
+    "Start the app when this PC boots. The registration lives in the OS; switching it off removes it again.",
+  "settings.startupAutostartOff": "No",
+  "settings.startupAutostartOn": "Yes",
+  "settings.startupModeLabel": "When the app starts",
+  "settings.startupModeHint":
+    "Applies to every launch: normally, fullscreen Big Picture, or hidden in the tray.",
+  "settings.startupModeManual": "Normal window",
+  "settings.startupModeBigPicture": "Big Picture",
+  "settings.startupModeTray": "In the tray",
+  "settings.startupCloseLabel": "Closing the window",
+  "settings.startupCloseHint":
+    "Keep reading in the background from the tray, or let the window close quit the app.",
+  "settings.startupCloseTray": "Hide to tray",
+  "settings.startupCloseQuit": "Quits the app",
   "settings.windowTitle": "Desktop window",
   "settings.windowPositionLabel": "Launch position",
   "settings.windowPositionHint":
@@ -1341,11 +1373,11 @@ export const en = {
   "guide.stats.title": "Stats",
   "guide.stats.body":
     "Playtime by game, route and month, computed from the stored sessions.",
-  "guide.stats.p1": "Active time and away time stay separate instead of being merged.",
+  "guide.stats.p1": "Active time and away time are tracked separately.",
   "guide.stats.p2": "A session under a minute is still shown in seconds.",
   "guide.stats.p3":
-    "The range can be changed; a figure with no data behind it says not recorded, not zero.",
-  "guide.discover.title": "Discover",
+    "The range can be changed; figures without underlying data display as not recorded.",
+  "guide.discover.title": "Recommendations",
   "guide.discover.body":
     "Ask what to read next; suggestions come from what people wrote and always cite sources.",
   "guide.discover.p1": "VNDB is free; web search uses your own Tavily key.",
@@ -1424,10 +1456,18 @@ export const en = {
   "devices.kept.remote": "kept the other device",
   "taste.title": "Your taste",
   "taste.intro":
-    "The VNDB tags your library carries most, counted across your games. Hover a tag for the games behind it.",
+    "The themes, studios, writers and voices your games share. These are the seeds your For-you recommendations rank with, rated games counting most. Hover a chip for the games behind it.",
+  "taste.basedOn": "Based on {{count}} games",
+  "taste.anchors": "Driven most by",
+  "taste.themes": "Themes",
+  "taste.studios": "Studios",
+  "taste.staff": "Writers & artists",
+  "taste.voices": "Voice actors",
+  "taste.hintRefresh":
+    "Refreshing your games' VNDB details from their pages fills this in.",
   "taste.noThemes": "Not enough overlap yet",
   "taste.noThemesBody":
-    "No tag is carried by at least two described games yet. Adding a few more games, or linking them to VNDB, will fill this in.",
+    "No theme or creator is carried by at least two of your games yet. Adding a few more games, or linking them to VNDB, will fill this in.",
   "taste.undetermined":
     "{count} games have no tags, so they are not part of this: {titles}.",
   "chat.title": "AI provider: chat & recommendations",
@@ -1676,17 +1716,18 @@ export const en = {
   "walkthrough.empty":
     "No walkthrough loaded yet. Search automatically from Seiya-Saiga's directory or enter a guide URL directly.",
   "walkthrough.routes": "Routes",
-  "walkthrough.allRoutes": "All Routes",
+  "walkthrough.allRoutes": "All routes",
   "walkthrough.progress": "{{checked}} of {{total}} choices completed",
   "walkthrough.resetProgress": "Reset choices",
   "walkthrough.resetConfirm": "Clear all checked choices for this walkthrough?",
   "walkthrough.source": "Source: {{title}}",
+  "walkthrough.matchSource": "Seiya-Saiga match",
   "walkthrough.openSource": "Open guide in browser",
-  "walkthrough.translateAi": "AI Translate (VNDB Glossary)",
+  "walkthrough.translateAi": "Model translation (VNDB glossary)",
   "walkthrough.translateGoogle": "Google Translate",
   "walkthrough.translating": "Translating...",
-  "walkthrough.langOriginal": "Japanese (Original)",
-  "walkthrough.langAi": "AI Translated",
+  "walkthrough.langOriginal": "Japanese (original)",
+  "walkthrough.langAi": "Model translation",
   "walkthrough.langGoogle": "Google Translate",
   "walkthrough.glossaryActive": "{{count}} characters from VNDB glossary",
   "walkthrough.kind.choice": "Choice",
@@ -1695,17 +1736,19 @@ export const en = {
   "walkthrough.kind.action": "Action",
   "walkthrough.kind.ending": "Ending",
   "walkthrough.kind.note": "Note",
-  "walkthrough.reload": "Re-scrape",
+  "walkthrough.reload": "Reload",
+  "walkthrough.searchLabel": "Search Seiya-Saiga guides",
+  "walkthrough.customUrlLabel": "Seiya-Saiga guide URL",
   "walkthrough.searchPlaceholder":
     "Search game titles (Japanese / Romaji) on Seiya-Saiga...",
   "walkthrough.searchBtn": "Search",
-  "walkthrough.searchOtherGuide": "Search Another Guide on Seiya-Saiga",
+  "walkthrough.searchOtherGuide": "Search another guide on Seiya-Saiga",
   "walkthrough.switchGuide": "Search / Switch Seiya-Saiga guide",
   "walkthrough.searchingDirectory": "Searching Seiya-Saiga directory...",
   "walkthrough.urlRequired": "Please enter a Seiya-Saiga guide URL first",
   "walkthrough.searching": "Searching...",
-  "walkthrough.searchResults": "Search Results ({{count}})",
-  "walkthrough.candidatesFound": "Matching Candidates ({{count}})",
+  "walkthrough.searchResults": "Search results ({{count}})",
+  "walkthrough.candidatesFound": "Matching candidates ({{count}})",
   "walkthrough.noResults":
     "No matching titles found on Seiya-Saiga. Try another keyword or use a manual URL.",
   "walkthrough.select": "Fetch",
@@ -2000,7 +2043,7 @@ export const en = {
   "memory.filter": "Show scope",
   "memory.allScopes": "All saved scopes",
   "memory.empty":
-    "No saved memories match. Remember a preference or an observation to get started.",
+    "No saved memories match. Add a preference or observation above.",
   "memory.evidence.reader": "Reader authored",
   "memory.evidence.passage": "Reader passage",
   "memory.evidence.inference": "Derived / may be speculative",
@@ -2192,7 +2235,7 @@ export const en = {
     "Image support is not confirmed for this configuration. Text chat remains available.",
   "vision.look": "Look at this scene",
   "vision.previewAlt": "Selected game scene preview",
-  "vision.previewSize": "{{width}} x {{height}} pixels - this image will be shared",
+  "vision.previewSize": "{{width}} x {{height}} pixels. This image will be shared.",
   "vision.question": "Question about this scene",
   "vision.defaultQuestion": "What do you notice in this scene?",
   "vision.send": "Send this image",
@@ -2206,16 +2249,16 @@ export const en = {
   "vision.retention":
     "Screenshots stay in memory only. History keeps text and source details, not images. Stop, Pause, End or Forget clears capture. Watching never restarts automatically after app launch.",
   "vision.reaction": "Companion reaction",
-  "vision.inference": "Visual inference - image not retained",
+  "vision.inference": "Visual inference (image not retained)",
   "vision.state.off": "Vision off",
   "vision.state.preview": "Local preview",
-  "vision.state.watching": "Watching - waiting for a stable scene",
-  "vision.state.quiet": "Quiet - automatic replies stopped",
+  "vision.state.watching": "Watching: waiting for a stable scene",
+  "vision.state.quiet": "Quiet: automatic replies stopped",
   "vision.state.focus_paused": "Waiting for the game to be foreground",
   "vision.state.limit": "Request limit reached",
   "vision.state.replying": "Replying",
-  "vision.state.cooldown": "Watching - between reactions",
-  "vision.state.unavailable": "Capture unavailable - preview again",
+  "vision.state.cooldown": "Watching: between reactions",
+  "vision.state.unavailable": "Capture unavailable. Preview again.",
   "companion.error.vision_unsupported": "Window capture is supported on Windows only.",
   "companion.error.vision_unavailable":
     "Windows capture is unavailable. Check the selected window and use a supported SDR display.",

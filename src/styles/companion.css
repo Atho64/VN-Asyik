@@ -50,7 +50,7 @@
 .companion-bar > .companion__actions {
   flex: 0 0 auto;
   flex-wrap: nowrap;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 .companion__provider {
   display: flex;
@@ -368,7 +368,7 @@
     font-size: var(--text-l);
   }
   .companion-bar {
-    gap: var(--space-1);
+    gap: var(--space-2);
     padding-inline: var(--space-2);
   }
   .companion-bar__link {

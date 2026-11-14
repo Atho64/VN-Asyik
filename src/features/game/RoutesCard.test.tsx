@@ -226,12 +226,7 @@ describe("Routes card", () => {
   });
 
   it("wraps the merge buttons in their own container, not the library row", async () => {
-    // Regression: the buttons sat in `row row--wrap`, and `.row` is the library's
-    // list-row grid (`44px 1fr auto` — a cover thumbnail, the text, the rating). A
-    // bare button dropped into that grid took the 44px art cell and was clipped, so
-    // on a phone the label rendered as "…e route as Mio" hanging off the left edge.
-    // No test caught it because every assertion was about text, never about which
-    // element the text was in.
+    // Regression: keep merge buttons in `.chapter-group__merge`, not `.row` (`44px 1fr auto` grid clips them).
     mocks.gameRoutes.mockResolvedValue([
       route({ id: "r1", mergeCandidates: ["r2"] }),
       route({ id: "r2", name: "Mio", chapters: [], mergeCandidates: ["r1"] }),
@@ -384,5 +379,25 @@ describe("Routes card", () => {
 
     expect(await screen.findByText(/could not be loaded/i)).toBeTruthy();
     expect(screen.getByText("database is locked")).toBeTruthy();
+  });
+
+  it("offers the time-correction actions it is given", async () => {
+    const onAddTime = vi.fn();
+    const onAdjustPlaytime = vi.fn();
+    const user = userEvent.setup();
+    mocks.gameRoutes.mockResolvedValue([]);
+    render(
+      <AppContext.Provider value={{ t, locale: "en", ready: true, bootError: null }}>
+        <RoutesCard
+          gameId="g1"
+          onAddTime={onAddTime}
+          onAdjustPlaytime={onAdjustPlaytime}
+        />
+      </AppContext.Provider>,
+    );
+    await user.click(await screen.findByRole("button", { name: "Add time" }));
+    expect(onAddTime).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Adjust playtime" }));
+    expect(onAdjustPlaytime).toHaveBeenCalledTimes(1);
   });
 });

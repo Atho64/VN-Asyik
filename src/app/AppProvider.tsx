@@ -95,11 +95,14 @@ export function AppProvider({
 
     const boot = async (): Promise<void> => {
       try {
-        const [loadedPrefs, platform, loadedUiPrefs] = await Promise.all([
+        const [loadedPrefs, platform, loadedUiPrefs, loadedStartup] = await Promise.all([
           api.getPrefs().catch(() => null),
           api.platformInfo().catch(() => null),
           typeof api.uiPrefsGet === "function"
             ? api.uiPrefsGet().catch(() => null)
+            : Promise.resolve(null),
+          typeof api.startupPrefsGet === "function"
+            ? api.startupPrefsGet().catch(() => null)
             : Promise.resolve(null),
         ]);
         if (cancelled) return;
@@ -107,6 +110,13 @@ export function AppProvider({
         else useAppStore.setState({ prefsLoaded: true });
         if (loadedUiPrefs) hydrateUiPrefs(loadedUiPrefs);
         else useAppStore.setState({ uiPrefsLoaded: true });
+        // The Big Picture boot navigation reads this; a failed read must not
+        // keep a stale mode from a previous run.
+        useAppStore.getState().hydrateStartupPrefs(loadedStartup ?? {
+          prefs: { startup_mode: "manual", close_to_tray: true },
+          supported: false,
+          autostart: null,
+        });
         if (platform) setPlatform(platform);
         if (companionWindow) return;
 
@@ -161,10 +171,7 @@ export function AppProvider({
     };
   }, [platform?.os, setCards]);
 
-  // DOM attributes are the contract between prefs and CSS (tokens.css).
-  //
-  // A theme carries its own mode, so it decides `data-theme` outright: a dark
-  // theme on a light-mode system is the reader's explicit choice, not a bug.
+  // Sync DOM theme attributes with explicit user preferences (CSS contract in tokens.css).
   useEffect(() => {
     const root = document.documentElement;
     const apply = (): void => {
@@ -209,11 +216,8 @@ export function AppProvider({
     };
   }, [setAppearance, companionWindow]);
 
-  /* Theme and accent are CSS variable overrides rather than a class per colour:
-   * the token set already reads them everywhere, so one property recolours
-   * buttons, chips, focus rings and charts together. `updateAppearance` is the
-   * only writer — it resolves theme, then the reader's accent, then the focused
-   * game's tint, so no surface can clobber another's property. */
+  /* Theme and accent apply via CSS custom properties so one update recolors controls
+   * globally; `updateAppearance` is the single writer (theme -> accent -> game tint). */
   useEffect(() => {
     const apply = (): void => {
       const theme = appearance?.theme ?? null;

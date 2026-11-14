@@ -16,24 +16,19 @@ import type {
 import { formatDuration } from "@/lib/time";
 
 /**
- * Routes, with their chapters and endings under them.
- *
- * This replaces a chapter panel and an ending panel that sat in different columns
- * and grouped the same story two different ways: chapters by an engine key, endings
- * by a free-text label, with nothing tying the halves together. One route row per
- * story is the whole point, so there is one card.
- *
- * The manual timer lives here rather than in a section of its own because it is the
- * same question the chapter rows answer -- which chapter is this time for -- and it
- * was the reason the chapter list and the "add time" button were separated before.
+ * Unified per-route view grouping chapters, endings, and the manual timer so
+ * engine keys and user-defined ending routes live under one card.
  */
 export function RoutesCard({
   gameId,
   onAddTime,
+  onAdjustPlaytime,
 }: {
   gameId: string;
   /** Opens the "add a past session" sheet. */
   onAddTime?: () => void;
+  /** Opens the "adjust playtime" sheet. */
+  onAdjustPlaytime?: () => void;
 }) {
   const { t, locale } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
@@ -120,14 +115,7 @@ export function RoutesCard({
     return () => window.clearInterval(id);
   }, [timer?.active, timer?.running]);
 
-  /**
-   * The card's one honest sentence about automatic detection.
-   *
-   * Three outcomes, not two: detection works, the platform cannot read anything, or
-   * the platform could but this build has no verified profile. Collapsing the last
-   * two into "promises detection" is how a KiriKiri game sat on an empty list
-   * waiting for something that was never coming.
-   */
+  /** Renders the chapter detection availability notice (supported, unsupported, or unverified). */
   const intro = useMemo(() => {
     if (!capability) return t("chapters.introManualOnly");
     if (capability.automatic) return t("chapters.intro");
@@ -232,6 +220,11 @@ export function RoutesCard({
             {onAddTime ? (
               <Button variant="ghost" onClick={onAddTime}>
                 {t("detail.addSession")}
+              </Button>
+            ) : null}
+            {onAdjustPlaytime ? (
+              <Button variant="ghost" onClick={onAdjustPlaytime}>
+                {t("detail.adjustPlaytime")}
               </Button>
             ) : null}
             <Button
@@ -453,10 +446,7 @@ export function RoutesCard({
                       const name = chapterName.trim();
                       if (!name) return;
                       void run(async () => {
-                        // Passing the route id both links the chapter to this route
-                        // and lets Rust take the route's name, so adding a chapter
-                        // here never asks the user to retype a route they are
-                        // already inside.
+                        // Link chapter to this route id so Rust derives the route name directly.
                         const id = await api.trackingCreateChapter(
                           gameId,
                           name,
@@ -520,10 +510,7 @@ export function RoutesCard({
                           achieved: false,
                           achievedAt: null,
                         });
-                        // `create_ending` does not take a route id, so the new row is
-                        // linked in a second step. Use the returned id: ending names
-                        // are not unique on purpose ("Bad End" is routine), so
-                        // looking the row up by name could re-point an older one.
+                        // Link by returned ending id rather than name since ending names are not unique.
                         await api.setEndingRoute(created.meta.id, addingEndingTo);
                         setAddingEndingTo(null);
                         setEndingName("");

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useI18n } from "@/app/useI18n";
+import { useModalFocusTrap } from "@/lib/useModalFocusTrap";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 
@@ -22,61 +23,23 @@ interface SheetProps {
 }
 
 /**
- * Modal surface. Escape closes it, focus is trapped inside while open, and focus
- * returns to the trigger on close (antislop R-32). On phones it slides up from
- * the bottom, where thumbs reach.
+ * Modal sheet overlay with focus trapping, Escape dismissal, and focus restoration.
  */
 export function Sheet({ open, title, onClose, children, footer, wide = false }: SheetProps) {
   const { t } = useI18n();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  const previouslyFocused = useRef<HTMLElement | null>(null);
+
+  useModalFocusTrap(panelRef, open, onClose);
 
   useEffect(() => {
     if (!open) return undefined;
-
-    previouslyFocused.current = document.activeElement as HTMLElement | null;
-    const panel = panelRef.current;
-    const focusable = panel?.querySelector<HTMLElement>(
-      "input, textarea, select, button, [href], [tabindex]:not([tabindex='-1'])",
-    );
-    focusable?.focus();
-
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !panel) return;
-      const items = [
-        ...panel.querySelectorAll<HTMLElement>(
-          "input, textarea, select, button, [href], [tabindex]:not([tabindex='-1'])",
-        ),
-      ].filter((element) => !element.hasAttribute("disabled"));
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (!first || !last) return;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown);
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
-
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = overflow;
-      previouslyFocused.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

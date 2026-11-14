@@ -1,20 +1,10 @@
-/* Chat is a workspace, not a form.
- *
- * Two structural decisions drive the rest:
- * - The conversation owns the remaining height and scrolls internally, so the
- *   composer stays put and the page itself never double-scrolls.
- * - The sidebar reads top-to-bottom as context (what am I asking about), not as
- *   a stack of labelled inputs. Settings that only matter before the first
- *   message collapse to a summary once the conversation starts.
- */
+/* Chat workspace: fixed composer with internally scrolling thread, and collapsible setup sidebar. */
 
 .vnchat {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  /* Fill the shell's scroll area instead of collapsing to content height. The
-   * page box is `auto`-height by default, so the flex chain below needs an
-   * explicit bound to divide space between thread and composer. */
+  /* Fill the shell scroll area so flex children split space between thread and composer. */
   height: 100%;
   min-height: 0;
 }
@@ -36,7 +26,7 @@
   min-height: 0;
 }
 
-/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+/* Sidebar */
 
 .vnchat__sidebar {
   display: flex;
@@ -96,10 +86,7 @@
   outline-offset: 1px;
 }
 
-/* Spoiler choice is three positions on one line — a segmented control, because
- * the options are ordered from safest to most revealing. Labels are sets of
- * words, not single tokens, so they wrap inside their own cell instead of
- * squeezing the group. */
+/* Segmented spoiler control; multi-word labels wrap inside individual cells. */
 .vnchat__segments {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -147,26 +134,20 @@
 .vnchat__check {
   display: flex;
   gap: var(--space-2);
-  align-items: flex-start;
-  min-height: 32px;
+  align-items: center;
+  min-height: var(--touch-target);
   font-size: var(--text-s);
   cursor: pointer;
 }
 
-/* The whole label is the hit area, not the 16 px box.
- *
- * A bare checkbox is 13 px by default and 16 px here; on a touch screen that is a
- * target a third of the size the design system asks for. The input stays 16 px
- * because that is what a checkbox should look like, but the <label> wraps it and
- * the row is a full touch target, so tapping the words toggles it too. */
+/* Entire <label> acts as touch target around the 16px visual checkbox. */
 .vnchat__check input {
   margin-top: 3px;
   accent-color: var(--accent);
   width: 16px;
   height: 16px;
   flex: none;
-  /* Grow the hit area to the target without growing the drawn box: the extra
-   * space is outside the border, so it is clickable but invisible. */
+  /* Expand invisible hit area without enlarging the drawn box. */
   position: relative;
 }
 
@@ -203,7 +184,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 36px;
+  min-height: var(--touch-target);
   cursor: pointer;
   list-style: none;
   font-size: var(--text-s);
@@ -261,7 +242,7 @@
   flex-wrap: wrap;
 }
 
-/* ── Conversation ────────────────────────────────────────────────────────── */
+/* Conversation */
 
 .vnchat__conversation {
   display: flex;
@@ -283,9 +264,7 @@
   scroll-padding-block: var(--space-5);
 }
 
-/* Shares the reading column with the thread and the composer. It used to sit at
- * the scroll padding's left edge, so the welcome drifted left of the input it
- * was inviting the user to type into. */
+/* Shares the reading column width with the thread and composer so the empty state stays aligned with the input. */
 .vnchat__empty {
   height: 100%;
   display: flex;
@@ -346,7 +325,7 @@
   outline-offset: 2px;
 }
 
-/* ── Messages ────────────────────────────────────────────────────────────── */
+/* Messages */
 
 .vnchat__thread {
   display: flex;
@@ -420,10 +399,9 @@
   color: var(--warning);
 }
 
-/* ── Tool activity ───────────────────────────────────────────────────────── */
+/* Tool activity */
 
-/* Tool runs are progress detail, not prose: they collapse into a single quiet
- * strip above the answer and never compete with it for attention. */
+/* Keep tool runs collapsed into a quiet strip above the answer. */
 .vnchat__tools {
   display: flex;
   flex-direction: column;
@@ -440,7 +418,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding-inline: var(--space-3);
   cursor: pointer;
   list-style: none;
@@ -481,7 +459,7 @@
   overflow: auto;
 }
 
-/* ── Sources ─────────────────────────────────────────────────────────────── */
+/* Sources */
 
 .vnchat__sources {
   margin-top: var(--space-1);
@@ -492,7 +470,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  min-height: 30px;
+  min-height: var(--touch-target);
   cursor: pointer;
   font-size: var(--text-xs);
   color: var(--text-muted);
@@ -519,7 +497,7 @@
   text-decoration-color: currentColor;
 }
 
-/* ── Composer ────────────────────────────────────────────────────────────── */
+/* Composer */
 
 .vnchat__composer {
   flex: none;
@@ -536,9 +514,7 @@
   gap: var(--space-2);
 }
 
-/* One pill: text on the left, the action on the right, nothing else inside it.
- * `align-items: flex-end` made the Send button hang off the bottom edge as the
- * textarea grew, which is what read as "weird" — the two now share a centre. */
+/* Pill composer: text on the left, send action on the right, centered vertically. */
 .vnchat__field {
   display: flex;
   align-items: center;
@@ -547,13 +523,12 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
   background: var(--bg-elevated);
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
+  transition: border-color 120ms ease;
 }
 .vnchat__field:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+  border-color: var(--accent-strong);
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 
 /* Single line when empty, grows while typing. `field-sizing` is not available in
@@ -634,7 +609,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 24px;
+  min-height: var(--touch-target);
   font-size: var(--text-xs);
   color: var(--text-faint);
 }
@@ -642,6 +617,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+  min-height: var(--touch-target);
   cursor: pointer;
   list-style: none;
   color: var(--text-faint);
@@ -670,7 +646,7 @@
   line-height: 1.55;
 }
 
-/* ── Markdown output ─────────────────────────────────────────────────────── */
+/* Markdown output */
 
 .md-p {
   margin: 0 0 var(--space-3);
@@ -740,16 +716,9 @@
   font-style: italic;
 }
 
-/* ── Narrow screens ──────────────────────────────────────────────────────── */
-
-/* Narrow layout.
- *
- * Desktop can afford a fixed sidebar and a thread that fills the window. Below
- * 900px the sidebar turns into a compact context bar and the thread keeps the
- * remaining height; the composer never scrolls out of reach. */
+/* Narrow layout: collapse fixed sidebar into a compact header strip so the composer stays visible. */
 @media (max-width: 900px) {
-  /* The shell pads `.app__main` and scrolls it. Cap the workspace to the content
-   * box so the composer stays on screen and only the thread scrolls. */
+  /* Cap workspace to content box height so only the message list scrolls. */
   .vnchat {
     height: auto;
     max-height: 100%;
@@ -784,8 +753,7 @@
   .vnchat__group--scope {
     grid-column: 1;
   }
-  /* Spoiler and online rules share one row: the labels and long hints repeat
-   * what the controls already say, and they cost a third of the screen. */
+  /* Share one row and drop redundant labels/hints to reclaim vertical space on narrow screens. */
   .vnchat__group--rules {
     grid-column: 1 / -1;
     display: flex;
@@ -802,12 +770,7 @@
     flex: 0 1 auto;
     min-width: 220px;
   }
-  /* 36 px with 11 px text was a squeeze to keep three labels on one row, and it
-   * did not even achieve that: "Up to my reading boundary" still took two lines
-   * and the row became a 36 px strip under the 44 px minimum the rest of the app
-   * holds. The labels get their 44 px and their normal size back, and the strip
-   * is allowed to be two rows tall if the longest label needs it — a legible,
-   * tappable control is worth more than one saved line. */
+  /* Preserve 44px minimum touch height even when long segmented labels wrap to two lines. */
   .vnchat__group--rules .vnchat__segment {
     min-height: var(--touch-target);
   }

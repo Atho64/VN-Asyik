@@ -5,16 +5,19 @@ import userEvent from "@testing-library/user-event";
 import { AppContext } from "@/app/AppProvider";
 import { useAppStore } from "@/app/store";
 import { createTranslator } from "@/i18n";
+import { dayIndex } from "@/lib/time";
 
 const mocks = vi.hoisted(() => ({
   statusBreakdown: vi.fn(),
   playtimeByDay: vi.fn(),
+  finishedByDay: vi.fn(),
 }));
 
 vi.mock("@/lib/ipc/client", () => ({
   api: {
     statusBreakdown: mocks.statusBreakdown,
     playtimeByDay: mocks.playtimeByDay,
+    finishedByDay: mocks.finishedByDay,
   },
 }));
 
@@ -61,6 +64,7 @@ describe("StatsScreen", () => {
       dropped: 0,
     });
     mocks.playtimeByDay.mockResolvedValue([[20_000, 3_600_000]]);
+    mocks.finishedByDay.mockResolvedValue([]);
     useAppStore.setState({
       libraryLoaded: true,
       cards: [
@@ -122,5 +126,34 @@ describe("StatsScreen", () => {
 
     await user.click(within(tabs).getByRole("tab", { name: "Taste" }));
     expect(screen.getByTestId("taste-panel")).toBeInTheDocument();
+  });
+
+  it("marks the days a VN was finished, even without recorded time", async () => {
+    const user = userEvent.setup();
+    // The component computes the local day index the same way, so the cells
+    // are always inside the 53-week window.
+    const today = dayIndex(Date.now() - new Date().getTimezoneOffset() * 60_000);
+    mocks.playtimeByDay.mockResolvedValue([[today, 3_600_000]]);
+    // Yesterday saw a finish but no reading: the mark is the event, not the
+    // session it belongs to.
+    mocks.finishedByDay.mockResolvedValue([
+      [today, 1],
+      [today - 1, 1],
+    ]);
+    const { container } = renderStats();
+
+    await user.click(await screen.findByRole("tab", { name: "Activity" }));
+    // The layout lives in the container: pin the attribute, not only text.
+    const marked = container.querySelectorAll('.heatmap__cell[data-finished="true"]');
+    expect(marked).toHaveLength(2);
+    // The zero-time finished day still carries a mark on its level-0 surface,
+    // and today's read day is the other marked one.
+    const quiet = Array.from(marked).find(
+      (cell) => cell.getAttribute("data-level") === "0",
+    );
+    expect(quiet).not.toBeNull();
+    expect(
+      Array.from(marked).some((cell) => cell.getAttribute("data-level") !== "0"),
+    ).toBe(true);
   });
 });

@@ -5,7 +5,13 @@ import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { api, IpcError } from "@/lib/ipc/client";
-import type { UiPrefsPatch, WindowLaunchMode, WindowLaunchView } from "@/lib/ipc/types";
+import type {
+  StartupMode,
+  StartupPrefsView,
+  UiPrefsPatch,
+  WindowLaunchMode,
+  WindowLaunchView,
+} from "@/lib/ipc/types";
 import { toSavedLibraryBrowse, type SortKey } from "@/lib/library";
 
 const SORT_OPTIONS: Array<{ value: SortKey; labelKey: string }> = [
@@ -282,6 +288,135 @@ export function WindowLaunchSection() {
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+/** Desktop startup preferences queried directly from OS autostart state. */
+export function StartupSection() {
+  const { t } = useI18n();
+  const pushToast = useAppStore((state) => state.pushToast);
+  const [view, setView] = useState<StartupPrefsView | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (typeof api.startupPrefsGet !== "function") return;
+    let cancelled = false;
+    void api
+      .startupPrefsGet()
+      .then((loaded) => {
+        if (!cancelled) setView(loaded);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (view && !view.supported) {
+    return null;
+  }
+
+  const mode: StartupMode = view?.prefs.startup_mode ?? "manual";
+  const closeToTray = view?.prefs.close_to_tray ?? true;
+  const autostart = view?.autostart === true;
+
+  const apply = async (patch: {
+    startup_mode?: StartupMode;
+    close_to_tray?: boolean;
+    autostart?: boolean;
+  }): Promise<void> => {
+    if (typeof api.startupPrefsSet !== "function") return;
+    setBusy(true);
+    try {
+      const next = await api.startupPrefsSet(patch);
+      setView(next);
+    } catch (caught) {
+      pushToast("error", caught instanceof IpcError ? caught.message : t("common.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="settings__group">
+      <h2 className="settings__group-title">{t("settings.startupTitle")}</h2>
+
+      <div className="settings__row">
+        <span className="settings__label">
+          {t("settings.startupAutostartLabel")}
+          <span className="settings__hint">{t("settings.startupAutostartHint")}</span>
+        </span>
+        <div className="settings__control">
+          <Chip
+            selected={!autostart}
+            disabled={busy}
+            onClick={() => void apply({ autostart: false })}
+          >
+            {t("settings.startupAutostartOff")}
+          </Chip>
+          <Chip
+            selected={autostart}
+            disabled={busy}
+            onClick={() => void apply({ autostart: true })}
+          >
+            {t("settings.startupAutostartOn")}
+          </Chip>
+        </div>
+      </div>
+
+      <div className="settings__row">
+        <span className="settings__label">
+          {t("settings.startupModeLabel")}
+          <span className="settings__hint">{t("settings.startupModeHint")}</span>
+        </span>
+        <div className="settings__control">
+          <Chip
+            selected={mode === "manual"}
+            disabled={busy}
+            onClick={() => void apply({ startup_mode: "manual" })}
+          >
+            {t("settings.startupModeManual")}
+          </Chip>
+          <Chip
+            selected={mode === "big_picture"}
+            disabled={busy}
+            onClick={() => void apply({ startup_mode: "big_picture" })}
+          >
+            {t("settings.startupModeBigPicture")}
+          </Chip>
+          <Chip
+            selected={mode === "tray"}
+            disabled={busy}
+            onClick={() => void apply({ startup_mode: "tray" })}
+          >
+            {t("settings.startupModeTray")}
+          </Chip>
+        </div>
+      </div>
+
+      <div className="settings__row">
+        <span className="settings__label">
+          {t("settings.startupCloseLabel")}
+          <span className="settings__hint">{t("settings.startupCloseHint")}</span>
+        </span>
+        <div className="settings__control">
+          <Chip
+            selected={closeToTray}
+            disabled={busy}
+            onClick={() => void apply({ close_to_tray: true })}
+          >
+            {t("settings.startupCloseTray")}
+          </Chip>
+          <Chip
+            selected={!closeToTray}
+            disabled={busy}
+            onClick={() => void apply({ close_to_tray: false })}
+          >
+            {t("settings.startupCloseQuit")}
+          </Chip>
+        </div>
+      </div>
     </section>
   );
 }

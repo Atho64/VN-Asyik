@@ -4,9 +4,11 @@ import {
   formatBirthday,
   formatBloodType,
   groupTraits,
+  isSpoilerCharacter,
   isTraitVisible,
+  sortSpoilerLast,
 } from "./traitFilters";
-import type { CharacterTrait } from "@/lib/ipc/types";
+import type { CharacterTrait, VndbCharacter } from "@/lib/ipc/types";
 
 function trait(overrides: Partial<CharacterTrait>): CharacterTrait {
   return {
@@ -16,6 +18,24 @@ function trait(overrides: Partial<CharacterTrait>): CharacterTrait {
     spoiler: 0,
     sexual: false,
     lie: false,
+    ...overrides,
+  };
+}
+
+function person(overrides: Partial<VndbCharacter>): VndbCharacter {
+  return {
+    id: "c1",
+    name: "Someone",
+    original: null,
+    role: "side",
+    spoiler: null,
+    image: null,
+    traits: [],
+    birthday: null,
+    height: null,
+    weight: null,
+    blood_type: null,
+    voiced_by: null,
     ...overrides,
   };
 }
@@ -101,5 +121,32 @@ describe("traitFilters", () => {
     expect(formatBloodType(" ab ")).toBe("AB");
     expect(formatBloodType("")).toBeNull();
     expect(formatBloodType(null)).toBeNull();
+  });
+
+  it("treats a null character spoiler as safe", () => {
+    // Old cached rows predate the field; VNDB omits the field when untagged.
+    expect(isSpoilerCharacter(person({}))).toBe(false);
+    expect(isSpoilerCharacter(person({ spoiler: 0 }))).toBe(false);
+    expect(isSpoilerCharacter(person({ spoiler: 1 }))).toBe(true);
+    expect(isSpoilerCharacter(person({ spoiler: 2 }))).toBe(true);
+  });
+
+  it("moves spoiler characters last without re-sorting the safe ones", () => {
+    // VNDB's role order is meaningful; the only change is the split.
+    const ordered = sortSpoilerLast([
+      person({ id: "a", name: "Side" }),
+      person({ id: "b", name: "Secret", spoiler: 2 }),
+      person({ id: "c", name: "Main" }),
+      person({ id: "d", name: "Mild", spoiler: 1 }),
+    ]);
+    expect(ordered.map((c) => c.name)).toEqual(["Side", "Main", "Secret", "Mild"]);
+  });
+
+  it("keeps an all-spoiler cast in its original order", () => {
+    const cast = [
+      person({ id: "a", name: "First", spoiler: 1 }),
+      person({ id: "b", name: "Second", spoiler: 2 }),
+    ];
+    expect(sortSpoilerLast(cast).map((c) => c.name)).toEqual(["First", "Second"]);
   });
 });

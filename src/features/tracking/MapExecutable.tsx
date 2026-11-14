@@ -132,7 +132,6 @@ export function MapExecutable({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  // Runner state
   const defaultRunner: RunnerKind = isAndroid ? "kirikiroid2" : "vita3k";
   const [runnerKind, setRunnerKind] = useState<RunnerKind>(defaultRunner);
   const [runnerExe, setRunnerExe] = useState(
@@ -199,7 +198,7 @@ export function MapExecutable({
         setRunnerExe(chosen);
       }
     } catch {
-      // Ignored
+      // Cancelled file dialog or unavailable picker leaves the path unchanged.
     }
   }
 
@@ -231,7 +230,7 @@ export function MapExecutable({
         setLaunchTarget(chosen);
       }
     } catch {
-      // Ignored
+      // Cancelled file dialog or unavailable picker leaves the target unchanged.
     }
   }
 
@@ -416,7 +415,7 @@ export function MapExecutable({
               className="input"
               value={titleMatch}
               onChange={(e) => setTitleMatch(e.target.value)}
-              placeholder={currentGameTitle || "Window title keyword"}
+              placeholder={currentGameTitle || t("tracking.titleMatchPlaceholder")}
             />
             <span className="field__hint">{t("tracking.titleMatchHint")}</span>
           </label>
@@ -427,7 +426,7 @@ export function MapExecutable({
               className="input"
               value={extraArgs}
               onChange={(e) => setExtraArgs(e.target.value)}
-              placeholder="e.g. --fullscreen"
+              placeholder={t("tracking.extraArgsPlaceholder")}
             />
           </label>
 

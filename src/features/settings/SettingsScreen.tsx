@@ -12,6 +12,7 @@ import { LunaPanel } from "@/features/settings/LunaPanel";
 import { TitleParsingPanel } from "@/features/settings/TitleParsingPanel";
 import {
   LibraryLaunchSection,
+  StartupSection,
   WindowLaunchSection,
 } from "@/features/settings/LaunchPrefsPanel";
 import { TrackingScreen } from "@/features/tracking/TrackingScreen";
@@ -86,19 +87,19 @@ export default function SettingsScreen({
       </header>
 
       <div role="tablist" aria-label={t("nav.settings")} className="settings__tabs">
-        <Chip selected={tab === "general"} onClick={() => setTab("general")}>
+        <Chip role="tab" selected={tab === "general"} onClick={() => setTab("general")}>
           <Icon name="settings" size={14} />
           {t("settings.tabGeneral")}
         </Chip>
-        <Chip selected={tab === "tracking"} onClick={() => setTab("tracking")}>
+        <Chip role="tab" selected={tab === "tracking"} onClick={() => setTab("tracking")}>
           <Icon name="play" size={14} />
           {t("nav.tracking")}
         </Chip>
-        <Chip selected={tab === "vndb"} onClick={() => setTab("vndb")}>
+        <Chip role="tab" selected={tab === "vndb"} onClick={() => setTab("vndb")}>
           <Icon name="sync" size={14} />
           {t("settings.tabVndb")}
         </Chip>
-        <Chip selected={tab === "transfer"} onClick={() => setTab("transfer")}>
+        <Chip role="tab" selected={tab === "transfer"} onClick={() => setTab("transfer")}>
           <Icon name="shelf" size={14} />
           {t("settings.tabTransfer")}
         </Chip>
@@ -350,6 +351,7 @@ export default function SettingsScreen({
           </section>
 
           <LibraryLaunchSection />
+          {platform?.kind === "desktop" ? <StartupSection /> : null}
           {platform?.kind === "desktop" ? <WindowLaunchSection /> : null}
 
           {isWindows ? (
@@ -369,18 +371,7 @@ export default function SettingsScreen({
   );
 }
 
-/**
- * Refresh the VNDB metadata every game already has.
- *
- * Metadata used to be frozen at import time: `vndb_import` was the only writer and
- * it is reachable only when adding a game, so a cached row never learned about
- * fields added later. Refreshing one game at a time exists on its page; this is the
- * same operation across the library, because 41 individual clicks is not a feature.
- *
- * Slow by nature: one request per game, paced by the shared rate limiter. The run
- * reports how far it got rather than pretending it finished, and a stopped run
- * resumes from the stored index instead of starting over.
- */
+/** Resumable batch refresh for cached VNDB metadata, paced by the shared rate limiter. */
 function MetadataRefreshPanel() {
   const { t } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);

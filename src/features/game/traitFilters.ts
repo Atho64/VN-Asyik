@@ -1,20 +1,26 @@
 import type { Locale } from "@/i18n";
-import type { CharacterTrait } from "@/lib/ipc/types";
+import type { CharacterTrait, VndbCharacter } from "@/lib/ipc/types";
 
-/** Spoiler level above which traits are withheld by default.
- *
- * 0 means only safe traits show. VNDB marks levels 1 and 2 as plot reveals:
- * across CLANNAD's cast, 234 of 1 138 trait rows sit above level 0, and some of
- * them name the culprit in a mystery. The game page therefore conceals them the
- * way it conceals explicit art — behind a deliberate reveal, not on by default.
- */
+/** Maximum trait spoiler level shown unrevealed (levels 1-2 hold plot reveals). */
 export const MAX_SAFE_SPOILER = 0;
 
-/** Whether a trait may be shown at the given spoiler ceiling.
- *
- * An absent level counts as 0: VNDB omits the field rather than sending 0, and
- * treating "missing" as unsafe would hide most of a character's hair and eyes.
- */
+/** Whether the character's per-VN entry carries a spoiler level >= 1 (`null` = safe). */
+export function isSpoilerCharacter(character: VndbCharacter): boolean {
+  return (character.spoiler ?? 0) >= 1;
+}
+
+/** Keeps safe characters ahead of spoiler-tagged entries so the initial cast slice stays spoiler-free. */
+export function sortSpoilerLast(characters: VndbCharacter[]): VndbCharacter[] {
+  const safe: VndbCharacter[] = [];
+  const spoiled: VndbCharacter[] = [];
+  for (const character of characters) {
+    if (isSpoilerCharacter(character)) spoiled.push(character);
+    else safe.push(character);
+  }
+  return [...safe, ...spoiled];
+}
+
+/** Whether a trait passes the spoiler ceiling (omitted levels default to 0/safe). */
 export function isTraitVisible(trait: CharacterTrait, ceiling: number): boolean {
   return (trait.spoiler ?? 0) <= ceiling;
 }

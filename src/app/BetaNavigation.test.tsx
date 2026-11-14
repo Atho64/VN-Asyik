@@ -33,7 +33,7 @@ it("gates desktop navigation, mobile More, the session bar and command palette t
       </MemoryRouter>
     </AppContext.Provider>,
   );
-  for (const name of ["Discover", "VN Chat", "Companion"])
+  for (const name of ["Recommendations", "VN Chat", "Companion"])
     expect(screen.queryByRole("link", { name })).toBeNull();
   expect(screen.queryByText("Active companion")).toBeNull();
   act(() => useAppStore.setState({ paletteOpen: true }));
@@ -41,14 +41,14 @@ it("gates desktop navigation, mobile More, the session bar and command palette t
   act(() => useAppStore.setState({ paletteOpen: false }));
   await userEvent.click(screen.getByRole("button", { name: "More" }));
   const more = screen.getByRole("navigation", { name: "More" });
-  for (const name of ["Discover", "VN Chat", "Companion"])
+  for (const name of ["Recommendations", "VN Chat", "Companion"])
     expect(within(more).queryByRole("link", { name })).toBeNull();
   act(() =>
     useAppStore.setState({
       prefs: { ...useAppStore.getState().prefs, beta_features: true },
     }),
   );
-  for (const name of ["Discover", "VN Chat", "Companion"])
+  for (const name of ["Recommendations", "VN Chat", "Companion"])
     expect(within(more).getByRole("link", { name })).toBeInTheDocument();
   expect(screen.getByText("Active companion")).toBeInTheDocument();
   act(() =>

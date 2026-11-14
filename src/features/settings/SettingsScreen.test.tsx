@@ -109,15 +109,15 @@ describe("unified settings data tab", () => {
     renderSettings();
     const tabs = screen.getByRole("tablist");
     expect(
-      within(tabs).getAllByRole("button", { name: "Backup & transfer" }),
+      within(tabs).getAllByRole("tab", { name: "Backup & transfer" }),
     ).toHaveLength(1);
     // The tab is the only way in: no shortcut row duplicating it in General.
-    expect(screen.getAllByRole("button", { name: "Backup & transfer" })).toHaveLength(1);
+    expect(screen.getAllByRole("tab", { name: "Backup & transfer" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Export backup" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Import backup" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Export file" })).toBeNull();
     await userEvent.click(
-      within(tabs).getByRole("button", { name: "Backup & transfer" }),
+      within(tabs).getByRole("tab", { name: "Backup & transfer" }),
     );
     expect(screen.getAllByRole("button", { name: "Export file" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Import file" })).toHaveLength(1);
@@ -179,13 +179,13 @@ describe("unified settings data tab", () => {
     });
     renderSettings();
     const tabs = screen.getByRole("tablist");
-    expect(within(tabs).getAllByRole("button", { name: "Tracking" })).toHaveLength(1);
+    expect(within(tabs).getAllByRole("tab", { name: "Tracking" })).toHaveLength(1);
     // The tab is the only way in: both window-title chapter parsing and the
     // AFK group moved out of General with the screen, so tracking settings are
     // not split across two tabs.
     expect(screen.queryByText("Window titles")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Idle detection" })).toBeNull();
-    await userEvent.click(within(tabs).getByRole("button", { name: "Tracking" }));
+    await userEvent.click(within(tabs).getByRole("tab", { name: "Tracking" }));
     expect(screen.getByText("Tracking panel")).toBeInTheDocument();
     expect(screen.getByText("Window titles")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Idle detection" })).toBeInTheDocument();
@@ -226,6 +226,6 @@ describe("unified settings data tab", () => {
       screen.getByText(/Linux support is currently in Beta/i),
     ).toBeInTheDocument();
     const tabs = screen.getByRole("tablist");
-    expect(within(tabs).getByRole("button", { name: "Tracking" })).toBeInTheDocument();
+    expect(within(tabs).getByRole("tab", { name: "Tracking" })).toBeInTheDocument();
   });
 });

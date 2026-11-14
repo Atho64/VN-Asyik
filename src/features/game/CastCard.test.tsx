@@ -12,6 +12,7 @@ function character(overrides: Partial<VndbCharacter>): VndbCharacter {
     name: "Okabe Rintarou",
     original: "岡部 倫太郎",
     role: "main",
+    spoiler: null,
     image: {
       id: "cv1",
       url: "https://t.vndb.org/ch/1.jpg",
@@ -121,5 +122,59 @@ describe("CastCard", () => {
     renderCast([character({ name: null, original: null, id: "empty" })]);
     // The card still renders because the list is non-empty; it just has no tile.
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+  });
+
+  it("sorts spoiler-tagged characters last and conceals their tile", () => {
+    // A main-role secret character would otherwise sit in the visible slice
+    // with its name; the tag moves it to the end, concealed but not omitted.
+    const { container } = renderCast([
+      character({ id: "secret", name: "Secret Twin", role: "main", spoiler: 2 }),
+      character({ id: "safe", name: "Everyday Heroine", role: "primary" }),
+    ]);
+    // The safe name shows; the spoiler's does not, on screen or in the art.
+    expect(screen.getByText("Everyday Heroine")).toBeInTheDocument();
+    expect(screen.queryByText("Secret Twin")).not.toBeInTheDocument();
+    const tiles = container.querySelectorAll(".cast__summary");
+    expect(tiles).toHaveLength(2);
+    // The layout lives in the container: pin the marker, not only the text.
+    expect(tiles.item(0)?.getAttribute("data-spoiler")).toBe("false");
+    expect(tiles.item(1)?.getAttribute("data-spoiler")).toBe("true");
+    expect(screen.getByText("Spoiler")).toBeInTheDocument();
+    // Only the safe character paints a portrait; the concealed one does not.
+    expect(container.querySelectorAll("img")).toHaveLength(1);
+  });
+
+  it("keeps a null spoiler safe, like rows cached before the field existed", () => {
+    renderCast([character({ id: "old", name: "Cached Row", spoiler: null })]);
+    expect(screen.getByText("Cached Row")).toBeInTheDocument();
+    expect(screen.queryByText("Spoiler")).not.toBeInTheDocument();
+  });
+
+  it("reveals a spoiler character from the sheet toggle", async () => {
+    const user = userEvent.setup();
+    renderCast([
+      character({
+        id: "secret",
+        name: "Secret Twin",
+        role: "main",
+        spoiler: 2,
+        birthday: [1, 1],
+      }),
+    ]);
+    // The concealed tile carries an accessible label, not a name.
+    await user.click(screen.getByRole("button", { name: /Spoiler character/ }));
+    // The sheet conceals the portrait and offers the reveal even though the
+    // character has no hidden traits to count. The sheet portals, so query
+    // the document rather than the render container.
+    expect(screen.getByText(/VNDB marks this character/)).toBeInTheDocument();
+    expect(document.querySelector(".cast__portrait")).not.toBeNull();
+    expect(document.querySelector("img.cast__portrait")).toBeNull();
+    expect(screen.queryByText("Secret Twin")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reveal character" }));
+    // Sheet reveal unmasks name, portrait, and facts while re-labeling the grid tile too.
+    expect((await screen.findAllByText("Secret Twin")).length).toBe(2);
+    expect(screen.getByText("January 1")).toBeInTheDocument();
+    // The empty portrait frame is replaced by the real portrait image.
+    expect(document.querySelector("img.cast__portrait")).not.toBeNull();
   });
 });

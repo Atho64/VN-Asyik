@@ -29,6 +29,11 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
 }
+@media (max-width: 599px) {
+  .companion-vision__crop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .companion-vision__identity {
   overflow-wrap: anywhere;
   padding: var(--space-3);

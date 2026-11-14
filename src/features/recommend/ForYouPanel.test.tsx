@@ -22,12 +22,12 @@ const readyProfile = {
   considered: 23,
   ready: true,
   tags: [
-    { id: "g505", name: "Cherry Blossom", count: 5 },
-    { id: "g902", name: "Island", count: 4 },
+    { id: "g505", name: "Cherry Blossom", count: 5, examples: [] },
+    { id: "g902", name: "Island", count: 4, examples: [] },
   ],
-  developers: [{ id: "p8", name: "KID", count: 3 }],
-  staff: [{ id: "s545", name: "Nakazawa Takumi", count: 3 }],
-  voices: [{ id: "s2001", name: "Suzumura Kenichi", count: 2 }],
+  developers: [{ id: "p8", name: "KID", count: 3, examples: [] }],
+  staff: [{ id: "s545", name: "Nakazawa Takumi", count: 3, examples: [] }],
+  voices: [{ id: "s2001", name: "Suzumura Kenichi", count: 2, examples: [] }],
   topGames: ["Ever17", "CLANNAD"],
 };
 

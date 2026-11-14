@@ -10,6 +10,7 @@ interface ChipProps {
   className?: string;
   /** Accessible name when the visible label alone would be ambiguous. */
   ariaLabel?: string;
+  role?: "tab";
   /**
    * A chip whose choice is currently overridden by something else. Disabled
    * rather than hidden: the control still explains what it would do, and a
@@ -26,6 +27,7 @@ export function Chip({
   onClick,
   className,
   ariaLabel,
+  role,
   disabled,
 }: ChipProps) {
   const classes = ["chip"];
@@ -38,8 +40,10 @@ export function Chip({
   return (
     <button
       type="button"
+      role={role}
       className={classes.join(" ")}
-      aria-pressed={selected ?? false}
+      aria-selected={role === "tab" ? (selected ?? false) : undefined}
+      aria-pressed={role === "tab" ? undefined : (selected ?? false)}
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={onClick}

@@ -4,41 +4,26 @@ import { useI18n } from "@/app/useI18n";
 import { Card, CardHeader } from "@/components/Card";
 import { Sheet } from "@/components/Sheet";
 import { CharacterDetails } from "@/features/game/CharacterDetails";
+import { isSpoilerCharacter, sortSpoilerLast } from "@/features/game/traitFilters";
 import type { VndbCharacter } from "@/lib/ipc/types";
 
 interface CastCardProps {
   characters: VndbCharacter[];
 }
 
-/** How many characters the card lists before the rest go behind a disclosure.
- *
- * A long VN lists dozens; the first row is the cast a reader recognises. */
+/** Initial characters shown before the "show more" disclosure. */
 const VISIBLE_CHARACTERS = 12;
 
 /**
- * The cast, as VNDB records it.
- *
- * Each entry is a button that opens a sheet, following the screenshot gallery
- * rather than expanding in place. A character carries up to ~90 traits, and
- * inline expansion turned the card into a wall of text that pushed the rest of
- * the page away — the sheet keeps the list scannable and gives the details room.
- *
- * Sorted main-first by VNDB's own `role` value, which is why the order is not
- * re-sorted here: their ordering already puts the protagonist at the front.
- *
- * Portraits come from VNDB's CDN rather than being cached like covers. A cast is
- * dozens of small images per game, and caching them all would trade hundreds of
- * megabytes for an offline view of a page that needs the network anyway.
- *
- * The card renders nothing at all when there is no cast: an empty "Characters"
- * heading reads as a loading failure.
+ * Character cast list that opens trait details in a sheet, moves spoiler-tagged
+ * entries to the end while keeping them selectable, and hides when empty.
  */
 export function CastCard({ characters }: CastCardProps) {
   const { t } = useI18n();
-  // Which character's sheet is open, by index into `characters`.
+  // Keep spoiler characters last so the initial slice remains safe without shifting indices.
+  const ordered = sortSpoilerLast(characters);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  // One reveal covers the whole sheet rather than one per character: a reader who
-  // has decided spoilers are fine should not have to toggle again per person.
+  // Single spoiler reveal toggle covers the whole sheet session.
   const [revealed, setRevealed] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
@@ -46,31 +31,38 @@ export function CastCard({ characters }: CastCardProps) {
 
   if (characters.length === 0) return null;
 
-  const shown = showAll ? characters : characters.slice(0, VISIBLE_CHARACTERS);
-  const rest = characters.length - shown.length;
-  const current = openIndex === null ? null : characters[openIndex];
+  const shown = showAll ? ordered : ordered.slice(0, VISIBLE_CHARACTERS);
+  const rest = ordered.length - shown.length;
+  const current = openIndex === null ? null : ordered[openIndex];
 
   const item = (character: VndbCharacter, index: number) => {
     // A character with neither name is not worth a blank tile.
     const label = character.name ?? character.original;
     if (!label) return null;
+    const concealed = isSpoilerCharacter(character) && !revealed;
     return (
       <li key={character.id ?? label} className="cast__item">
         <button
           type="button"
           className="cast__summary"
+          data-spoiler={concealed ? "true" : "false"}
+          aria-label={concealed ? t("detail.castSpoilerTile") : undefined}
           onClick={() => setOpenIndex(index)}
         >
           <span className="cast__art">
-            {character.image?.url ? (
-              <img src={character.image.url} alt="" loading="lazy" />
-            ) : (
+            {concealed || !character.image?.url ? (
               <span className="cast__art--empty" aria-hidden="true" />
+            ) : (
+              <img src={character.image.url} alt="" loading="lazy" />
             )}
           </span>
           <span className="cast__text">
-            <span className="cast__name">{label}</span>
-            {character.original && character.original !== label ? (
+            {concealed ? (
+              <span className="cast__spoiler-name">{t("detail.castSpoiler")}</span>
+            ) : (
+              <span className="cast__name">{label}</span>
+            )}
+            {!concealed && character.original && character.original !== label ? (
               <span className="cast__original">{character.original}</span>
             ) : null}
             {character.role ? (
@@ -102,7 +94,11 @@ export function CastCard({ characters }: CastCardProps) {
 
       <Sheet
         open={current !== null}
-        title={current?.name ?? current?.original ?? t("detail.cast")}
+        title={
+          current && isSpoilerCharacter(current) && !revealed
+            ? t("detail.castSpoiler")
+            : (current?.name ?? current?.original ?? t("detail.cast"))
+        }
         onClose={close}
       >
         {current ? (

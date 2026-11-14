@@ -8,6 +8,7 @@ import {
   formatBirthday,
   formatBloodType,
   groupTraits,
+  isSpoilerCharacter,
 } from "@/features/game/traitFilters";
 
 interface CharacterDetailsProps {
@@ -17,20 +18,12 @@ interface CharacterDetailsProps {
   onToggleReveal: () => void;
 }
 
-/** Groups shown before the rest go behind a disclosure.
- *
- * Even at spoiler 0 a character carries around 40 traits across a dozen groups;
- * the first few are the ones a reader is looking at the sheet for. */
+/** Number of safe trait groups shown initially before folding behind a toggle. */
 const VISIBLE_GROUPS = 6;
 
 /**
- * Everything VNDB knows about one character, shown in a sheet.
- *
- * Traits are the bulk of it: a single CLANNAD character carries 94, of which 42
- * are at spoiler level 0. The rest name plot points, so they stay behind a
- * reveal that is off by default — the same rule the library applies to explicit
- * art, and for the same reason: showing them unasked is irreversible in the
- * reader's memory even if the UI can hide them again.
+ * Character detail sheet. Keeps spoiler-tagged traits (levels > 0) and spoiler
+ * characters concealed behind an explicit opt-in reveal toggle.
  */
 export function CharacterDetails({
   character,
@@ -40,13 +33,16 @@ export function CharacterDetails({
   const { t, locale } = useI18n();
   const [showAllTraits, setShowAllTraits] = useState(false);
 
+  // Conceal portrait and name behind the same reveal toggle when the character itself is a spoiler.
+  const spoilerCharacter = isSpoilerCharacter(character);
+  const concealed = spoilerCharacter && !revealed;
+
   const birthday = formatBirthday(character.birthday, locale);
   const blood = formatBloodType(character.blood_type);
   const ceiling = revealed ? 2 : MAX_SAFE_SPOILER;
-  const groups = groupTraits(character.traits, ceiling);
+  const groups = concealed ? [] : groupTraits(character.traits, ceiling);
 
-  // How many traits the reveal would add, so the button says what it does rather
-  // than "spoilers" with no sense of scale.
+  // Count hidden spoiler traits so the reveal button shows how many remain concealed.
   const hiddenCount = character.traits.filter(
     (trait) => (trait.spoiler ?? 0) > MAX_SAFE_SPOILER,
   ).length;
@@ -69,19 +65,25 @@ export function CharacterDetails({
 
   return (
     <div className="cast__details">
-      {character.image?.url ? (
+      {concealed || !character.image?.url ? (
+        <span className="cast__portrait cast__portrait--empty" aria-hidden="true" />
+      ) : (
         <img
           className="cast__portrait"
           src={character.image.url}
           alt=""
         />
-      ) : null}
+      )}
 
-      {character.original && character.original !== character.name ? (
+      {!concealed && character.original && character.original !== character.name ? (
         <p className="cast__sheet-original">{character.original}</p>
       ) : null}
 
-      {facts.length > 0 ? (
+      {concealed ? (
+        <p className="cast__sheet-original" role="status">
+          {t("detail.castSpoilerBody")}
+        </p>
+      ) : facts.length > 0 ? (
         <dl className="cast__facts">
           {facts.map(([label, value]) => (
             <div key={label} className="cast__fact">
@@ -92,7 +94,7 @@ export function CharacterDetails({
         </dl>
       ) : null}
 
-      {groups.length > 0 ? (
+      {!concealed && groups.length > 0 ? (
         <div className="cast__trait-block">
           <h3 className="caption">{t("detail.castTraits")}</h3>
           <dl className="cast__traits">
@@ -115,12 +117,16 @@ export function CharacterDetails({
         </div>
       ) : null}
 
-      {hiddenCount > 0 ? (
+      {/* A spoiler character offers the toggle even with no hidden traits:
+          revealing the character itself is the whole point. */}
+      {hiddenCount > 0 || spoilerCharacter ? (
         <div className="cast__spoiler">
           <Chip selected={revealed} onClick={onToggleReveal}>
             {revealed
               ? t("detail.castHideSpoilers")
-              : t("detail.castShowSpoilers", { count: hiddenCount })}
+              : spoilerCharacter && hiddenCount === 0
+                ? t("detail.castRevealCharacter")
+                : t("detail.castShowSpoilers", { count: hiddenCount })}
           </Chip>
         </div>
       ) : null}

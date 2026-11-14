@@ -199,6 +199,21 @@
 }
 
 @media (max-width: 600px) {
+  .session-history__session {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .session-history__duration {
+    grid-column: 1;
+    justify-self: start;
+    text-align: start;
+  }
+  .session-history__arrow {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+  .session-history__note {
+    grid-column: 1 / 3;
+  }
   .reading__overview,
   .reading__fields {
     grid-template-columns: minmax(0, 1fr);
@@ -211,12 +226,7 @@
   }
 }
 
-/* A screenshot pinned to a checkpoint.
- *
- * Sized by aspect ratio rather than a fixed height so a portrait or 4:3 source
- * keeps its shape; the file is the 640 px tile from Rust, not the 1920 px
- * lightbox copy, because this paints at card width.
- */
+/* Checkpoint photo: sized by aspect ratio using the 640px Rust tile rather than the 1920px lightbox copy. */
 .reading__photo-field {
   display: grid;
   gap: var(--space-2);
@@ -266,8 +276,8 @@
   background: var(--surface-2);
   cursor: zoom-in;
   transition:
-    border-color var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
+    border-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 .journal-photo__tile:hover {
   border-color: var(--border-strong);
@@ -282,9 +292,7 @@
   object-fit: cover;
   display: block;
 }
-/* The file is already the pre-blurred copy generated in Rust; this only softens the
- * upscaling edge. Never `filter: blur()` — that is the expensive path the pipeline
- * exists to avoid on low-end Android. */
+/* Pre-blurred copy generated in Rust; avoids expensive CSS filter blur on mobile. */
 .journal-photo__img--concealed {
   transform: scale(1.06);
 }

@@ -1,6 +1,4 @@
-/* Timeline: the cross-game reading journey. Its own block on purpose (AGENTS
-   §11): the library's `.row` is a different feature's layout, and borrowing it
-   is how the route-merge button ended up clipped inside a 44px art cell. */
+/* Cross-game reading timeline layout (separate from library `.row` so 44px art cells do not clip). */
 
 .timeline {
   display: flex;
@@ -136,13 +134,7 @@
   padding: var(--space-3) 0;
 }
 
-/* "On this day" on the Stats page.
- *
- * Same row anatomy as a Timeline row (44 px cover, text column) because it is the
- * same kind of object: a past moment attached to a game. It is deliberately not
- * the Timeline's class — that grid has a third `auto` column for a duration this
- * card never has, and reusing it would leave a dead column and clip the text.
- */
+/* "On this day" shares Timeline's 44px cover row without its trailing duration column. */
 .memory-card {
   margin-bottom: var(--space-5);
 }

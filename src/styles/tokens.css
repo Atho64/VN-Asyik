@@ -1,7 +1,4 @@
-/*
- * tokens.css — the only place literal colours and sizes are allowed.
- * Components must use var(--token). See docs/DESIGN.md §4.
- */
+/* Design tokens: single source for literal colors and sizes consumed via var(--token). */
 
 :root {
   color-scheme: dark;
@@ -50,6 +47,8 @@
   --scrim-top: rgb(16 23 25 / 0.3);
   --scrim-mid: rgb(16 23 25 / 0.7);
   --scrim-bottom: rgb(16 23 25 / 0.94);
+  --badge-scrim-bg: rgb(10 11 15 / 0.86);
+  --badge-scrim-text: #edf7f4;
   --text-shadow-over-art: 0 1px 2px rgb(0 0 0 / 0.55), 0 2px 12px rgb(0 0 0 / 0.35);
 
   /* shape */
@@ -216,14 +215,7 @@
   }
 }
 
-/* Aliases for names the walkthrough card's older inline styles use.
- *
- * That component was written before the token set was named, and asks for
- * `--color-text-dim`, `--font-size-sm`, `--radius-md` and friends. None of them
- * existed, so every colour, border and radius silently fell back to the browser
- * default. Mapping the old names onto the real tokens fixes the card everywhere
- * at once, in both themes, without rewriting 700 lines of inline style.
- * Remove this block when that card is moved onto the shared classes. */
+/* Legacy token aliases for WalkthroughCard inline styles; remove once migrated to shared classes. */
 :root {
   --color-text: var(--text);
   --color-text-dim: var(--text-muted);

@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   windowLaunchGet: vi.fn(),
   windowLaunchSet: vi.fn(),
   windowLaunchCapture: vi.fn(),
+  startupPrefsGet: vi.fn(),
+  startupPrefsSet: vi.fn(),
 }));
 
 vi.mock("@/lib/ipc/client", () => ({
@@ -20,6 +22,8 @@ vi.mock("@/lib/ipc/client", () => ({
     windowLaunchGet: mocks.windowLaunchGet,
     windowLaunchSet: mocks.windowLaunchSet,
     windowLaunchCapture: mocks.windowLaunchCapture,
+    startupPrefsGet: mocks.startupPrefsGet,
+    startupPrefsSet: mocks.startupPrefsSet,
   },
   IpcError: class extends Error {
     code = "error";
@@ -30,7 +34,9 @@ vi.mock("@/lib/ipc/client", () => ({
   },
 }));
 
-const { LibraryLaunchSection, WindowLaunchSection } = await import("./LaunchPrefsPanel");
+const { LibraryLaunchSection, StartupSection, WindowLaunchSection } = await import(
+  "./LaunchPrefsPanel"
+);
 const t = createTranslator("en");
 
 function Wrapper({ children }: { children: React.ReactNode }) {
@@ -187,6 +193,68 @@ describe("LaunchPrefsPanel", () => {
 
     await waitFor(() => {
       expect(mocks.windowLaunchGet).toHaveBeenCalledOnce();
+    });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("toggles autostart against the OS and applies mode and close-action chips", async () => {
+    // The read answers from the OS, so the chip can never claim a Run-key
+    // entry that is not there.
+    mocks.startupPrefsGet.mockResolvedValue({
+      prefs: { startup_mode: "manual", close_to_tray: true },
+      supported: true,
+      autostart: false,
+    });
+    mocks.startupPrefsSet.mockImplementation(
+      async (patch: { autostart?: boolean }) => ({
+        prefs: {
+          startup_mode: "manual",
+          close_to_tray: true,
+          ...patch,
+        },
+        supported: true,
+        autostart: patch.autostart ?? false,
+      }),
+    );
+
+    render(
+      <Wrapper>
+        <StartupSection />
+      </Wrapper>,
+    );
+    expect(await screen.findByText("Startup")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByText("Yes"));
+    await waitFor(() => {
+      expect(mocks.startupPrefsSet).toHaveBeenCalledWith({ autostart: true });
+    });
+    await fireEvent.click(screen.getByText("Big Picture"));
+    await waitFor(() => {
+      expect(mocks.startupPrefsSet).toHaveBeenLastCalledWith({
+        startup_mode: "big_picture",
+      });
+    });
+    await fireEvent.click(screen.getByText("Quits the app"));
+    await waitFor(() => {
+      expect(mocks.startupPrefsSet).toHaveBeenLastCalledWith({
+        close_to_tray: false,
+      });
+    });
+  });
+
+  it("renders nothing when startup behaviour is unsupported", async () => {
+    mocks.startupPrefsGet.mockResolvedValue({
+      prefs: { startup_mode: "manual", close_to_tray: true },
+      supported: false,
+      autostart: null,
+    });
+    const { container } = render(
+      <Wrapper>
+        <StartupSection />
+      </Wrapper>,
+    );
+    await waitFor(() => {
+      expect(mocks.startupPrefsGet).toHaveBeenCalledOnce();
     });
     expect(container).toBeEmptyDOMElement();
   });

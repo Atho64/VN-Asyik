@@ -1,11 +1,4 @@
-/**
- * Typed mirror of the Rust command surface.
- *
- * These types are hand-kept in sync with `src-tauri/src/db/models.rs` and
- * `src-tauri/src/commands`. Validity is enforced at runtime by the zod schemas
- * below, so a Rust change that breaks the contract fails loudly at the boundary
- * instead of corrupting the UI silently.
- */
+/** Typed mirror of the Rust command surface, validated at the IPC boundary with zod. */
 
 import { z } from "zod";
 
@@ -293,11 +286,7 @@ export const libraryWrappedSchema = z.object({
 export type LibraryWrapped = z.infer<typeof libraryWrappedSchema>;
 
 /**
- * One past moment that shares today's month and day, for the Stats card.
- *
- * Two kinds, because both carry something worth re-reading: a journal
- * checkpoint and an achieved ending. Sessions are absent on purpose — "you read
- * for 40 minutes" is not a memory.
+ * Past journal checkpoint or achieved ending on this calendar day (raw playtime sessions excluded).
  */
 export const memoryEventSchema = z.object({
   kind: z.enum(["journal", "ending"]),
@@ -341,15 +330,7 @@ export const endingSchema = z.object({
 });
 export type Ending = z.infer<typeof endingSchema>;
 
-/**
- * What the add/edit form submits.
- *
- * `gameId` is only read when creating: an edit knows the ending's id, and the row
- * it belongs to must not move between games.
- *
- * `achievedAt` is the moment the route was finished. `null` means "now" on create
- * and "keep what is stored" on edit, which is what makes re-saving a name safe.
- */
+/** Ending mutation payload; `gameId` applies only on create, and `null` `achievedAt` means now (create) or keep existing (edit). */
 export interface EndingInput {
   gameId: string;
   name: string;
@@ -464,6 +445,9 @@ export const vndbCharacterSchema = z.object({
   original: z.string().nullable().default(null),
   /** `main`, `primary`, `side` or `appears`. */
   role: z.string().nullable().default(null),
+  /** VNDB spoiler level for this VN's entry: 0 safe, 1 mild, 2 major. Rows
+   * cached before the field existed decode as null and stay safe. */
+  spoiler: z.number().nullable().default(null),
   image: vndbImageSchema.nullable().default(null),
   traits: characterTraitSchema.array().default([]),
   /** `[month, day]`, when known. */
@@ -510,10 +494,7 @@ export type DetailPayload = z.infer<typeof detailPayloadSchema>;
 export const screenshotViewSchema = z.object({
   image_id: z.string(),
   vndb_url: z.string(),
-  /**
-   * The sharp image, or the pre-blurred one when `sharp` is false. This is what a
-   * revealed tile paints, exactly as `artUrl` is for a cover.
-   */
+  /** Cached sharp/pre-blurred image data URL (`blurred_src` is used when `sharp` is false). */
   src: z.string(),
   /** The pre-blurred copy, when one is cached. */
   blurred_src: z.string().nullable().default(null),
@@ -532,11 +513,7 @@ export const screenshotGallerySchema = z.object({
   reported: z.number(),
   /** False when some images could not be fetched. */
   complete: z.boolean(),
-  /**
-   * Screenshots still to download. Non-zero means "call again for more": the backend
-   * downloads in batches so tiles appear progressively instead of after a full
-   * minute of silence.
-   */
+  /** Remaining screenshots queued for progressive batch fetching. */
   pending: z.number().default(0),
 });
 export type ScreenshotGallery = z.infer<typeof screenshotGallerySchema>;
@@ -565,7 +542,6 @@ export const usageAccessViewSchema = z.object({
 
 export type UsageAccessView = z.infer<typeof usageAccessViewSchema>;
 
-/** Device-to-device sync status. */
 /** The tokens a theme owns. Mirrors `ThemeTokens` in `src/lib/theme.ts`. */
 export const themeTokensSchema = z.object({
   bg: z.string(),
@@ -683,6 +659,36 @@ export interface LlmProfileInput {
   key?: string;
 }
 
+/**
+ * One recurring signal in the library's taste: a tag, a studio, a staff
+ * member or a voice actor the user's games share. The For-you header shows
+ * the name and count; the taste panel also names the games behind the count.
+ */
+export const forYouSignalSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  count: z.number(),
+  /** Titles of the games carrying the signal, capped at three. */
+  examples: z.array(z.string()).default([]),
+});
+export type ForYouSignal = z.infer<typeof forYouSignalSchema>;
+
+/** The rating-weighted seeds the For-you recommendations rank with: the same
+ * categories and ordering the taste panel renders. */
+export const tasteSeedsSchema = z.object({
+  /** Whether the library is large enough to query VNDB at all. */
+  ready: z.boolean(),
+  /** Distinct works that contributed at least one signal. */
+  considered: z.number(),
+  tags: z.array(forYouSignalSchema),
+  developers: z.array(forYouSignalSchema),
+  staff: z.array(forYouSignalSchema),
+  voices: z.array(forYouSignalSchema),
+  /** Strongest seed games, titles only. */
+  topGames: z.array(z.string()),
+});
+export type TasteSeeds = z.infer<typeof tasteSeedsSchema>;
+
 /** One tag the library carries, with the games behind it. */
 export const tasteThemeSchema = z.object({
   name: z.string(),
@@ -691,13 +697,14 @@ export const tasteThemeSchema = z.object({
   share: z.number(),
 });
 
-/** The library's taste: a plain count of its most common VNDB tags. */
+/** The library's taste: the plain tag count plus the weighted seeds. */
 export const tasteViewSchema = z.object({
   profile: z.object({
     considered: z.number(),
     undetermined: z.array(z.string()),
     themes: z.array(tasteThemeSchema),
   }),
+  seeds: tasteSeedsSchema,
 });
 export type TasteView = z.infer<typeof tasteViewSchema>;
 
@@ -853,18 +860,12 @@ export const chapterViewSchema = z.object({
 });
 export type ChapterView = z.infer<typeof chapterViewSchema>;
 
-/* One route with its chapters and endings nested, as `game_routes` returns it.
- *
- * Chapters and endings used to be two independent lists with two route
- * vocabularies, so one story appeared twice and neither half could show the
- * other. This is the joined shape that makes them one thing. */
+/** One route with its chapters and endings nested, as `game_routes` returns it. */
 export const routeViewSchema = z.object({
-  /* Null for the bucket of rows that belong to no route at all. Those still have
-   * to be listed, or creating a route would hide the chapters that prompted it. */
+  /** `null` for the unrouted bucket so orphaned chapters stay visible. */
   id: z.string().nullable(),
   name: z.string(),
-  /* `engine`, `ending` or `manual` -- where the row came from. Shown so a user can
-   * tell why one story appears twice before merging the halves. */
+  /** Source provenance (`engine`, `ending`, or `manual`) to explain duplicate stories prior to merging. */
   origin: z.string(),
   chapters: chapterViewSchema.array(),
   endings: endingSchema.array(),
@@ -877,13 +878,7 @@ export const routeViewSchema = z.object({
 });
 export type RouteView = z.infer<typeof routeViewSchema>;
 
-/* What chapter detection can do here. `automatic` decides whether the panel
- * promises detection or points at the manual timer instead.
- *
- * `engine` and `unavailableReason` exist so the panel can say something useful
- * instead of the same sentence for every game: "no engine profile for this build"
- * and "map this game's executable first" are different problems with different
- * fixes. */
+/* Capability metadata controlling whether chapter UI offers auto-detection or directs users to the manual timer. */
 export const chapterCapabilityViewSchema = z.object({
   platform: z.string(),
   sources: z.array(z.string()),
@@ -1144,17 +1139,6 @@ export const recommendOutcomeSchema = z.object({
 });
 export type RecommendOutcome = z.infer<typeof recommendOutcomeSchema>;
 
-/**
- * One recurring signal in the library's taste, as the For-you header shows it:
- * a tag, a studio, a staff member or a voice actor the user's games share.
- */
-export const forYouSignalSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  count: z.number(),
-});
-export type ForYouSignal = z.infer<typeof forYouSignalSchema>;
-
 /** The library's taste seeds, computed locally and shown before any query. */
 export const forYouProfileSchema = z.object({
   considered: z.number(),
@@ -1242,15 +1226,7 @@ export const launchProfileSchema = z.object({
 });
 export type LaunchProfile = z.infer<typeof launchProfileSchema>;
 
-/** What the launch screen can do. */
-/**
- * What Locale Emulator will do for the next launch.
- *
- * One value rather than several booleans, because only one combination is ever
- * truthful. `ready` is the only state that starts a game in Japanese; keying a
- * badge off "the launcher exists on disk" is what previously promised
- * localization that the launch then skipped.
- */
+/** Single exclusive Locale Emulator readiness state (`ready` launches in Japanese). */
 export const emulatorStateSchema = z.enum([
   "notInstalled",
   "noProfile",
@@ -1259,6 +1235,7 @@ export const emulatorStateSchema = z.enum([
 ]);
 export type EmulatorState = z.infer<typeof emulatorStateSchema>;
 
+/** What the launch screen can do. */
 export const launchCapabilitySchema = z.object({
   canLaunch: z.boolean(),
   emulator: emulatorStateSchema,
@@ -1512,6 +1489,33 @@ export interface UiPrefsPatch {
   library_remember_browse?: boolean;
   library_default_sort?: LibrarySortKey;
   library_saved_browse?: SavedLibraryBrowse;
+}
+
+/** How the app's window presents on every launch, however it was started. */
+export const startupModeSchema = z.enum(["manual", "big_picture", "tray"]);
+export type StartupMode = z.infer<typeof startupModeSchema>;
+
+/** Device-local window behaviour. Autostart itself is OS state, reported
+ * separately, never stored here. */
+export const startupPrefsSchema = z.object({
+  startup_mode: startupModeSchema.default("manual"),
+  close_to_tray: z.boolean().default(true),
+});
+export type StartupPrefs = z.infer<typeof startupPrefsSchema>;
+
+/** The prefs plus whether this platform acts on them, and the OS autostart
+ * registration state when it can be read. */
+export const startupPrefsViewSchema = z.object({
+  prefs: startupPrefsSchema,
+  supported: z.boolean(),
+  autostart: z.boolean().nullable(),
+});
+export type StartupPrefsView = z.infer<typeof startupPrefsViewSchema>;
+
+export interface StartupPrefsPatch {
+  startup_mode?: StartupMode;
+  close_to_tray?: boolean;
+  autostart?: boolean;
 }
 
 export const windowLaunchModeSchema = z.enum(["centered", "customized"]);

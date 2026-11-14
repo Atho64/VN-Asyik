@@ -16,18 +16,8 @@ html {
   text-size-adjust: 100%;
 }
 
-/* The app is a native-feeling surface, not a document.
- *
- * Android's WebView honours pinch and double-tap zoom on any page that does not
- * say otherwise, so a double-tap on a screenshot tile or a two-finger touch while
- * scrolling zoomed the whole UI — header, tab bar and all — and the only way back
- * was a reload. There is no third-party document here whose text a reader might
- * need to enlarge (the accessibility path for that is the OS font scale, which
- * still works), so the viewport is fixed and the gesture layer is ours.
- *
- * `touch-action: manipulation` keeps panning and tapping but removes the
- * double-tap-to-zoom delay, which also removes the ~300 ms click lag each tile
- * used to pay before its handler ran. */
+/* Prevent double-tap-zoom 300 ms click delay while leaving viewport pinch-zoom
+ * available for accessibility. Lightbox images scope pinch-zoom directly. */
 html,
 body {
   touch-action: manipulation;
@@ -94,11 +84,36 @@ button {
   label[for],
   label:has(input[type="checkbox"], input[type="radio"]),
   input[type="checkbox"],
-  input[type="radio"]
-) {
+  input[type="radio"],
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  input[type="file"],
+  input[type="range"],
+  input[type="color"],
+  [role="button"],
+  [role="link"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [role="switch"]
+):not(:disabled):not([aria-disabled="true"]) {
   cursor: pointer;
 }
 :is(button, select, input, textarea):disabled,
+:is(
+  a,
+  button,
+  select,
+  input,
+  textarea,
+  [role="button"],
+  [role="link"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [role="switch"]
+)[aria-disabled="true"],
 label:has(input:disabled) {
   cursor: not-allowed;
 }

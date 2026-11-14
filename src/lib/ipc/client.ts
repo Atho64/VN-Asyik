@@ -16,10 +16,13 @@ import {
   type WalkthroughIndexEntry,
   uiPrefsSchema,
   windowLaunchViewSchema,
+  startupPrefsViewSchema,
   type UiPrefs,
   type UiPrefsPatch,
   type WindowLaunchView,
   type WindowLaunchInput,
+  type StartupPrefsView,
+  type StartupPrefsPatch,
   androidAppSchema,
   androidSessionViewSchema,
   type AndroidApp,
@@ -209,14 +212,7 @@ export async function call<T>(
 /** Requests already on the wire, keyed by command. */
 const inFlight = new Map<string, Promise<unknown>>();
 
-/**
- * Share one in-flight request between callers of the same command.
- *
- * Only for calls whose answer does not depend on arguments: the library totals
- * and the tracking status. A caller that starts while the previous answer is
- * still travelling gets that answer instead of paying for a second aggregate.
- * The entry is cleared as soon as it settles, so the next call is fresh.
- */
+/** Deduplicates concurrent identical no-arg IPC requests until the in-flight call settles. */
 function shared<T>(key: string, run: () => Promise<T>): Promise<T> {
   const pending = inFlight.get(key);
   if (pending) return pending as Promise<T>;
@@ -301,6 +297,8 @@ export interface Api {
   statusBreakdown(): Promise<StatusBreakdown>;
   playtimeTotals(): Promise<[number, number]>;
   playtimeByDay(): Promise<Array<[number, number]>>;
+  /** Local-day buckets of finished games, for the heatmap's finished marks. */
+  finishedByDay(): Promise<Array<[number, number]>>;
   getPrefs(): Promise<Prefs>;
   setTheme(value: string): Promise<Prefs>;
   setLanguage(value: string): Promise<Prefs>;
@@ -327,14 +325,7 @@ export interface Api {
   setGameCustomCover(id: string, path: string): Promise<Game>;
   /** Remove the custom cover and fall back to the previous artwork. */
   clearGameCustomCover(id: string): Promise<Game>;
-  /**
-   * Screenshot gallery, cached on demand.
-   *
-   * Policy-free on purpose: like {@link vndbLocalArt}, the payload carries both the
-   * sharp and the pre-blurred copy of every tile and the surface decides which to
-   * paint. That is what lets a reveal paint instantly instead of re-fetching, and it
-   * is why changing the content setting no longer needs a round trip.
-   */
+  /** Cached VNDB screenshot gallery carrying both sharp and pre-blurred URLs per tile for policy switching. */
   vndbScreenshots(vnId: string): Promise<ScreenshotGallery>;
   /** One screenshot at full cached size, for the lightbox. */
   vndbScreenshotFetch(vnId: string, imageId: string): Promise<ScreenshotView>;
@@ -514,19 +505,15 @@ export interface Api {
   windowLaunchGet(): Promise<WindowLaunchView>;
   windowLaunchSet(input: WindowLaunchInput): Promise<WindowLaunchView>;
   windowLaunchCapture(): Promise<WindowLaunchView>;
+  startupPrefsGet(): Promise<StartupPrefsView>;
+  startupPrefsSet(patch: StartupPrefsPatch): Promise<StartupPrefsView>;
+  windowSetFullscreen(fullscreen: boolean): Promise<void>;
 }
 
 /** `void` commands still resolve to `null` over IPC. */
 const voidSchema = z.unknown().transform(() => undefined as void);
 
-/**
- * Run `run` immediately, then every `intervalMs`, waiting for each call to settle.
- *
- * A fixed `setInterval` starts a new request whether or not the last one came
- * back. A slow IPC round trip (an Android usage query, a cold database open) then
- * stacks requests that are answered out of order, and the oldest answer can
- * overwrite the newest state. This keeps exactly one request in flight.
- */
+/** Runs `run` immediately and reschedules after `intervalMs` once settled so slow calls never overlap. */
 export function startPolling(
   run: () => Promise<void>,
   intervalMs: number,
@@ -550,14 +537,7 @@ export function startPolling(
   };
 }
 
-/**
- * Drop a response once its caller has gone away.
- *
- * Pollers answer every few seconds, and a slow round trip can outlive the
- * screen that asked for it. This keeps scheduling the next tick only while a
- * request is still in flight, so a stalled backend stops accumulating
- * overlapping calls instead of piling one up per interval.
- */
+/** Reschedules polling only while mounted so slow IPC round trips never pile up. */
 export function polled<T>(
   promise: Promise<T>,
   apply: (value: T) => void,
@@ -636,6 +616,9 @@ export const api: Api = {
   playtimeTotals: () => call("playtime_totals", z.tuple([z.number(), z.number()])),
   playtimeByDay: () =>
     call("playtime_by_day", z.array(z.tuple([z.number(), z.number()]))),
+  /** Local-day buckets of finished games, for the heatmap's finished marks. */
+  finishedByDay: () =>
+    call("finished_by_day", z.array(z.tuple([z.number(), z.number()]))),
   getPrefs: () => call("get_prefs", prefsSchema),
   setTheme: (value) => call("set_theme", prefsSchema, { value }),
   setLanguage: (value) => call("set_language", prefsSchema, { value }),
@@ -850,6 +833,11 @@ export const api: Api = {
   windowLaunchGet: () => call("window_launch_get", windowLaunchViewSchema),
   windowLaunchSet: (input) => call("window_launch_set", windowLaunchViewSchema, { input }),
   windowLaunchCapture: () => call("window_launch_capture", windowLaunchViewSchema),
+  startupPrefsGet: () => call("startup_prefs_get", startupPrefsViewSchema),
+  startupPrefsSet: (patch) =>
+    call("startup_prefs_set", startupPrefsViewSchema, { patch }),
+  windowSetFullscreen: (fullscreen) =>
+    call("window_set_fullscreen", voidSchema, { fullscreen }),
 };
 
 /** True when running inside the Tauri shell. */

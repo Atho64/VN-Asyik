@@ -123,7 +123,7 @@ describe("WalkthroughCard", () => {
     ).toBeInTheDocument();
 
     expect(await screen.findByText("Rewrite+")).toBeInTheDocument();
-    expect(screen.getByText("Seiya-Saiga Match")).toBeInTheDocument();
+    expect(screen.getByText("Seiya-Saiga match")).toBeInTheDocument();
   });
 
   it("renders routes, save markers, and checkable choices when walkthrough is loaded", async () => {
@@ -163,7 +163,7 @@ describe("WalkthroughCard", () => {
 
     renderCard();
 
-    const jaButton = await screen.findByRole("button", { name: "Japanese (Original)" });
+    const jaButton = await screen.findByRole("button", { name: "Japanese (original)" });
     await user.click(jaButton);
 
     expect(await screen.findByText("共通・小鳥、ちはや")).toBeInTheDocument();
@@ -188,6 +188,6 @@ describe("WalkthroughCard", () => {
 
     expect(api.walkthroughSearch).toHaveBeenCalledWith("rewrite");
     expect(await screen.findByText("Rewrite - PS3")).toBeInTheDocument();
-    expect(screen.getByText("Search Results (1)")).toBeInTheDocument();
+    expect(screen.getByText("Search results (1)")).toBeInTheDocument();
   });
 });

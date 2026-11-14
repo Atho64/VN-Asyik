@@ -1,9 +1,6 @@
 import type { Messages } from "./en";
 
-/**
- * Indonesian. Typed as `Messages`, so a key missing here is a type error.
- * Written as a reader would say it, not as a literal translation of English.
- */
+/** Indonesian locale catalog, typed against `Messages` to enforce key completeness. */
 export const id: Messages = {
   "reading.sessionDetails": "Detail sesi baca",
   "reading.started": "Mulai",
@@ -247,7 +244,10 @@ export const id: Messages = {
   "tracking.titleMatch": "Kata kunci judul jendela (opsional)",
   "tracking.titleMatchHint":
     "Dipakai membedakan game saat beberapa game memakai emulator yang sama.",
+  "tracking.titleMatchPlaceholder": "Kata kunci judul jendela",
   "tracking.extraArgs": "Argumen peluncuran tambahan (opsional)",
+  "tracking.extraArgsPlaceholder": "Contoh: --fullscreen",
+  "tracking.folderPlaceholder": "F:/Visual Novels",
   "tracking.browseEmulator": "Pilih emulator",
   "tracking.browseTarget": "Pilih file ROM / game",
   "tracking.mapRunner": "Simpan pemetaan runner",
@@ -316,7 +316,7 @@ export const id: Messages = {
   "sync.tokenHelp":
     "Buat token di VNDB pada Profil Saya, lalu tab Aplikasi. Perlu listread untuk melihat label privat dan listwrite untuk mengirim perubahan.",
   "sync.tokenUnsupported":
-    "Build ini belum bisa menyimpan token dengan aman di platform ini. Sinkronisasi dimatikan daripada disimpan di tempat yang tidak aman.",
+    "Build ini belum bisa menyimpan token dengan aman di platform ini, jadi sinkronisasi dimatikan agar tidak tersimpan di tempat yang tidak aman.",
   "sync.connect": "Hubungkan",
   "sync.connecting": "Memeriksa token",
   "sync.disconnect": "Putuskan",
@@ -409,7 +409,7 @@ export const id: Messages = {
   "field.started": "Mulai",
   "field.finished": "Selesai",
 
-  "nav.recommend": "Temukan",
+  "nav.recommend": "Rekomendasi",
   "play.play": "Mainkan",
   "play.playVia": "Mainkan via {{runner}}",
   "play.starting": "Menjalankan",
@@ -612,6 +612,15 @@ export const id: Messages = {
   "detail.ratingLabel": "Nilai",
   "detail.ratingValue": "Beri nilai {{value}} dari 10",
   "detail.addSession": "Tambah waktu",
+  "detail.adjustPlaytime": "Atur ulang waktu main",
+  "detail.adjustIntro":
+    "Waktu yang kamu tahu tapi tidak tercatat di sesi mana pun: jam baca sebelum pelacakan ada, atau rentang yang terhitung dua kali. Penyesuaian ini ditambahkan ke sesi tercatat dan melekat pada game.",
+  "detail.adjustTracked": "Tercatat oleh sesi",
+  "detail.adjustCurrent": "Penyesuaian saat ini",
+  "detail.adjustMinutes": "Penyesuaian dalam menit",
+  "detail.adjustHint":
+    "Menit negatif mengurangi. Total tidak pernah di bawah nol.",
+  "detail.adjustInvalid": "Masukkan jumlah menit bulat.",
   "detail.chapters": "Bab",
   "detail.chaptersEmpty": "Belum ada bab. Deteksi bab datang di fase berikutnya.",
   "detail.alsoKnownAs": "Juga dikenal sebagai",
@@ -683,7 +692,7 @@ export const id: Messages = {
   "detail.cancel": "Batal",
   "detail.notFound": "Game itu sudah tidak ada di koleksimu.",
 
-  // ---- VN facts, gallery and VNDB links ----
+  // VN facts, gallery and VNDB links
   "detail.facts": "Detail",
   "detail.released": "Rilis",
   "detail.developer": "Pengembang",
@@ -720,6 +729,11 @@ export const id: Messages = {
   "detail.castTraitsMore": "{{count}} grup lainnya",
   "detail.castShowSpoilers": "Tampilkan {{count}} sifat spoiler",
   "detail.castHideSpoilers": "Sembunyikan sifat spoiler",
+  "detail.castSpoiler": "Spoiler",
+  "detail.castSpoilerTile": "Karakter spoiler. Buka, lalu ungkap untuk melihatnya.",
+  "detail.castSpoilerBody":
+    "VNDB menandai karakter ini sebagai spoiler untuk cerita ini. Ungkap untuk melihat nama, potret, dan detailnya.",
+  "detail.castRevealCharacter": "Ungkap karakter",
   "detail.titleRole.english": "Inggris",
   "detail.titleRole.romaji": "Romaji",
   "detail.titleRole.japanese": "Jepang",
@@ -835,7 +849,7 @@ export const id: Messages = {
   "catalog.owned": "Sudah di koleksimu",
   "catalog.none": "Tidak ada yang cukup mirip",
   "catalog.noneBody":
-    "Tidak ada isi katalog yang cukup mirip untuk disarankan. Itu jawaban sungguhan, bukan kegagalan.",
+    "Tidak ada entri katalog yang cukup mirip untuk disarankan.",
   "catalog.missingBody":
     "Katalog VNDB belum diunduh, jadi game ini hanya bisa dibandingkan dengan koleksimu sendiri.",
   "catalog.missingHow":
@@ -846,14 +860,14 @@ export const id: Messages = {
   "similar.because": "Berbagi {{tags}}",
   "similar.noSharedTags": "Mirip dari kata-katanya, tanpa tag yang sama",
   "similar.placeholder":
-    "Versi ini memakai pembanding sementara yang mengabaikan makna, jadi anggap ini uji sambungan, bukan saran.",
+    "Versi ini memakai pembanding sementara yang mengabaikan makna, jadi anggap hasilnya hanya sebagai uji sambungan.",
   "similar.notIndexed": "Belum dibandingkan",
   "similar.notIndexedBody":
     "Game ini belum disiapkan untuk perbandingan. Prosesnya sebentar dan tetap di perangkatmu.",
   "similar.index": "Siapkan perbandingan",
   "similar.none": "Tidak ada yang cukup mirip",
   "similar.noneBody":
-    "Tidak ada game di koleksimu yang cukup mirip untuk disarankan. Itu jawaban sungguhan, bukan kegagalan.",
+    "Tidak ada game di koleksimu yang cukup mirip untuk disarankan.",
   "similar.modelTitle": "Model pembanding",
   "similar.modelMissing":
     "Model pembanding belum diunduh, jadi belum ada yang bisa dibandingkan. Ukurannya sekitar 330 MB dan berjalan offline.",
@@ -896,6 +910,8 @@ export const id: Messages = {
   "stats.heatmap": "Hari membaca, 12 bulan terakhir",
   "stats.heatmapLegend": "Sedikit",
   "stats.heatmapLegendMore": "Banyak",
+  "stats.heatmapLegendDot": "Titik = menyelesaikan VN di hari itu",
+  "stats.heatmapFinished": "menyelesaikan VN",
   "stats.streakCurrent": "Rentetan: {{days}}",
   "stats.streakLongest": "Terpanjang: {{days}}",
   "stats.onThisDay": "Di hari ini",
@@ -972,11 +988,11 @@ export const id: Messages = {
   "stats.errorTitle": "Statistik gagal dimuat",
 
   "timeline.tabs": "Tampilan linimasa",
-  "timeline.tabJourney": "Perjalanan",
+  "timeline.tabJourney": "Log baca",
   "timeline.tabScreenshots": "Screenshot",
   "timeline.title": "Lini Masa",
-  "timeline.loading": "Menyusun perjalananmu",
-  "timeline.emptyTitle": "Perjalanan dimulai dengan sesi pertama",
+  "timeline.loading": "Memuat log baca",
+  "timeline.emptyTitle": "Log bacamu dimulai dari sesi pertama",
   "timeline.emptyBody": "Sesi, catatan jurnal, akhir yang dicapai, dan game yang selesai dari semua game akan muncul di sini sebagai satu lini masa.",
   "timeline.errorTitle": "Lini masa gagal dimuat",
   "timeline.loadOlder": "Kejadian lebih lama",
@@ -989,13 +1005,13 @@ export const id: Messages = {
   "timeline.searchLoading": "Mencari di jurnalmu",
   "timeline.searchEmptyTitle": "Tidak ada catatan yang cocok",
   "timeline.searchEmptyBody":
-    "Coba kata lain, atau hapus pencarian untuk melihat seluruh perjalanan.",
+    "Coba kata lain, atau hapus pencarian untuk melihat seluruh log baca.",
   "timeline.searchCount_one": "{{count}} hasil",
   "timeline.searchCount_other": "{{count}} hasil",
 
   "settings.betaTitle": "Fitur Beta",
   "settings.betaLabel": "Aktifkan fitur Beta",
-  "settings.betaHint": "Tampilkan Teman baca, Temukan (pencarian VN dengan kunci API), dan Chat VN, beserta pengaturannya. Nonaktif secara bawaan. Menonaktifkan ini menjeda teman baca tanpa menghapus pengaturan dan riwayat tersimpan.",
+  "settings.betaHint": "Tampilkan Teman baca, Rekomendasi (pencarian VN dengan kunci API), dan Chat VN, beserta pengaturannya. Nonaktif secara bawaan. Menonaktifkan ini menjeda teman baca tanpa menghapus pengaturan dan riwayat tersimpan.",
   "settings.betaOn": "Aktif",
   "settings.betaOff": "Nonaktif",
   "settings.betaSaving": "Menyimpan…",
@@ -1013,6 +1029,23 @@ export const id: Messages = {
   "settings.libraryDefaultSortLabel": "Urutan bawaan",
   "settings.libraryDefaultSortHint":
     "Dipakai saat membuka aplikasi jika penyimpanan filter & urutan dimatikan.",
+  "settings.startupTitle": "Startup",
+  "settings.startupAutostartLabel": "Jalankan saat PC menyala",
+  "settings.startupAutostartHint":
+    "Jalankan aplikasi saat PC ini menyala. Pendaftaran ada di OS; mematikannya akan menghapusnya lagi.",
+  "settings.startupAutostartOff": "Tidak",
+  "settings.startupAutostartOn": "Ya",
+  "settings.startupModeLabel": "Saat aplikasi dibuka",
+  "settings.startupModeHint":
+    "Berlaku untuk setiap pembukaan: jendela biasa, Big Picture layar penuh, atau tersembunyi di tray.",
+  "settings.startupModeManual": "Jendela biasa",
+  "settings.startupModeBigPicture": "Big Picture",
+  "settings.startupModeTray": "Di tray",
+  "settings.startupCloseLabel": "Menutup jendela",
+  "settings.startupCloseHint":
+    "Lanjut membaca dari tray di latar belakang, atau biarkan menutup jendela menutup aplikasi.",
+  "settings.startupCloseTray": "Sembunyikan ke tray",
+  "settings.startupCloseQuit": "Tutup aplikasi",
   "settings.windowTitle": "Jendela desktop",
   "settings.windowPositionLabel": "Posisi saat dibuka",
   "settings.windowPositionHint":
@@ -1048,14 +1081,14 @@ export const id: Messages = {
   "settings.afk": "Deteksi diam",
   "settings.afkThreshold": "Hitung sebagai pergi setelah",
   "settings.afkThresholdHint":
-    "Membaca visual novel membuat tidak ada input cukup lama, jadi jeda ini mencegah waktu baca asli dianggap istirahat. Windows mengukur input untuk seluruh mesin, bukan hanya jendela gim: klik di mana pun akan meresetnya. Waktu hanya bertambah selama gim ada di depan, jadi membaca di tempat lain tidak pernah terhitung.",
+    "Membaca visual novel membuat tidak ada input cukup lama, jadi jeda ini mencegah waktu baca asli dianggap istirahat. Windows mengukur input untuk seluruh mesin, bukan hanya jendela game: klik di mana pun akan meresetnya. Waktu hanya bertambah selama game ada di depan, jadi membaca di tempat lain tidak pernah terhitung.",
   "settings.afkExclude": "Jangan hitung waktu pergi sebagai waktu baca",
   "settings.afkExcludeHint":
     "Mati: waktu pergi ditambahkan kembali ke waktu baca. Bagaimanapun, waktunya selalu dicatat.",
   "settings.seconds": "{{count}} detik",
   "settings.presence": "Discord Rich Presence",
   "settings.presenceHint":
-    "Tampilkan visual novel yang sedang dimainkan di profil Discord Anda.",
+    "Tampilkan visual novel yang sedang dimainkan di profil Discord kamu.",
   "settings.presenceEnable": "Aktifkan Rich Presence",
   "settings.presenceStatus": "Status",
   "settings.presenceStatusConnected": "Terhubung",
@@ -1080,36 +1113,36 @@ export const id: Messages = {
   "settings.presenceState": "Baris State",
   "settings.presenceShowCover": "Tampilkan Sampul",
   "settings.presenceShowCoverHint":
-    "Sampul VNDB hanya dikirim kalau tidak eksplisit. Sampul yang kamu pilih sendiri dikirim seperti yang tampil di koleksimu, diburamkan bila rating sampul gim itu eksplisit.",
+    "Sampul VNDB hanya dikirim kalau tidak eksplisit. Sampul yang kamu pilih sendiri dikirim seperti yang tampil di koleksimu, diburamkan bila rating sampul game itu eksplisit.",
   "settings.presenceImageHost": "Host Gambar",
   "settings.presenceImageHostNone": "Tidak ada",
   "settings.presenceImageHostCatbox": "Catbox",
   "settings.presenceImageHostImgbb": "ImgBB",
   "settings.presenceImageHostHint":
-    'Opsional. Memungkinkan kartu menampilkan gambar yang tidak bisa diambil Discord sendiri: sampul eksplisit sebagai salinan yang diburamkan secara lokal, dan sampul kustom Anda. Tidak ada yang diunggah selama masih "Tidak ada".',
+    'Opsional. Memungkinkan kartu menampilkan gambar yang tidak bisa diambil Discord sendiri: sampul eksplisit sebagai salinan yang diburamkan secara lokal, dan sampul kustom kamu. Tidak ada yang diunggah selama masih "Tidak ada".',
   "settings.presenceImageKey": "Kunci API ImgBB",
-  "settings.presenceImageKeyPlaceholder": "Tempel kunci API imgbb Anda",
+  "settings.presenceImageKeyPlaceholder": "Tempel kunci API imgbb kamu",
   "settings.presenceImageKeySave": "Simpan Kunci",
   "settings.presenceImageKeyRemove": "Hapus",
   "settings.presenceImageKeySaved": "Kunci API disimpan",
   "settings.presenceImageKeyRemoved": "Kunci API dihapus",
   "settings.presenceImageKeyHint":
-    "Disimpan di brankos kredensial sistem, tidak pernah di backup. Dapatkan gratis di api.imgbb.com.",
+    "Disimpan di brankas kredensial sistem, tidak pernah di backup. Dapatkan gratis di api.imgbb.com.",
   "settings.presenceShowTimestamps": "Tampilkan Waktu Bermain",
   "settings.presenceShowWhenUnfocused": "Tetap tampil saat jendela lain aktif",
   "settings.presenceShowWhenUnfocusedHint":
-    "Kartu tetap ada di profil selama game berjalan meski Anda berpindah ke browser, catatan, atau Discord. Kartu tetap hilang saat game ditutup, dan timer yang dijeda akan menyembunyikannya.",
+    "Kartu tetap ada di profil selama game berjalan meski kamu berpindah ke browser, catatan, atau Discord. Kartu tetap hilang saat game ditutup, dan timer yang dijeda akan menyembunyikannya.",
   "settings.presenceShowButtons": "Tampilkan tombol VNDB",
   "settings.presenceClientId": "Client ID (opsional)",
   "settings.presenceClientIdHint":
     "Biarkan kosong untuk menggunakan ID aplikasi bawaan VN Asyik.",
   "settings.presenceScope": "Cakupan presence",
   "settings.presenceScopeHint":
-    "Pilih gim untuk menimpa gim itu saja. Yang kamu ubah di sini disimpan sendiri; sisanya tetap mengikuti bawaan global.",
+    "Pilih game untuk menimpa game itu saja. Yang kamu ubah di sini disimpan sendiri; sisanya tetap mengikuti bawaan global.",
   "settings.presenceScopeGlobal": "Bawaan global",
-  "settings.presenceScopeResetButton": "Kembalikan gim ini ke global",
-  "settings.presenceScopeReset": "Gim ini kembali memakai pengaturan global.",
-  "settings.presencePreviewGame": "Gim yang ditampilkan di pratinjau",
+  "settings.presenceScopeResetButton": "Kembalikan game ini ke global",
+  "settings.presenceScopeReset": "Game ini kembali memakai pengaturan global.",
+  "settings.presencePreviewGame": "Game yang ditampilkan di pratinjau",
   "settings.presencePreview": "Pratinjau Langsung",
   "settings.presencePlaying": "SEDANG MEMAINKAN",
 
@@ -1142,11 +1175,11 @@ export const id: Messages = {
   "settings.presenceTransformReplacing": "{{count}} diganti",
   "settings.presenceTokensTitle": "Token templat",
   "settings.presenceTokensHint":
-    "Klik token untuk menyisipkannya di akhir kolom yang terakhir Anda fokuskan. Token tak dikenal dibiarkan apa adanya.",
-  "settings.presenceShowListButton": "Tampilkan tombol Daftar VNDB Saya",
-  "settings.presenceMyVndbLink": "Profil VNDB Anda",
+    "Klik token untuk menyisipkannya di akhir kolom yang terakhir kamu fokuskan. Token tak dikenal dibiarkan apa adanya.",
+  "settings.presenceShowListButton": "Tampilkan tombol Daftar VNDB saya",
+  "settings.presenceMyVndbLink": "Profil VNDB kamu",
   "settings.presenceMyVndbLinkHint":
-    "URL profil Anda, misalnya https://vndb.org/u123456. Ditampilkan sebagai tombol kedua.",
+    "URL profil kamu, misalnya https://vndb.org/u123456. Ditampilkan sebagai tombol kedua.",
   "settings.presencePreviewDetailsEntry": "Pratinjau baris detail ke-",
   "settings.presencePreviewStateEntry": "Pratinjau baris status ke-",
   "settings.presencePreviewPrev": "Baris sebelumnya",
@@ -1169,13 +1202,13 @@ export const id: Messages = {
   "settings.presenceTosTitle": "Pemberitahuan Discord Gateway & Ketentuan Layanan",
   "settings.presenceTosWarningHead": "Peringatan Self-Bot & Keamanan Akun",
   "settings.presenceTosBody1":
-    "Android tidak memiliki socket IPC Discord lokal. Menampilkan rich presence di ponsel memerlukan koneksi langsung ke Discord Gateway menggunakan token akun pengguna Anda.",
+    "Android tidak memiliki socket IPC Discord lokal. Menampilkan rich presence di ponsel memerlukan koneksi langsung ke Discord Gateway menggunakan token akun pengguna kamu.",
   "settings.presenceTosBody2":
-    "Ketentuan Layanan Discord melarang klien pihak ketiga dan self-botting. Meskipun VN Asyik hanya mengirim paket OP 3 PRESENCE_UPDATE dan tidak pernah membaca atau mengirim pesan chat, penggunaan token ini adalah risiko Anda sendiri.",
+    "Ketentuan Layanan Discord melarang klien pihak ketiga dan self-botting. Meskipun VN Asyik hanya mengirim paket OP 3 PRESENCE_UPDATE dan tidak pernah membaca atau mengirim pesan chat, risiko penggunaan token ini menjadi tanggung jawab kamu.",
   "settings.presenceTosBody3":
-    "Token Anda dienkripsi menggunakan Android Keystore pada perangkat ini. Token tidak pernah dicatat dalam log, tidak pernah disertakan dalam cadangan, dan hanya dikirim langsung ke wss://gateway.discord.gg.",
-  "settings.presenceTosAccept": "Saya Memahami & Menyetujui",
-  "settings.presenceTokenInputPlaceholder": "Tempel token Discord Anda di sini",
+    "Token kamu dienkripsi menggunakan Android Keystore pada perangkat ini. Token tidak pernah dicatat dalam log, tidak pernah disertakan dalam cadangan, dan hanya dikirim langsung ke wss://gateway.discord.gg.",
+  "settings.presenceTosAccept": "Mengerti dan setuju",
+  "settings.presenceTokenInputPlaceholder": "Tempel token Discord kamu di sini",
   "settings.presenceTokenInputHelp":
     "Token biasanya berbentuk MTAx... atau mfa.W_... dengan panjang 50 hingga 128 karakter.",
   "settings.presenceSaveTokenBtn": "Simpan Token Discord",
@@ -1346,11 +1379,11 @@ export const id: Messages = {
   "guide.stats.title": "Statistik",
   "guide.stats.body":
     "Waktu baca per game, rute, dan bulan, dihitung dari sesi yang tersimpan.",
-  "guide.stats.p1": "Waktu aktif dan waktu pergi dipisah, bukan digabung diam-diam.",
+  "guide.stats.p1": "Waktu aktif dan waktu pergi dicatat terpisah.",
   "guide.stats.p2": "Sesi di bawah satu menit tetap tampil dalam detik.",
   "guide.stats.p3":
-    "Rentang waktu bisa diganti; angka yang tidak ada datanya ditulis belum tercatat, bukan nol.",
-  "guide.discover.title": "Temukan",
+    "Rentang waktu bisa diganti; angka tanpa data tercatat ditampilkan sebagai belum tercatat.",
+  "guide.discover.title": "Rekomendasi",
   "guide.discover.body":
     "Tanya mau baca apa selanjutnya; saran diambil dari tulisan orang dan selalu menyebut sumbernya.",
   "guide.discover.p1": "VNDB gratis; pencarian web memakai kunci Tavily milikmu.",
@@ -1368,7 +1401,7 @@ export const id: Messages = {
     "Lebih dari satu penyedia bisa disimpan dan dipilih dari Pengaturan; tiap kuncinya tinggal di credential store perangkat.",
   "guide.companion.title": "Pendamping baca",
   "guide.companion.body":
-    "Pendamping baca yang mengikuti satu gim dan playthrough: mengobrol dengan teks langsung atau hasil impor, menyimpan memori lokal yang bisa kamu tinjau, dan di Windows bisa melihat satu jendela pilihanmu.",
+    "Pendamping baca yang mengikuti satu game dan playthrough: mengobrol dengan teks langsung atau hasil impor, menyimpan memori lokal yang bisa kamu tinjau, dan di Windows bisa melihat satu jendela pilihanmu.",
   "guide.companion.p1":
     "Semuanya berada di balik fitur Beta di Pengaturan, mati secara bawaan; mematikannya menjeda sesi dan menyimpan riwayatmu.",
   "guide.companion.p2":
@@ -1429,10 +1462,18 @@ export const id: Messages = {
   "devices.kept.remote": "pakai perangkat lain",
   "taste.title": "Selera kamu",
   "taste.intro":
-    "Tag VNDB yang paling sering muncul di koleksimu, dihitung dari game-gamemu. Arahkan kursor ke tag untuk melihat game di baliknya.",
+    "Tema, studio, penulis, dan pengisi suara yang paling sering muncul di game-game-mu. Inilah benih yang dipakai rekomendasi Untukmu, game yang kamu beri rating paling berpengaruh. Arahkan kursor ke chip untuk melihat game di baliknya.",
+  "taste.basedOn": "Berdasarkan {{count}} game",
+  "taste.anchors": "Paling didorong oleh",
+  "taste.themes": "Tema",
+  "taste.studios": "Studio",
+  "taste.staff": "Penulis & ilustrator",
+  "taste.voices": "Pengisi suara",
+  "taste.hintRefresh":
+    "Segarkan detail VNDB game dari halamannya untuk mengisinya.",
   "taste.noThemes": "Belum cukup kesamaan",
   "taste.noThemesBody":
-    "Belum ada tag yang dimiliki setidaknya dua game. Tambah beberapa game lagi, atau hubungkan ke VNDB, nanti akan terisi.",
+    "Belum ada tema atau kreator yang dimiliki setidaknya dua game-mu. Tambah beberapa game lagi, atau hubungkan ke VNDB, nanti akan terisi.",
   "taste.undetermined":
     "{count} game tidak punya tag, jadi tidak ikut dihitung: {titles}.",
   "chat.title": "Penyedia AI: chat & rekomendasi",
@@ -1682,17 +1723,18 @@ export const id: Messages = {
   "walkthrough.empty":
     "Belum ada panduan yang dimuat. Cari otomatis dari direktori Seiya-Saiga atau masukkan URL panduan secara langsung.",
   "walkthrough.routes": "Rute",
-  "walkthrough.allRoutes": "Semua Rute",
+  "walkthrough.allRoutes": "Semua rute",
   "walkthrough.progress": "{{checked}} dari {{total}} pilihan selesai",
   "walkthrough.resetProgress": "Atur ulang pilihan",
   "walkthrough.resetConfirm": "Hapus semua tanda centang pilihan pada panduan ini?",
   "walkthrough.source": "Sumber: {{title}}",
+  "walkthrough.matchSource": "Kecocokan Seiya-Saiga",
   "walkthrough.openSource": "Buka panduan di peramban",
-  "walkthrough.translateAi": "Terjemahan AI (Kamus VNDB)",
+  "walkthrough.translateAi": "Terjemahan model (Kamus VNDB)",
   "walkthrough.translateGoogle": "Google Translate",
   "walkthrough.translating": "Menerjemahkan...",
-  "walkthrough.langOriginal": "Bahasa Jepang (Asli)",
-  "walkthrough.langAi": "Terjemahan AI",
+  "walkthrough.langOriginal": "Bahasa Jepang (asli)",
+  "walkthrough.langAi": "Terjemahan model",
   "walkthrough.langGoogle": "Google Translate",
   "walkthrough.glossaryActive": "{{count}} karakter dari kamus VNDB",
   "walkthrough.kind.choice": "Pilihan",
@@ -1701,16 +1743,18 @@ export const id: Messages = {
   "walkthrough.kind.action": "Aksi",
   "walkthrough.kind.ending": "Ending",
   "walkthrough.kind.note": "Catatan",
-  "walkthrough.reload": "Ambil Ulang",
+  "walkthrough.reload": "Muat ulang",
+  "walkthrough.searchLabel": "Cari panduan Seiya-Saiga",
+  "walkthrough.customUrlLabel": "URL panduan Seiya-Saiga",
   "walkthrough.searchPlaceholder": "Ketik judul game (Jepang / Romaji) untuk mencari...",
   "walkthrough.searchBtn": "Cari",
-  "walkthrough.searchOtherGuide": "Cari Panduan Lain di Seiya-Saiga",
-  "walkthrough.switchGuide": "Cari / Ganti panduan Seiya-Saiga",
+  "walkthrough.searchOtherGuide": "Cari panduan lain di Seiya-Saiga",
+  "walkthrough.switchGuide": "Cari / ganti panduan Seiya-Saiga",
   "walkthrough.searchingDirectory": "Mencari kecocokan di direktori Seiya-Saiga...",
   "walkthrough.urlRequired": "Silakan masukkan URL panduan Seiya-Saiga terlebih dahulu",
   "walkthrough.searching": "Mencari...",
-  "walkthrough.searchResults": "Hasil Pencarian ({{count}})",
-  "walkthrough.candidatesFound": "Kandidat Cocok ({{count}})",
+  "walkthrough.searchResults": "Hasil pencarian ({{count}})",
+  "walkthrough.candidatesFound": "Kandidat yang cocok ({{count}})",
   "walkthrough.noResults":
     "Tidak ada judul yang cocok di Seiya-Saiga. Coba kata kunci lain atau gunakan URL manual.",
   "walkthrough.select": "Ambil",
@@ -1740,7 +1784,7 @@ export const id: Messages = {
   "screenshot.libraryTitle": "Screenshot",
   "screenshot.libraryCount_one": "1 tangkapan di seluruh pustaka",
   "screenshot.libraryCount_other": "{{count}} tangkapan di seluruh pustaka",
-  "screenshot.title": "Screenshot Anda",
+  "screenshot.title": "Screenshot kamu",
   "screenshot.empty":
     "Belum ada screenshot. Jalankan game ini dari aplikasi, lalu tekan tombol kamera saat game berjalan.",
   "screenshot.count_one": "1 screenshot",
@@ -1793,14 +1837,14 @@ export const id: Messages = {
   "appearance.glassHint":
     "Makin rendah makin ringan digambar dan makin mudah dibaca di ponsel. Transparansi dikurangi tetap menimpanya.",
   "appearance.themeShare": "Bagikan tema ini",
-  "appearance.themeShareHint": "File tema hanya berisi warna dan bentuk, bukan pustaka Anda.",
+  "appearance.themeShareHint": "File tema hanya berisi warna dan bentuk, bukan pustakamu.",
   "appearance.themeExport": "Ekspor tema",
   "appearance.themeImport": "Impor tema",
   "appearance.themeExported": "File tema tersimpan",
   "appearance.themeImported": "Tema diimpor",
   "appearance.gameTint": "Biarkan tiap game mewarnai antarmuka",
   "appearance.gameTintHint":
-    "Memakai warna sampul game yang sedang dibuka. Aksen pilihan Anda sendiri selalu menang.",
+    "Memakai warna sampul game yang sedang dibuka. Aksen pilihanmu sendiri selalu menang.",
   "appearance.accent": "Warna aksen",
   "appearance.accentHint": "Dipakai untuk tombol, pilihan, dan grafik.",
   "appearance.accentTeal": "Teal",
@@ -1969,9 +2013,9 @@ export const id: Messages = {
   "memory.autoHint":
     "Saat percakapan lama keluar dari batas 200 pesan, buat saran rangkuman dengan model terpilih. Tinjau sebelum menyimpan.",
   "memory.autoConfirm":
-    "Aktifkan panggilan model otomatis untuk rangkuman saat riwayat bergulir? Biaya penyedia mungkin berlaku. Panggilan terhenti menunggu Anda mencoba lagi.",
+    "Aktifkan panggilan model otomatis untuk rangkuman saat riwayat bergulir? Biaya penyedia mungkin berlaku. Panggilan terhenti menunggumu mencoba lagi.",
   "memory.suggestConfirm":
-    "Kirim percakapan terbaru yang sesuai ke model terpilih untuk saran rangkuman? Biaya penyedia mungkin berlaku. Hasil baru menjadi ingatan setelah Anda menyetujuinya.",
+    "Kirim percakapan terbaru yang sesuai ke model terpilih untuk saran rangkuman? Biaya penyedia mungkin berlaku. Hasil baru menjadi ingatan setelah kamu menyetujuinya.",
   "memory.replayExcluded":
     "Pesan pendamping sebelumnya tetap dapat dibaca, tetapi tidak masuk konteks model selanjutnya setelah ingatan diperbaiki atau dilupakan.",
   "memory.capacity": "{{items}} / 1.000 tersimpan · {{pins}} / 100 disematkan",
@@ -1992,7 +2036,7 @@ export const id: Messages = {
   "memory.scope.companion": "Pendamping ini",
   "memory.scope.reading": "Pembacaan ini",
   "memory.scopeHint.shared":
-    "Hanya preferensi yang Anda pilih untuk dibagikan ke semua pendamping. Simpan detail cerita di Pembacaan ini.",
+    "Hanya preferensi yang kamu pilih untuk dibagikan ke semua pendamping. Simpan detail cerita di Pembacaan ini.",
   "memory.scopeHint.companion":
     "Preferensi atau kesinambungan hubungan untuk identitas ini, termasuk setelah profil diedit. Simpan detail cerita di Pembacaan ini.",
   "memory.scopeHint.reading":
@@ -2009,7 +2053,7 @@ export const id: Messages = {
   "memory.filter": "Tampilkan cakupan",
   "memory.allScopes": "Semua cakupan tersimpan",
   "memory.empty":
-    "Tidak ada ingatan yang cocok. Simpan preferensi atau pengamatan untuk memulai.",
+    "Tidak ada ingatan yang cocok. Simpan preferensi atau pengamatan di atas.",
   "memory.evidence.reader": "Ditulis pembaca",
   "memory.evidence.passage": "Kutipan pembaca",
   "memory.evidence.inference": "Turunan / mungkin dugaan",
@@ -2180,12 +2224,12 @@ export const id: Messages = {
     "Aku kurang sepakat kalau langsung disimpulkan “dia sudah merelakan”. “Mungkin besok” terdengar seperti dia masih menyisakan tiket pulang.",
   "vision.title": "Penglihatan",
   "vision.intro":
-    "Pilih satu jendela gim dan periksa pratinjau lokal sebelum membagikannya.",
+    "Pilih satu jendela game dan periksa pratinjau lokal sebelum membagikannya.",
   "vision.unsupported": "Tangkapan jendela hanya tersedia di Windows.",
   "vision.metadata": "Mulai sesi Teramati atau Semua untuk berbagi adegan.",
   "vision.resumeSession": "Lanjutkan sesi membaca terlebih dahulu.",
-  "vision.listWindows": "Cari jendela gim",
-  "vision.window": "Jendela gim",
+  "vision.listWindows": "Cari jendela game",
+  "vision.window": "Jendela game",
   "vision.chooseWindow": "Pilih jendela...",
   "vision.crop": "Potongan opsional",
   "vision.crop.x": "Kiri (%)",
@@ -2201,13 +2245,13 @@ export const id: Messages = {
   "vision.unknown":
     "Dukungan gambar belum dikonfirmasi untuk konfigurasi ini. Obrolan teks tetap tersedia.",
   "vision.look": "Lihat adegan ini",
-  "vision.previewAlt": "Pratinjau adegan gim terpilih",
-  "vision.previewSize": "{{width}} x {{height}} piksel - gambar ini akan dibagikan",
+  "vision.previewAlt": "Pratinjau adegan game terpilih",
+  "vision.previewSize": "{{width}} x {{height}} piksel. Gambar ini akan dibagikan.",
   "vision.question": "Pertanyaan tentang adegan ini",
   "vision.defaultQuestion": "Apa yang kamu perhatikan dalam adegan ini?",
   "vision.send": "Kirim gambar ini",
   "vision.consent":
-    "Untuk sesi ini, bagikan jendela dan potongan ini secara otomatis dengan penyedia di atas. Panggilan gambar dan teks dapat dikenai biaya. Amati hanya saat gim di depan.",
+    "Untuk sesi ini, bagikan jendela dan potongan ini secara otomatis dengan penyedia di atas. Panggilan gambar dan teks dapat dikenai biaya. Amati hanya saat game di depan.",
   "vision.watch": "Amati dan tanggapi",
   "vision.quiet": "Diam",
   "vision.stop": "Berhenti mengamati",
@@ -2216,16 +2260,16 @@ export const id: Messages = {
   "vision.retention":
     "Tangkapan layar hanya ada di memori. Riwayat menyimpan teks dan rincian sumber, tanpa gambar. Berhenti, Jeda, Akhiri, atau Lupakan menghapus tangkapan. Pengamatan tidak otomatis dimulai saat aplikasi dibuka.",
   "vision.reaction": "Tanggapan teman baca",
-  "vision.inference": "Penafsiran visual - gambar tidak disimpan",
+  "vision.inference": "Penafsiran visual (gambar tidak disimpan)",
   "vision.state.off": "Penglihatan mati",
   "vision.state.preview": "Pratinjau lokal",
-  "vision.state.watching": "Mengamati - menunggu adegan stabil",
-  "vision.state.quiet": "Diam - tanggapan otomatis dihentikan",
-  "vision.state.focus_paused": "Menunggu gim berada di depan",
+  "vision.state.watching": "Mengamati: menunggu adegan stabil",
+  "vision.state.quiet": "Diam: tanggapan otomatis dihentikan",
+  "vision.state.focus_paused": "Menunggu game berada di depan",
   "vision.state.limit": "Batas panggilan tercapai",
   "vision.state.replying": "Menanggapi",
-  "vision.state.cooldown": "Mengamati - jeda tanggapan",
-  "vision.state.unavailable": "Tangkapan tidak tersedia - pratinjau ulang",
+  "vision.state.cooldown": "Mengamati: jeda tanggapan",
+  "vision.state.unavailable": "Tangkapan tidak tersedia. Pratinjau ulang.",
   "companion.error.vision_unsupported": "Tangkapan jendela hanya didukung di Windows.",
   "companion.error.vision_unavailable":
     "Tangkapan Windows tidak tersedia. Periksa jendela terpilih dan gunakan layar SDR yang didukung.",
@@ -2247,7 +2291,7 @@ export const id: Messages = {
   "companion.error.vision_provider_changed":
     "Konfigurasi penyedia berubah. Pratinjau dan uji ulang.",
   "companion.error.vision_test_required":
-    "Uji dukungan gambar sebelum membagikan adegan gim.",
+    "Uji dukungan gambar sebelum membagikan adegan game.",
   "companion.error.vision_metadata":
     "Sesi metadata saja tidak dapat membagikan gambar adegan.",
   "companion.error.vision_invalid_reaction":

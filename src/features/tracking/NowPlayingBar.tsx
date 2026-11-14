@@ -59,7 +59,7 @@ export function NowPlayingBar() {
           }
         }
       } catch {
-        // Ignore
+        // Best-effort foreground reconcile; next focus or poll will retry.
       }
     };
 
@@ -246,8 +246,8 @@ export function NowPlayingBar() {
           color: "var(--text-muted)",
           display: "grid",
           placeItems: "center",
-          minWidth: 32,
-          minHeight: 32,
+          minWidth: "var(--touch-target)",
+          minHeight: "var(--touch-target)",
         }}
       >
         <Icon name="close" size={14} />

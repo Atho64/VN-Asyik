@@ -70,7 +70,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         setData(res);
         setLoading(false);
 
-        // Auto-select language mode if a translation exists
         if (res) {
           const aiKey = `ai_${targetLang}`;
           const gKey = `google_${targetLang}`;
@@ -80,7 +79,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
             setLangMode("google");
           }
         } else {
-          // If no walkthrough loaded yet, look for candidate matches from Seiya-Saiga index
           setSearchingCandidate(true);
           void api
             .walkthroughSearchCandidate(gameId, vnId)
@@ -166,7 +164,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
   const handleToggle = async (itemId: string) => {
     if (!data) return;
 
-    // Optimistic UI update
     const prevChecked = data.checkedItems;
     const isChecked = prevChecked.includes(itemId);
     const nextChecked = isChecked
@@ -179,7 +176,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
       const synced = await api.walkthroughToggleItem(gameId, itemId);
       setData((curr) => (curr ? { ...curr, checkedItems: synced } : null));
     } catch (err: unknown) {
-      // Revert if error
       setData((curr) => (curr ? { ...curr, checkedItems: prevChecked } : null));
       pushToast("error", String(err));
     }
@@ -195,7 +191,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
     }
   };
 
-  // Resolve current active routes based on language selection
   const currentRoutes: WalkthroughRoute[] = (() => {
     if (!data) return [];
     if (langMode === "ai") {
@@ -210,13 +205,11 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
 
   const glossaryCount = data ? Object.keys(data.characterGlossary).length : 0;
 
-  // Filter routes to display
   const displayedRoutes =
     selectedRouteId === "all"
       ? currentRoutes
       : currentRoutes.filter((r) => r.id === selectedRouteId);
 
-  // Calculate choices progress
   const allChoiceIds: string[] = [];
   for (const r of currentRoutes) {
     for (const item of r.items) {
@@ -248,17 +241,29 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
       }}
     >
       {inSwitchMode && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "var(--space-2)",
+          }}
+        >
           <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600 }}>
             {t("walkthrough.searchOtherGuide")}
           </span>
-          <Button size="icon" variant="ghost" onClick={() => setShowSwitchSearch(false)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setShowSwitchSearch(false)}
+            aria-label={t("common.close")}
+          >
             <Icon name="close" size={12} />
           </Button>
         </div>
       )}
 
-      {/* Search Input Bar */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -272,6 +277,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t("walkthrough.searchPlaceholder")}
+            aria-label={t("walkthrough.searchLabel")}
             style={{
               width: "100%",
               padding: "var(--space-2) var(--space-3) var(--space-2) 32px",
@@ -306,7 +312,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         </Button>
       </form>
 
-      {/* Manual Search Results */}
       {searchResults !== null ? (
         searchResults.length === 0 ? (
           <div
@@ -391,7 +396,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         )
       ) : null}
 
-      {/* Auto-detected Candidates (when not searching manually) */}
       {!searchResults && candidates.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -403,11 +407,10 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                 fontSize: "10px",
                 color: "var(--color-accent)",
                 fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
+                letterSpacing: "0.02em",
               }}
             >
-              Seiya-Saiga Match
+              {t("walkthrough.matchSource")}
             </span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", maxHeight: "240px", overflowY: "auto" }}>
@@ -473,7 +476,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         </div>
       )}
 
-      {/* Manual URL toggle / direct fetch */}
       <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--space-2)" }}>
         {!showInput ? (
           <div
@@ -508,15 +510,17 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               }
               void handleFetch(trimmed);
             }}
-            style={{ display: "flex", gap: "var(--space-2)" }}
+            style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}
           >
             <input
               type="url"
               value={customUrl}
               onChange={(e) => setCustomUrl(e.target.value)}
               placeholder={t("walkthrough.customUrlPlaceholder")}
+              aria-label={t("walkthrough.customUrlLabel")}
               style={{
                 flex: 1,
+                minWidth: "10rem",
                 padding: "var(--space-2) var(--space-3)",
                 background: inSwitchMode ? "var(--color-surface)" : "var(--color-surface-raised)",
                 border: "1px solid var(--color-border)",
@@ -544,7 +548,14 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         title={t("walkthrough.title")}
         aside={
           data ? (
-            <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "var(--space-2)",
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
               <span
                 style={{
                   fontSize: "var(--font-size-xs)",
@@ -572,6 +583,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                 onClick={() => void handleFetch(data.sourceUrl)}
                 disabled={fetching}
                 title={t("walkthrough.reload")}
+                aria-label={t("walkthrough.reload")}
               >
                 <Icon name="spark" size={14} />
               </Button>
@@ -615,7 +627,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
           {showSwitchSearch && renderSearchSection(true)}
 
-          {/* Top Bar: Translation & Glossary Info */}
           <div
             style={{
               display: "flex",
@@ -627,12 +638,21 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               borderBottom: "1px solid var(--color-border)",
             }}
           >
-            {/* Language Switcher */}
-            <div style={{ display: "inline-flex", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", padding: "2px" }}>
+            <div
+              style={{
+                display: "inline-flex",
+                flexWrap: "wrap",
+                gap: "2px",
+                borderRadius: "var(--radius-md)",
+                background: "var(--color-surface-raised)",
+                padding: "2px",
+              }}
+            >
               <button
                 type="button"
                 onClick={() => setLangMode("original")}
                 style={{
+                  minHeight: "var(--touch-target)",
                   padding: "var(--space-1) var(--space-3)",
                   borderRadius: "var(--radius-sm)",
                   border: "none",
@@ -657,11 +677,12 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                 }}
                 disabled={translating}
                 style={{
+                  minHeight: "var(--touch-target)",
                   padding: "var(--space-1) var(--space-3)",
                   borderRadius: "var(--radius-sm)",
                   border: "none",
                   fontSize: "var(--font-size-xs)",
-                  cursor: "pointer",
+                  cursor: translating ? "not-allowed" : "pointer",
                   fontWeight: langMode === "ai" ? 600 : 400,
                   background: langMode === "ai" ? "var(--color-surface)" : "transparent",
                   color: langMode === "ai" ? "var(--color-accent)" : "var(--color-text-dim)",
@@ -681,11 +702,12 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                 }}
                 disabled={translating}
                 style={{
+                  minHeight: "var(--touch-target)",
                   padding: "var(--space-1) var(--space-3)",
                   borderRadius: "var(--radius-sm)",
                   border: "none",
                   fontSize: "var(--font-size-xs)",
-                  cursor: "pointer",
+                  cursor: translating ? "not-allowed" : "pointer",
                   fontWeight: langMode === "google" ? 600 : 400,
                   background: langMode === "google" ? "var(--color-surface)" : "transparent",
                   color: langMode === "google" ? "var(--color-text)" : "var(--color-text-dim)",
@@ -695,7 +717,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               </button>
             </div>
 
-            {/* Glossary badge / Translation action */}
             <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
               {glossaryCount > 0 ? (
                 <span
@@ -722,7 +743,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
             </div>
           </div>
 
-          {/* Route Tabs */}
           {currentRoutes.length > 1 ? (
             <div
               style={{
@@ -750,7 +770,6 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
             </div>
           ) : null}
 
-          {/* Steps / Walkthrough Content */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
             {displayedRoutes.map((route) => (
               <div
@@ -770,6 +789,8 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "var(--space-2)",
                     borderBottom: "1px solid var(--color-border)",
                     paddingBottom: "var(--space-2)",
                   }}
@@ -797,12 +818,13 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
             ))}
           </div>
 
-          {/* Bottom Bar: Source URL and Reset Choices */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              flexWrap: "wrap",
+              gap: "var(--space-2)",
               paddingTop: "var(--space-2)",
               borderTop: "1px solid var(--color-border)",
               fontSize: "var(--font-size-xs)",
@@ -849,9 +871,10 @@ function WalkthroughItemRow({
       <label
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
+          minHeight: "var(--touch-target)",
           gap: "var(--space-2)",
-          padding: "var(--space-1) var(--space-2)",
+          padding: "var(--space-2)",
           borderRadius: "var(--radius-sm)",
           cursor: "pointer",
           background: isChecked ? "var(--color-surface)" : "transparent",

@@ -39,14 +39,7 @@ interface DayCell {
   ms: number;
 }
 
-/**
- * Stats.
- *
- * Composition is editorial, not a stat-card row: one number large enough to read
- * across a room, then supporting detail. Every figure is aggregated from recorded
- * sessions by the backend, so an empty library shows an empty state instead of
- * zeros dressed up as insight (antislop R-17, R-38).
- */
+/** Editorial stats view built from backend session aggregates (empty library shows an empty state). */
 export function StatsScreen() {
   const { t, locale } = useI18n();
   const cards = useAppStore((state) => state.cards);
@@ -56,22 +49,21 @@ export function StatsScreen() {
   const [recapMode, setRecapMode] = useState<RecapMode>("yearly");
   const [breakdown, setBreakdown] = useState<StatusBreakdown | null>(null);
   const [byDay, setByDay] = useState<DayCell[]>([]);
+  const [finishedDays, setFinishedDays] = useState<Set<number>>(new Set());
   const [failed, setFailed] = useState(false);
-  // Captured once: the heatmap window must not shift between renders. Day
-  // indexes are of the *local* date — the backend buckets by the user's own
-  // calendar day (`playtime_by_day`), so a late-night session lands on the
-  // cell the reader experienced, not on the UTC date the timestamp carries.
+  // Capture once using local calendar day indexes to match backend `playtime_by_day` buckets.
   const [todayIndex] = useState(() =>
     dayIndex(Date.now() - new Date().getTimezoneOffset() * 60_000),
   );
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([api.statusBreakdown(), api.playtimeByDay()])
-      .then(([statusRows, days]) => {
+    void Promise.all([api.statusBreakdown(), api.playtimeByDay(), api.finishedByDay()])
+      .then(([statusRows, days, finished]) => {
         if (cancelled) return;
         setBreakdown(statusRows);
         setByDay(days.map(([day, ms]) => ({ day, ms })));
+        setFinishedDays(new Set(finished.map(([day]) => day)));
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -303,7 +295,8 @@ export function StatsScreen() {
                   {/* The legend names the color scale, which the cells already show;
                       the streaks are figures, so they stay readable by AT. */}
                   <span className="caption" aria-hidden="true">
-                    {t("stats.heatmapLegend")} · {t("stats.heatmapLegendMore")}
+                    {t("stats.heatmapLegend")} · {t("stats.heatmapLegendMore")} ·{" "}
+                    {t("stats.heatmapLegendDot")}
                   </span>
                   <span className="heatmap__streaks caption tnum">
                     <span>{t("stats.streakCurrent", { days: streak.current })}</span>
@@ -314,19 +307,26 @@ export function StatsScreen() {
             />
             {heatmap ? (
               <div className="heatmap" role="img" aria-label={t("stats.heatmap")}>
-                {heatmap.cells.map((cell) => (
-                  <span
-                    key={cell.day}
-                    className="heatmap__cell"
-                    data-level={level(cell.ms, heatmap.max)}
-                    title={`${new Date(cell.day * MS_PER_DAY).toLocaleDateString(
-                      locale === "id" ? "id-ID" : "en-GB",
-                      // A day index encodes a calendar date as-if-UTC; rendering
-                      // it in UTC shows that exact date in every timezone.
-                      { timeZone: "UTC" },
-                    )}: ${formatDurationLong(cell.ms, locale)}`}
-                  />
-                ))}
+                {heatmap.cells.map((cell) => {
+                  const finished = finishedDays.has(cell.day);
+                  const day = new Date(cell.day * MS_PER_DAY).toLocaleDateString(
+                    locale === "id" ? "id-ID" : "en-GB",
+                    // A day index encodes a calendar date as-if-UTC; rendering
+                    // it in UTC shows that exact date in every timezone.
+                    { timeZone: "UTC" },
+                  );
+                  return (
+                    <span
+                      key={cell.day}
+                      className="heatmap__cell"
+                      data-level={level(cell.ms, heatmap.max)}
+                      data-finished={finished ? "true" : "false"}
+                      title={`${day}: ${formatDurationLong(cell.ms, locale)}${
+                        finished ? ` · ${t("stats.heatmapFinished")}` : ""
+                      }`}
+                    />
+                  );
+                })}
               </div>
             ) : (
               <p className="body">{t("stats.emptyBody")}</p>

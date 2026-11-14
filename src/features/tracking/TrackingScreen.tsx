@@ -16,13 +16,7 @@ import type {
 } from "@/lib/ipc/types";
 import { MapExecutable } from "@/features/tracking/MapExecutable";
 
-/**
- * Tracking settings.
- *
- * The mapping is explicit by design: the user says which executable is which
- * game. The folder scan only lists candidates, largest first, and never maps
- * anything on its own, because guessing wrong silently corrupts playtime.
- */
+/** Explicit executable mapping settings (folder scans rank candidates without auto-mapping). */
 export function TrackingScreen() {
   const { t } = useI18n();
   const cards = useAppStore((state) => state.cards);
@@ -377,7 +371,7 @@ export function TrackingScreen() {
               className="input"
               value={folderInput}
               onChange={(event) => setFolderInput(event.target.value)}
-              placeholder="F:/Visual Novels"
+              placeholder={t("tracking.folderPlaceholder")}
               aria-label={t("tracking.addFolder")}
             />
             <Button variant="secondary" onClick={() => void addFolder()}>

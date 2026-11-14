@@ -72,40 +72,13 @@ const placeholderGame: Game = {
   finished_at: null,
 };
 
-/**
- * Game detail.
- *
- * Composition differs from the library on purpose (RHYTHM 3): an asymmetric hero
- * with the cover as a single sharp object, then a two-column reading layout. The
- * cover is the only image at full sharpness in the app, because this is the one
- * screen where the artwork is the subject rather than the backdrop.
- *
- * "Full sharpness" is still subject to the content setting: an explicit cover is
- * blurred or replaced until the user asks to see it.
- */
-/**
- * The other names this VN goes by, in the order they are worth reading.
- *
- * Every entry is filtered against the main title and against the names already
- * kept, because VNDB repeats itself freely: an English release often has
- * `title === latin === alttitle`, and printing those three identical strings
- * under the heading is what made the old header look broken.
- *
- * Only Japanese and English are kept. VNDB also publishes Russian, Chinese,
- * Korean, German and more, and a row of five scripts under the title is noise for
- * a reader who wants to match a name rather than survey localisations. `ja` is
- * kept because it is what the cover and the save files say; `en` because it is
- * what most people search for.
- *
- * Aliases come last and are not titles: they are the short names people use
- * ("When They Cry 3" for Umineko), carry no language, and are shown as-is.
- *
- * The primary title is whatever the library row stores, so the caller passes it
- * in rather than this guessing.
- */
 // Mirrors `vn_core::model::MAX_NOTES_CHARS`: the backend rejects a longer note.
 const MAX_NOTES_CHARS = 20_000;
 
+/**
+ * Asymmetric game detail view featuring full-sharpness cover art (subject to
+ * the explicit-content policy) above a two-column reading layout.
+ */
 export function GameDetailScreen() {
   const walkthroughRef = useRef<HTMLDivElement>(null);
   const { id } = useParams<{ id: string }>();
@@ -115,14 +88,11 @@ export function GameDetailScreen() {
   const upsertCard = useAppStore((state) => state.upsertCard);
   const removeCard = useAppStore((state) => state.removeCard);
   const isAndroid = useAppStore((state) => state.platform?.os === "android");
-  // The library already holds every card, so returning to a game can paint
-  // immediately instead of blanking to a skeleton and re-fetching.
+  // Library cards stay preloaded in store so returning here skips a loading skeleton.
   const cachedCard = useAppStore((state) =>
     state.cards.find((entry) => entry.game.meta.id === id),
   );
-  // Read from the store, not local state: the page unmounts on navigation, so a
-  // refresh started before leaving kept running while its "in progress" flag died
-  // with the component — coming back showed "Refresh" over a live request.
+  // Read from store rather than component state because navigation unmounts this page while refreshes run.
   const refreshingVndb = useAppStore((state) =>
     id === undefined ? false : state.refreshingVndb.includes(id),
   );
@@ -132,10 +102,7 @@ export function GameDetailScreen() {
       ? (state.vndbDetails[cachedCard.game.vndb_id] ?? undefined)
       : undefined,
   );
-  // A cached `null` means "asked, and there are no VNDB details". Reading it
-  // inside the loader (not from this render's snapshot) keeps the answer valid
-  // for the whole page, so a detail row that does not exist is not requested
-  // again on every visit.
+  // Read the latest null sentinel inside the loader so missing VNDB details are not re-requested.
   const vndbDetailKnown = useCallback(
     (vnId: string) => useAppStore.getState().vndbDetails[vnId] !== undefined,
     [],
@@ -170,6 +137,7 @@ export function GameDetailScreen() {
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<{
     gameId: string;
     id: string;
@@ -209,10 +177,7 @@ export function GameDetailScreen() {
         });
         setExecutables(loadedExes.filter((entry) => entry.game_id === id));
 
-        // VNDB extras are strictly optional: a missing detail row just hides the
-        // section rather than blocking the page. A cached answer (including a
-        // cached "nothing here") is reused, so revisiting a page never repeats
-        // the request unless a metadata refresh replaced the payload.
+        // VNDB extras are optional; reuse cached answers (including null sentinels) unless refreshed.
         const vnId = loaded?.game.vndb_id;
         if (vnId && !vndbDetailKnown(vnId)) {
           void api
@@ -406,10 +371,7 @@ export function GameDetailScreen() {
     }
   };
 
-  // The picker returns a path string (a content:// URI on Android, which the
-  // Rust side resolves through the content resolver), and the bytes are
-  // re-decoded before acceptance: a renamed non-image must fail here with a
-  // message rather than become a silently broken cover.
+  // Re-encode the chosen path or Android content:// URI in Rust so invalid files fail safely.
   const pickCustomCover = async (): Promise<void> => {
     try {
       const chosen = await open({
@@ -483,9 +445,7 @@ export function GameDetailScreen() {
             </div>
           )}
 
-          {/* The hero is the app's one sharp artwork. It obeys the same content
-              setting as the library instead of being the single screen that
-              leaks the cover. */}
+          {/* Full-sharpness hero art still obeys the user's explicit-content concealment setting. */}
           {concealed ? (
             <div className="detail__art-cover">
               <Icon name="eyeOff" size={20} />
@@ -496,9 +456,7 @@ export function GameDetailScreen() {
             </div>
           ) : null}
 
-          {/* The cover control belongs on the artwork itself rather than in a
-              settings panel: a game with no VNDB entry shows a blank placeholder,
-              and the place a user looks to fix a missing picture is the picture. */}
+          {/* Place custom cover actions directly over the cover art instead of in settings. */}
           {!concealed ? (
             <div className="detail__art-edit">
               <button
@@ -530,10 +488,6 @@ export function GameDetailScreen() {
         <div className="detail__head">
           <div className="detail__intro">
             <h2 className="detail__title over-art">{game.title}</h2>
-            {/* Every other name the VN has, minus the one above. Previously this
-              showed `title_original` alone, which for KANADE is the same string as
-              the title, so the header printed the name twice and said nothing
-              about the Latin or English release names. */}
             {otherTitles.length > 0 ? (
               <ul className="detail__alts" aria-label={t("detail.alsoKnownAs")}>
                 {otherTitles.map((title) => (
@@ -553,9 +507,6 @@ export function GameDetailScreen() {
                 value={game.rating}
                 onChange={(rating) => void updateGame({ id: game.meta.id, rating })}
               />
-              {/* The community score, next to the user's own: the pair is the
-                interesting thing, and it was only visible at the bottom of the
-                VNDB card. */}
               {vndb?.rating ? (
                 <span
                   className="chip tnum"
@@ -604,10 +555,6 @@ export function GameDetailScreen() {
             </div>
           </div>
 
-          {/* One right-aligned column: secondary action, progress, primary action.
-              Inline styles put the ring on its own line with an ad-hoc flex, which
-              left "Discuss this VN" and the percentage floating at different
-              widths and made the group read as scattered rather than stacked. */}
           <div className="detail__actions">
             <div className="detail__actions-row">
               {beta ? (
@@ -643,10 +590,7 @@ export function GameDetailScreen() {
             <PlayButton gameId={game.meta.id} mappedExecutable={executables[0] ?? null} />
           </div>
 
-          {/* The five status chips are setters, not facts. Unlabelled and 8 px
-              under the Play button they read as a second row of fact chips, and
-              on a phone the whole head felt packed. The label says what they do
-              and the rule separates them from the primary action. */}
+          {/* Label status chips explicitly so they read as state setters rather than header facts. */}
           <div className="detail__status">
             <span className="detail__status-label caption">
               {t("detail.changeStatus")}
@@ -685,11 +629,7 @@ export function GameDetailScreen() {
 
       <div className="detail__columns">
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-          {/* The executable mapping is the first card: it feeds the Play button in
-              the hero above, so the one setup step a game needs sits at the top
-              rather than below the gallery. The mapped list stays visible; the
-              add form is a collapsed disclosure, because once a game is mapped
-              this card only ever needs to list and remove. */}
+          {/* Place executable mapping first since it powers the Play action; keep the add form collapsed. */}
           {id ? (
             <Card className="detail__executable">
               <CardHeader title={t("detail.executable")} />
@@ -766,9 +706,6 @@ export function GameDetailScreen() {
             </Card>
           ) : null}
 
-          {/* The facts come before the description: a reader deciding whether this
-              is the VN they are thinking of needs the date, the developer and the
-              platforms, not 2,000 words of synopsis. */}
           {vndb && game.vndb_id ? (
             <>
               <VndbFacts payload={vndb} vnId={game.vndb_id} playtimeMs={totalMs} />
@@ -776,8 +713,6 @@ export function GameDetailScreen() {
             </>
           ) : null}
 
-          {/* The description is prose and belongs at a reading width, not in a
-              narrow side rail where it ran taller than the whole page. */}
           {vndb ? (
             <Card>
               <CardHeader
@@ -819,28 +754,27 @@ export function GameDetailScreen() {
             </Card>
           ) : null}
 
-          {/* The reader's own captures come first: they are the only copy, while
-              the VNDB gallery below is a cache that can be rebuilt any time. */}
+          {/* Show user's local captures before the rebuildable VNDB gallery cache. */}
           {id ? <ScreenshotLibrary gameId={id} /> : null}
 
-          {/* Screenshots sit after the prose. They are the reason someone scrolls
-              this far, and putting them above the description would push the text
-              off the first screen for a VN with thirty of them. The gallery caches
-              on mount, so nothing downloads until this point is reached. */}
+          {/* Mount gallery below description so heavy downloads defer until this section is reached. */}
           {game.vndb_id ? (
             <ScreenshotGallery
               vnId={game.vndb_id}
               title={game.title}
-              // A refresh changes the payload, not the VN id, so the gallery needs
-              // its own signal to re-read the list it was built from.
+              // Bump version prop on refresh so gallery reloads even when `vnId` is unchanged.
               version={vndbVersion}
             />
           ) : null}
 
-          {id ? <RoutesCard gameId={id} onAddTime={() => setSessionOpen(true)} /> : null}
+          {id ? (
+            <RoutesCard
+              gameId={id}
+              onAddTime={() => setSessionOpen(true)}
+              onAdjustPlaytime={() => setAdjustOpen(true)}
+            />
+          ) : null}
 
-          {/* The script card sits with the routes: both are per-game material
-              for the companion chat, and neither is required to play. */}
           {id && beta ? <ScriptCard gameId={id} /> : null}
 
           {id ? (
@@ -873,9 +807,6 @@ export function GameDetailScreen() {
         </div>
 
         <div className="detail__aside">
-          {/* Notes shares the side rail with the destructive action: the writing
-              surface leaves the reading column and the rail stops being a
-              400 px strip that holds one button. */}
           <Card>
             <CardHeader title={t("detail.notes")} />
             <label className="visually-hidden" htmlFor="notes">
@@ -915,6 +846,19 @@ export function GameDetailScreen() {
           setSessionNotePreviews(page.notePreviews);
           setSessionTotals({ total: page.totalSessions, countedMs: page.countedMs });
         }}
+      />
+
+      <AdjustPlaytimeSheet
+        // Keyed by open: each opening remounts the sheet, which re-seeds the
+        // input from the saved value without an effect writing state.
+        key={adjustOpen ? "adjust-open" : "adjust-closed"}
+        open={adjustOpen}
+        trackedMs={card.tracked_ms}
+        manualPlaytimeMs={game.manual_playtime_ms}
+        onClose={() => setAdjustOpen(false)}
+        // The shared helper saves, toasts failures and folds the saved row
+        // into the cards optimistically; the sheet only closes on success.
+        onSave={(ms) => updateGame({ id: game.meta.id, manual_playtime_ms: ms })}
       />
 
       <Sheet
@@ -1056,6 +1000,101 @@ function ManualSessionSheet({ open, gameId, onClose, onSaved }: ManualSessionShe
         </div>
       </div>
       {error ? <p style={{ color: "var(--danger)", fontSize: 12 }}>{error}</p> : null}
+    </Sheet>
+  );
+}
+
+interface AdjustPlaytimeSheetProps {
+  open: boolean;
+  /** Time the sessions alone account for, shown so the adjustment reads
+   * against something. */
+  trackedMs: number;
+  /** The adjustment currently saved on the game row. */
+  manualPlaytimeMs: number;
+  onClose: () => void;
+  /** Saves the whole adjustment value; true when the write landed. */
+  onSave: (manualPlaytimeMs: number) => Promise<boolean>;
+}
+
+/**
+ * Signed per-game playtime offset in minutes (keeps `play_sessions` append-only
+ * and floors displayed totals at zero). Exported for tests.
+ */
+export function AdjustPlaytimeSheet({
+  open,
+  trackedMs,
+  manualPlaytimeMs,
+  onClose,
+  onSave,
+}: AdjustPlaytimeSheetProps) {
+  const { t, locale } = useI18n();
+  // Seeded from saved value because the screen keys this sheet by `open`.
+  const [minutes, setMinutes] = useState(() =>
+    String(Math.round(manualPlaytimeMs / 60_000)),
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (): Promise<void> => {
+    const value = Number(minutes);
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+      setError(t("detail.adjustInvalid"));
+      return;
+    }
+    const saved = await onSave(Math.round(value * 60_000));
+    if (saved) {
+      setError(null);
+      onClose();
+    }
+  };
+
+  // Shared duration formatting clamps non-positive values to "0 min", hiding negative offsets.
+  const signed = (ms: number): string => {
+    const rendered = formatDurationLong(Math.abs(ms), locale);
+    return ms < 0 ? `-${rendered}` : rendered;
+  };
+
+  return (
+    <Sheet
+      open={open}
+      title={t("detail.adjustPlaytime")}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {t("detail.cancel")}
+          </Button>
+          <Button variant="primary" onClick={() => void save()}>
+            {t("detail.save")}
+          </Button>
+        </>
+      }
+    >
+      <p className="body">{t("detail.adjustIntro")}</p>
+      <dl className="cast__facts">
+        <div className="cast__fact">
+          <dt>{t("detail.adjustTracked")}</dt>
+          <dd>{formatDurationLong(trackedMs, locale)}</dd>
+        </div>
+        <div className="cast__fact">
+          <dt>{t("detail.adjustCurrent")}</dt>
+          <dd>{signed(manualPlaytimeMs)}</dd>
+        </div>
+      </dl>
+      <div className="field">
+        <label className="field__label" htmlFor="adjust-minutes">
+          {t("detail.adjustMinutes")}
+        </label>
+        <input
+          id="adjust-minutes"
+          className="input"
+          type="number"
+          step="1"
+          value={minutes}
+          onChange={(event) => setMinutes(event.target.value)}
+        />
+        <p className="caption">{t("detail.adjustHint")}</p>
+      </div>
+      {error ? <p className="field__error" role="alert">{error}</p> : null}
     </Sheet>
   );
 }

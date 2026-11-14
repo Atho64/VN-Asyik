@@ -140,6 +140,30 @@ export function AppShell() {
     }
   }, [pathname]);
 
+  // The launch mode chosen in Settings applies on every launch: Big Picture
+  // navigates once after boot, after the prefs have hydrated. Manual and tray
+  // need nothing here (tray stays hidden until called up).
+  const startupMode = useAppStore((state) => state.startupPrefs?.prefs.startup_mode);
+  const navigatedForBoot = useRef(false);
+  useEffect(() => {
+    if (navigatedForBoot.current || startupMode === undefined) return;
+    navigatedForBoot.current = true;
+    if (startupMode === "big_picture") {
+      navigate("/big-picture");
+    }
+  }, [startupMode, navigate]);
+
+  // Leaving Big Picture drops the fullscreen the launch mode set; entering it
+  // by hand never forces fullscreen, matching the old behaviour.
+  const wasBigPicture = useRef(false);
+  useEffect(() => {
+    const bigPicture = pathname === "/big-picture";
+    if (wasBigPicture.current && !bigPicture) {
+      void api.windowSetFullscreen(false).catch(() => {});
+    }
+    wasBigPicture.current = bigPicture;
+  }, [pathname]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "H" || e.key === "h")) {
