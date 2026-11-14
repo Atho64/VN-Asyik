@@ -1,446 +1,136 @@
 # VN Asyik
 
-Pustaka visual novel dan pelacak waktu baca untuk Windows, Android, dan Linux (Beta). Data
-diambil dari VNDB, disimpan lokal di SQLite, dan tetap jalan tanpa jaringan.
-Rust dan Tauri di sisi belakang, React di sisi depan.
+Kumpulkan visual novelmu di satu tempat dan catat waktu bacamu. Tersedia untuk Windows,
+Android, dan Linux (Beta). Koleksi tersimpan di perangkatmu dan tetap bisa dibuka tanpa
+internet.
 
 [English](README.md) · **Bahasa Indonesia**
 
-![Kisi pustaka, menampilkan game yang sudah diimpor beserta kover dan waktu bacanya](src/assets/guide/library.jpg)
+![Koleksi VN Asyik dengan kover game dan waktu baca](src/assets/guide/library.jpg)
 
-## Yang bisa dilakukan
+## Unduh
 
-**Pustaka.** Cari di VNDB lalu impor game lengkap dengan kover, tag, rating, dan
-galeri tangkapan layarnya. Tampilan bisa kisi, daftar, atau rak; ketiganya
-divirtualisasi supaya tetap ringan. Kover eksplisit tetap tertutup di balik
-permukaan netral sampai kamu minta melihatnya, dan mengubah pengaturan itu
-menutupnya kembali.
+Ambil prarilis terbaru di [GitHub Releases](https://github.com/Atho64/VN-Asyik/releases).
 
-**Waktu baca.** Jalankan game dari aplikasi untuk mencatat durasi bacamu. Waktu
-hanya dihitung selama jendela game ada di depan; jeda yang melewati ambang
-tertentu dicatat terpisah sebagai waktu pergi, dan keduanya bisa kamu lihat
-masing-masing. Sesi ditulis tiap 20 detik, sehingga crash atau reboot paksa
-paling banyak kehilangan hitungan 20 detik.
+- Windows: installer `.exe` atau `.msi`. Keduanya belum ditandatangani, jadi SmartScreen
+  mungkin menampilkan peringatan.
+- Android: `app-universal-release.apk` yang sudah ditandatangani.
+- Linux (Beta): `.AppImage`. Beri izin eksekusi, lalu jalankan.
 
-**Jurnal baca.** Kartu **Terakhir sampai mana?** di halaman game menampilkan sesi
-baca terakhir dan posisi bab/rute yang tercatat. Simpan catatan per sesi serta
-penanda save slot manual, edit atau hapus entri, dan buka pintasan ke panduan.
-Buka sesi mana pun di riwayat untuk melihat waktu, rute/bab yang tercatat, dan
-semua penandanya, atau tambahkan catatan ke sesi lama tersebut. Tombol sesi
-lebih lama/baru membuka seluruh riwayat per 50 sesi, dengan cuplikan catatan pada setiap sesi.
-Jurnal ikut backup dan sinkronisasi pustaka. Save slot hanya pengingat; aplikasi
-tidak memuat atau mengubah save game.
+Buka **Panduan** di dalam aplikasi untuk bantuan pengaturan.
 
-**Big Picture.** Peluncur layar penuh dengan judul dan artwork game terpilih serta
-deretan kover yang ringkas. Klik kover untuk memilih, lalu Mainkan atau Enter
-untuk meluncurkan. Keyboard dan stik menjangkau seluruh koleksi; hanya kelompok
-kover yang terlihat yang dirender. Buka dari pustaka atau dengan Ctrl+Shift+B.
+## Fitur
 
-**Rute dan ending.** Rute sepenuhnya milikmu: kamu yang memberi nama, dan ending
-menggantung padanya. Deteksi bab membaca judul jendela game saat engine-nya
-menuliskannya (lihat [Bab dari judul jendela](#bab-dari-judul-jendela)), dan
-memakai atribusi tingkat game saat judul jendela tidak melaporkan bab.
+- Impor game dari VNDB beserta kover, tag, rating, dan screenshot.
+- Jalankan game dan catat waktu baca, dengan waktu istirahat dihitung terpisah.
+- Simpan catatan sesi, pengingat save slot, rute, dan ending agar ingat terakhir sampai mana.
+- Ikuti panduan Seiya-Saiga dengan pilihan rute dan opsi terjemahan.
+- Lihat lini masa, aktivitas harian, dan streak baca. Bagikan rekap tahunan atau seluruh
+  riwayat bacamu.
+- Ambil screenshot game di Windows atau Android, lalu lihat hasilnya per game.
+- Pilih tampilan kisi, daftar, atau rak, atau gunakan Big Picture dengan keyboard atau stik.
+- Pilih tema, atur warna, dan sembunyikan atau buramkan gambar eksplisit.
+- Tampilkan game yang sedang kamu baca di Discord lewat Rich Presence, yang awalnya nonaktif.
+- Sinkronkan lewat folder bersama, atau buat cadangan `.vn-asyik-library`. Cadangan memuat
+  catatan baca dan screenshot; sinkronisasi folder tidak menyertakan screenshot.
 
-**Statistik.** Waktu baca per game, per rute, dan per bulan, dihitung dari
-sesinya sendiri. Peta panas hari baca dengan streak baca saat ini dan
-terpanjang, plus kartu rekap tahunan yang merangkum tahun mana pun yang punya
-catatan: waktu membaca, hari membaca, akhir yang dicapai, catatan jurnal, game
-yang dimulai, dilanjutkan, dan diselesaikan, sesi dan streak terpanjang, game
-pertama tahun itu, bulan dan hari tersibuk, rute terlama, dan lima game dengan
-waktu terbanyak. Rincian hari dan jam menunjukkan kapan kamu membaca. Tahun
-mana pun yang punya catatan bisa dibagikan sebagai postingan 1080 x 1350 atau
-story 1080 x 1920, dibuat di perangkat lalu disimpan atau dikirim lewat lembar
-berbagi sistem. Kartu rekap sepanjang masa merangkum seluruh koleksi dan
-dibagikan dengan cara yang sama.
+Di desktop, menutup jendela secara bawaan menyembunyikannya ke system tray agar pelacakan
+bisa berlanjut. Gunakan `Ctrl+K` untuk perintah cepat, `Ctrl+Shift+B` untuk Big Picture, dan
+`Shift+S` untuk screenshot saat jendela game aktif di Windows. Game tetap menerima
+kombinasi tombol tersebut.
 
-**Lini Masa.** Log membaca dari semua game dalam satu aliran: sesi,
-catatan jurnal, akhir yang dicapai, dan game yang selesai, terbaru dulu,
-dikelompokkan per hari. Kover mengikuti pengaturan konten yang sama dengan
-koleksi, dan setiap baris membuka halaman game. Tab kedua berisi screenshot kamu.
+## Cara pelacakan bekerja
 
-**Screenshot.** Satu tombol merekam game yang sedang dibaca: jendela game di
-Windows, seluruh layar di Android. Di Windows juga terikat ke `Ctrl+Shift+S`,
-sehingga kamu bisa merekam tanpa keluar dari game. Hasilnya dikelompokkan per game,
-bisa dibuka penuh, dan bisa dihapus. Semuanya tetap di perangkat ini, dan ekspor
-pustaka menyertakannya agar cadangan tetap menyimpan gambarmu.
+Di desktop, waktu baca dihitung saat jendela game aktif, di luar jeda panjang tanpa
+aktivitas. Deteksi bab otomatis bekerja jika game menulis progres di judul jendelanya,
+seperti beberapa game Siglus. Buka **Pengaturan > Pelacakan** untuk memilih deteksi Siglus
+atau menguji pola khusus. Jika bab tidak terdeteksi, waktu baca game tetap tercatat.
 
-**Tema.** Selain warna aksen, tema menentukan permukaan, teks, sudut, kerapatan,
-dan kekuatan kaca. Ada empat preset (Nord, Sepia, Slate, High contrast), atau
-buat sendiri dengan pembacaan kontras langsung yang menjaga teks isi tetap AA.
-Tema bisa diekspor dan diimpor sebagai file JSON kecil. Game yang sedang dibuka
-masih bisa mewarnai antarmuka, atau bisa dimatikan.
+Android membutuhkan izin **Usage Access** untuk melacak game langsung maupun emulator;
+bab dan rute diisi manual. Pelacakan Linux bekerja lewat X11 dan XWayland, tetapi belum bisa
+melacak jendela Wayland native. Screenshot Android membutuhkan izin pencerminan layar dan
+menangkap seluruh layar; Windows menangkap jendela game.
 
-**Discord Rich Presence.** Opsional, mati secara bawaan. Menampilkan apa yang
-sedang kamu baca, bergiliran sesuai kolom yang kamu atur. Kover eksplisit
-diblur sebelum diunggah kalau kamu mengaktifkan host gambar.
-
-**Panduan rute.** Ambil panduan pilihan rute langsung dari indeks
-Seiya-Saiga. Langkah pilihan, rute, dan lencana ending disajikan per
-tab rute, lengkap dengan pencarian judul Jepang yang dinormalisasi dan opsi
-terjemahan.
-
-**Rekomendasi bacaan.** Layar **Rekomendasi** punya dua tab. **Tanya** memakai Tavily dan
-penyedia chat pilihanmu, lengkap dengan tautan sumber. **Untukmu** mencocokkan
-entri VNDB dengan tag, studio, penulis, ilustrator, dan pengisi suara dari
-pustakamu, tanpa model atau kunci API. Game yang dimainkan dan diberi nilai tinggi
-(hingga 10,0) berpengaruh paling besar, sementara game dropped maupun wishlist tanpa
-nilai diabaikan. Tema spesifik dan kreator yang sama berbobot lebih besar daripada
-tag umum, dan tab Seiyuu menyeimbangkan berbagai aktor favorit. Setiap kartu menyebut
-bukti kecocokan serta game pustaka terkait. Urutan Selera merangking maksimal 50 kandidat
-gabungan secara lokal; urutan lainnya mengikuti VNDB. Kartu tampil dalam kisi pada
-jendela lebar dan satu kolom di layar sempit. Filter mencakup durasi, nilai, tanggal
-rilis, bahasa, dan jumlah suara.
-
-**Sinkronisasi dan cadangan.** Selaraskan pustaka dan sesi baca antarperangkat
-lewat folder bersama di jaringan lokal (LAN) tanpa server pihak ketiga, atau
-ekspor seluruh pustaka ke satu berkas `.vn-asyik-library` dengan peninjauan
-konflik saat impor.
-
-**Akses cepat.** Tekan `Ctrl+K` (atau `Cmd+K`) kapan saja untuk membuka palet
-perintah: cari judul di pustaka seketika, pindah layar, atau kendalikan pelacakan
-dengan keyboard.
-
-**Latar belakang & System Tray.** Di desktop, jendela VN Asyik dapat disembunyikan
-ke taskbar notification area (system tray) lewat tombol samping, pintasan
-`Ctrl+Shift+H`, Command Palette, atau menutup jendela ('X'). Pelacakan
-waktu bermain dan text hook LunaTranslator tetap berjalan di latar belakang selama
-kamu membaca, dan jendela dapat dibuka kembali dengan mengklik ikon tray.
-
-**Android.** Waktu baca diambil dari event foreground `UsageStats`, yang butuh
-izin Usage Access, baik untuk game langsung maupun yang dijalankan lewat
-emulator. Android tidak bisa melihat isi jendela aplikasi lain, sehingga bab
-diatur manual dan aplikasi menyampaikan batasan tersebut secara langsung.
-
-Selama game tetap di depan, pemeriksaan berkala memperbarui satu checkpoint lokal.
-Riwayat mendapat satu sesi selesai ketika rentang baca berakhir, misalnya saat
-berpindah aplikasi, mengunci layar, atau menekan Stop. Potongan riwayat 15 detik
-yang sudah tersimpan tetap dipertahankan; perbaikan berlaku untuk rekaman baru.
-
-## Bab dari judul jendela
-
-Di desktop, bab diambil dari apa yang ditulis game di judul jendelanya sendiri:
-tanpa injeksi, tanpa membaca memori, dan pembaruan game tidak merusaknya. Siglus
-menaruh progresnya di sana, dan bentuk-bentuk ini sudah terverifikasi:
-
-```text
-Summer Pockets REFLECTION BLUE 静久 ８月７日   rute 静久, bab 8月7日
-anemoi Ｄａｙ １                              bab Day 1
-anemoi アネモイ Ｃｈａｐｔｅｒ ０１            rute アネモイ, bab Chapter 01
-```
-
-Karakter full-width dilipat dulu sebelum dicocokkan, jadi `Ｄａｙ １` dan
-`Day 1` dibaca sama. Judul tanpa penanda (layar judul atau menu) tidak mencatat
-bab apa pun, angka telanjang diabaikan, dan judul yang tidak menyebut nama game
-yang sedang dilacak ikut diabaikan.
-
-### Pola khusus
-
-Kalau game-mu menulis bentuk yang tidak tercakup di atas, buka **Pengaturan →
-Pelacakan → Membaca bab dari judul jendela**, ubah **Sumber** ke **Pola khusus**,
-lalu isi polanya. Sintaksnya Rust [`regex`](https://docs.rs/regex) 1.x: waktu
-linear, tanpa look-around, tanpa backreference, maksimal 512 byte (sekitar 170
-karakter Jepang), dan dijalankan pada seluruh judul apa adanya, termasuk nama
-game.
-
-- **Dua grup:** yang pertama rute, yang kedua bab.
-- **Satu grup:** itu babnya.
-
-Minimal harus ada satu grup; pola tanpa grup ditolak saat disimpan. Grup yang
-tidak ikut dalam kecocokan dilewati, jadi grup rute opsional menyisakan babnya
-saja.
-
-Dua sifat dialek itu yang perlu diketahui untuk caption Jepang: `\d` cocok
-dengan angka Unicode apa pun (termasuk `１２` full-width), dan `(?i)` membuat
-pencocokan tidak peka huruf besar/kecil.
-
-Untuk judul seperti `Fate/stay night [Fate] Day 3`:
-
-```text
-^.*?\[(.+)\]\s*(.+)$    rute "Fate", bab "Day 3"
-^.*?\s(Day \d+)$        bab "Day 3"                 (satu grup)
-```
-
-Yang perlu diketahui sebelum menyimpan:
-
-- Pola tidak di-anchor: pola itu cocok di mana pun dalam judul kecuali kamu
-  menulis `^` dan `$` sendiri.
-- Kecocokan yang grupnya menangkap string kosong dianggap tidak cocok, sehingga
-  nama bab kosong tidak pernah tersimpan.
-- Pola khusus **tidak** melipat karakter full-width: `Day` tidak pernah cocok
-  dengan `Ｄａｙ`, karena keduanya karakter berbeda. Untuk caption yang ditulis
-  begitu, tulis karakter tersebut di polanya, atau biarkan sumbernya di
-  **Siglus** yang melipatnya.
-- **Uji** menjalankan pola pada judul contoh, yang sudah terisi dari jendela
-  yang ada di depan saat panel dibuka; ubah isinya untuk mencoba judul lain.
-  Uji dulu sebelum menyimpan: pola yang tidak pernah cocok berperilaku persis
-  sama seperti game yang tidak menulis bab, sehingga hanya pengujian yang dapat
-  membedakannya.
-
-**Mati** berhenti membaca judul sama sekali. Pilihannya disimpan lokal di
-perangkat ini. Android tidak pernah membaca judul jendela (OS tidak
-mengizinkannya), jadi bab di sana diisi manual.
+Catatan save slot hanya pengingat. VN Asyik tidak memuat save, mengubah berkas game, atau
+membaca memori game.
 
 ## Fitur Beta
 
-Teman baca, Rekomendasi (pencarian VN dengan kunci API), dan Chat VN tersembunyi secara
-bawaan. Aktifkan **Pengaturan → Umum → Fitur Beta** untuk menampilkan fitur dan
-alat pengaturannya. Pilihan ini berlaku lokal per perangkat; impor pustaka tidak
-mengaktifkannya. Menonaktifkannya menjeda teman baca, menghentikan tangkapan
-jendela dan jawaban chat, memutus teks langsung Luna, serta menyembunyikan overlay.
-Kunci, pengaturan, memori, dan riwayat tersimpan tetap ada. Mengaktifkannya kembali
-tidak otomatis melanjutkan sesi atau tangkapan jendela. Pengembangan teman baca
-untuk sementara dijeda. Pencarian pustaka, pencarian/impor VNDB, dan pelacakan
-tetap tersedia.
+Aktifkan **Pengaturan > Umum > Fitur Beta** untuk membuka Rekomendasi, Chat VN, dan Teman
+baca. Fitur ini tersembunyi secara bawaan.
 
-## Obrolan pendamping
+- **Untukmu** menyarankan VN berdasarkan game yang kamu mainkan dan beri nilai, melalui tag
+  dan kreatornya. Data diambil dari VNDB tanpa model AI atau kunci API. **Tanya** mencari
+  lewat Tavily dan bisa memakai penyedia chat untuk menjawab dengan sumber.
+- Chat VN bisa membahas koleksimu, teks langsung dari LunaTranslator, atau skrip hasil
+  impor. Ringkasan cerita lengkap membutuhkan pilihan **Izinkan semua spoiler** di chat.
+- Teman baca menyediakan obrolan dengan kepribadian pilihanmu, ingatan opsional, dan overlay
+  desktop. Di Windows, kamu juga bisa mengizinkannya melihat satu jendela game dan bereaksi
+  terhadap adegan. Suara belum tersedia. Pengembangan lanjutan teman baca sedang dijeda.
 
-Pilih **Baca bersama teman** di halaman game, atau buka **Teman baca**, untuk
-memulai sesi. Pilih game dan kepribadian, lalu gunakan teks yang
-ditempel atau sumber LunaTranslator yang sudah kamu cocokkan dengan game itu.
-Buka **Konteks bacaan** untuk mengatur nama sesi dan batas bacaan tambahan.
-Jawaban tetap berjalan saat kamu berpindah halaman atau meminimalkan aplikasi
-Windows. Jeda menghentikan dialog baru dan jawaban; **Hentikan jawaban** memutus
-jawaban saat ini; **Akhiri sesi** menutup konteks. Setelah memuat save sebelumnya
-atau berpindah rute, buka **Opsi sesi** (ikon roda gigi) lalu pilih **Sesi baru**.
-Detail model, riwayat, dan Akhiri sesi ada di panel itu; Jeda dan Kirim tetap
-di samping percakapan. Kirim menjadi Hentikan jawaban selama jawaban berjalan.
-Detail tool yang selesai tersedia di bagian Sumber.
+Untuk chat, atur penyedia, model, dan kunci API jika diperlukan di Pengaturan. Kunci disimpan
+oleh sistem operasi. Konteks yang kamu bagikan dikirim ke penyedia tersebut, dan panggilan
+bisa dikenai biaya. Teks langsung, penggunaan ingatan, dan reaksi otomatis perlu diaktifkan
+masing-masing. Riwayat teman baca, ingatan, dan skrip impor tidak ikut sinkronisasi atau
+cadangan pustaka. Android tidak memiliki overlay mengambang dan bisa menghentikan teman
+baca di latar belakang.
 
-Batas pengetahuan dipilih secara jelas: **Metadata saja**, **Hanya yang kubagikan**,
-atau **Semua spoiler**. Hanya baris Luna baru yang masih segar
-setelah mulai atau lanjut yang dapat dipakai. Koneksi yang terputus atau
-berganti menjeda sesi dan perlu dikonfirmasi sebelum dilanjutkan. Pertanyaan
-menggunakan penyedia yang dipilih; reaksi otomatis dan saran rangkuman perlu
-diaktifkan secara terpisah. Sesi
-disimpan lokal, tidak ikut sinkronisasi atau ekspor pustaka, dan menyimpan
-maksimal 200 pesan terbaru per percakapan. Riwayat yang sudah berakhir tetap
-bisa dibaca atau dihapus setelah game dihapus. Memulai ulang aplikasi tidak
-otomatis melanjutkan sesi.
-
-Di desktop, **Buka overlay** membuka jendela kecil yang bisa dipindah, diubah
-ukurannya, dan tetap di atas, dengan percakapan serta kontrol jeda/akhiri yang
-sama. **Sembunyikan** atau tombol tutup menyembunyikannya sementara jawaban tetap
-berjalan; buka lagi untuk mengikuti kelanjutannya. Pengaturan sesi, pengaturan
-aplikasi, dan tautan pustaka dibuka di jendela utama. Gunakan mode berjendela atau
-borderless: fullscreen eksklusif dapat menutupi jendela biasa. Android belum
-memiliki overlay mengambang.
-
-Pilih dari dua belas kepribadian, atau gunakan **Sesuaikan** untuk menyimpan
-profil lokal dengan gaya bicara, minat, panjang balasan, bahasa, dan nadanya
-sendiri. Contoh balasan berupa tulisan contoh; membukanya tidak memanggil model.
-Di **Opsi sesi**, **Terapkan kepribadian** mengubah sesi saat ini dan menghentikan
-balasan yang masih memakai kepribadian sebelumnya. Menyimpan atau menghapus profil
-saja tidak mengubah salinan dalam sesi. Profil dan riwayat teman baca tidak ikut
-ekspor koleksi maupun sinkronisasi.
-
-**Opsi sesi → Tinjau ingatan** menambahkan ingatan lokal berkelanjutan.
-Gunakan **Ingat ini** untuk preferensi atau kutipan yang ditinjau, lalu pilih
-cakupannya: semua pendamping, identitas ini, atau game dan alur pembacaan ini.
-**Gunakan ingatan tersimpan** adalah pilihan terpisah yang awalnya nonaktif.
-Ingatan dapat dicari, ditinjau, diedit, dan disematkan. **Sarankan rangkuman**
-memanggil model terpilih saat diminta; saran rangkuman otomatis memerlukan
-persetujuan terpisah dan mungkin dikenai biaya penyedia. Saran baru digunakan
-setelah disetujui. Rangkuman terhenti menunggu percobaan ulang eksplisit, dan
-bukti tersimpan tetap ada setelah riwayat melewati batas 200 pesan.
-
-**Lupakan** menghapus teks ingatan dan bukti terpilih. Koreksi dan pelupaan juga
-menghapus rangkuman turunan serta mengecualikan seluruh percakapan pendamping
-sebelumnya dari prompt berikutnya, tetapi riwayat lokal tetap dapat dibaca.
-Kesinambungan percakapan terbaru akan hilang; konten yang sudah dikirim ke
-penyedia tidak dapat ditarik kembali. Sesi baru tidak mewarisi ingatan cerita
-dari alur pembacaan lain. Ingatan tidak ikut sinkronisasi, cadangan, atau ekspor.
-Menghapus sesi menghapus ingatan turunannya; preferensi yang ditulis mandiri
-tetap tersimpan.
-
-**Penglihatan** menambahkan adegan dari satu jendela terpilih di Windows.
-Pilih jendela game, periksa pratinjau lokal dan potongan opsional, lalu uji dukungan
-gambar pada penyedia yang dipilih. Kirim satu gambar dengan pertanyaan, atau
-aktifkan pengamatan dan reaksi otomatis sesekali saat game berada di depan.
-Panggilan gambar dapat dikenai biaya. Panggilan otomatis berjarak minimal 60 detik,
-maksimal 12/jam dan 30/sesi; panggilan yang diam, gagal, atau dibatalkan setelah
-dikirim tetap dihitung. **Diam** menghentikan balasan otomatis; berhenti mengamati,
-Jeda/Akhiri sesi, dan Lupakan membersihkan tangkapan. Pengamatan tidak dimulai ulang
-otomatis saat aplikasi dibuka. Gambar hanya berada di memori; riwayat menyimpan
-teks berlabel inferensi visual dan metadata sumber minimal. Tangkapan SDR Windows
-didukung; HDR dan platform lain menampilkan status tidak tersedia.
-
-Ini mencakup sesi teks, identitas teman, ingatan berkelanjutan, serta
-penglihatan dan reaksi sesekali. Suara masih direncanakan. Android tidak
-menjamin proses tetap berjalan di latar belakang; biarkan aplikasi terbuka di sana.
-
-Chat VN bekerja langsung dari konteks pustakamu dan mencantumkan sumbernya:
-
-- **Teks langsung.** Teks yang diekstrak LunaTranslator dari game yang sedang
-  kamu mainkan.
-- **Skrip hasil impor.** Masukkan skrip yang kamu ekstrak sendiri: teks biasa,
-  array JSON nama/pesan, atau format JSON Asyik. Aplikasi merangkumnya
-  jadi digest cerita yang bisa dijadikan rujukan jawaban.
-
-Perangkuman berjalan sebagai map-reduce atas skrip yang dipecah per anggaran
-byte. Sampai 10 agen merangkum segmen berurutan secara paralel, masing-masing
-membawa ekor ringkasan sebelumnya sebagai konteks, lalu digest tiap segmen
-digabung jadi satu. Kemajuannya disimpan per potongan, sehingga menutup aplikasi
-di tengah jalan akan melanjutkan dari potongan terakhir yang tersimpan.
-
-Digest ditahan kecuali tingkat spoiler obrolan disetel ke _All_. Chat biasa
-dapat membaca teks langsung pada semua tingkat spoiler; sesi teman baca juga
-menahan dialog tangkapan dalam mode **Metadata saja**.
-
-### Penyedia
-
-Pengaturan menyimpan daftar beberapa penyedia: masing-masing berisi nama, base URL
-yang kompatibel dengan OpenAI, dan model. Kuncinya disimpan di credential store
-sistem (satu slot per penyedia, tanpa disimpan di database atau file konfigurasi),
-sehingga berpindah penyedia tidak meminta pengetikan ulang kunci. Setelan tunggal
-dari versi lama otomatis dipindahkan menjadi satu profil saat pertama dijalankan,
-lengkap dengan kuncinya.
-
-Dua endpoint yang sudah terbukti jalan lewat lapisan kompatibilitas:
-
-| Penyedia         | Endpoint                                                  | Contoh model       |
-| ---------------- | --------------------------------------------------------- | ------------------ |
-| Google AI Studio | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` |
-| Runtime lokal    | `http://127.0.0.1:11434/v1` (Ollama)                      | `qwen3`            |
-
-`http` biasa hanya diterima di localhost, karena di tempat lain kuncinya akan
-terkirim tanpa enkripsi.
-
-## Yang tidak akan dilakukan
-
-Sebagian berasal dari batasan platform dan sebagian merupakan keputusan desain;
-keduanya ditampilkan apa adanya oleh aplikasi.
-
-- **Tidak ada pelacakan otomatis di sesi Wayland murni.** Wayland tidak
-  mengizinkan satu aplikasi melihat jendela aplikasi lain, jadi fokus dan judul
-  jendela tidak terjangkau. Visual novel yang berjalan lewat XWayland tetap
-  terlacak normal, sedangkan jendela Wayland asli tidak, dan aplikasi akan memberi
-  tahu kondisinya.
-- **Screenshot di Android butuh izin pencerminan layar.** Android merekam
-  seluruh layar lalu meminta izin lebih dulu.
-- **Tidak ada deteksi bab di Android.** Sistem operasi tidak mengizinkan satu
-  aplikasi memeriksa jendela aplikasi lain. Bab dan rute diatur manual.
-- **Aplikasi tidak pernah menulis ke game yang sedang berjalan.** Tidak menambal
-  berkas, tidak menyuntik ulang teks terjemahan, tidak menyentuh DRM.
-- **Tanpa telemetri.** Tidak ada analitik, tidak ada pelaporan crash, tidak ada
-  pengiriman data latar belakang. Koneksi jaringan hanya yang kamu nyalakan
-  sendiri: VNDB, Discord, penyedia obrolan pilihanmu, dan Tavily kalau kamu minta
-  rekomendasi yang butuh internet terbuka.
-
-## Pemasangan
-
-Unduh prarilis terbaru dari [GitHub Releases](https://github.com/Atho64/VN-Asyik/releases).
-Windows menyediakan installer `.exe` dan `.msi`; keduanya belum ditandatangani
-dan mungkin menampilkan peringatan SmartScreen. Android menggunakan
-`app-universal-release.apk` yang ditandatangani. Linux (Beta) memakai `.AppImage`:
-jadikan bisa dieksekusi lalu jalankan.
-
-Untuk membangun dari kode sumber:
-
-```
-pnpm install --frozen-lockfile
-pnpm tauri build
-```
-
-Hasilnya ada di `target/release/bundle/` kecuali direktori target Cargo diatur
-sendiri. Android butuh JDK 21, Android SDK dan NDK, serta target Rust Android:
-
-```
-pnpm tauri android build --apk --target aarch64
-```
-
-Application ID-nya `com.atho.vnasyik`. Android mengikat data aplikasi, penyimpanan
-kredensial Keystore, dan izin Usage Access ke string itu, jadi sifatnya permanen:
-mengubahnya lagi membuat sistem menganggapnya aplikasi yang berbeda.
-
-## Pindahan dari build `app.vntracker.desktop`
-
-Paketnya pernah diganti nama sekali, sebelum rilis publik pertama. Build dari
-sebelum penggantian tidak bisa memperbarui di tempat, karena Android melihatnya
-sebagai aplikasi lain: ia terpasang di samping yang lama dengan pustaka kosong.
-
-- **Android:** ekspor lewat _Pengaturan → Backup & transfer_ di build lama, lalu
-  impor di build ini.
-- **Windows:** pustakanya ada di `%APPDATA%\com.atho.vnasyik\`. Salin foldernya
-  dari `%APPDATA%\app.vntracker.desktop\` sebelum menjalankan yang baru, dan
-  game, sesi, serta pengaturannya ikut pindah.
+Tidak ada telemetri atau analitik. Fitur online terhubung ke layanan yang kamu pilih untuk
+dipakai, seperti VNDB, Discord, panduan Seiya-Saiga, dan penyedia chat.
 
 ## Pengembangan
 
-```
+Dibuat dengan Rust, Tauri v2, SQLite, React, dan TypeScript. Pasang Rust, Node.js, pnpm, serta
+dependensi sistem Tauri, lalu jalankan:
+
+```sh
 pnpm install --frozen-lockfile
 pnpm tauri dev
 ```
 
+Buat installer desktop dengan `pnpm tauri build`. Build Android juga membutuhkan JDK 21,
+Android SDK/NDK, serta target Rust Android:
+
+```sh
+pnpm tauri android build --apk --target aarch64
 ```
+
+Installer desktop ada di `target/release/bundle/`, kecuali kamu mengatur direktori target
+Cargo lain. Mulai membaca kode dari `crates/vn-core` untuk logika inti, `src-tauri/src` untuk
+backend, dan `src/` untuk antarmuka.
+
+<details>
+<summary>Pemeriksaan pengembangan</summary>
+
+```sh
 pnpm lint && pnpm typecheck && pnpm test
 cargo fmt --check && cargo clippy --all-targets -- -D warnings
 cargo test --workspace
-```
-
-Tes pelacakan langsung menyentuh jendela dan waktu diam yang sesungguhnya, jadi
-dilewati secara bawaan:
-
-```
-cargo test --test tracking_live -- --ignored --nocapture
-```
-
-Pemeriksaan kompilasi Android, yang menangkap kode yang bocor keluar dari
-gerbang `#[cfg]`:
-
-```
 cargo check --target aarch64-linux-android -p vn-tracker
 ```
 
-## Membaca kodenya
+Tes pelacakan langsung memakai jendela dan waktu diam sesungguhnya, jadi jalankan terpisah:
 
-Mulai dari `crates/vn-core`: di situ logika domain murninya (state machine sesi,
-penggabungan sinkronisasi, pemetaan bab, perangkuman skrip), tanpa Tauri dan
-tanpa panggilan OS, jadi bisa dites dengan `cargo test` biasa. `src-tauri/src`
-membungkusnya jadi command, penyimpanan, dan adapter platform. `src/` adalah
-frontend React yang hanya bicara ke backend lewat `src/lib/ipc`.
+```sh
+cargo test --test tracking_live -- --ignored --nocapture
+```
 
-Komentar di kode menjelaskan _kenapa_ sebuah aturan ada di tempat yang tidak
-jelas dengan sendirinya, agar penjelasannya menyatu langsung di dekat kode
-implementasinya.
+</details>
 
-## Karya yang mendahului dan atribusi
+## Kredit
 
-Tiap butir di bawah menyebut apa yang benar-benar diberikannya ke proyek ini.
-_Diport_ berarti kode atau konstanta disalin dan membawa komentar asal-usul di
-sumbernya. _Inspirasi_ berarti proyeknya dibaca untuk memahami masalahnya; tidak
-ada yang disalin.
-
-**[VaternID/EwE](https://github.com/VaternID/EwE)** (GPL-3.0, diport).
-Kartu presence Discord dimodelkan dari EwE. `crates/vn-core/src/presence.rs`
-mencatat apa yang diambil: pipeline transformasi teks per kolom (hapus, ganti,
-awalan/akhiran, rapikan, dalam urutan itu) dan kursor rotasi terpisah per kolom.
-Yang sengaja tidak diambil juga dicatat: skrip variabel Python kustom EwE, yang
-menjalankan kode sembarang dari folder di sebelah executable, dan pengunggahan
-kover tanpa persetujuan tersendiri.
-
-**[dead8309/Kizzy](https://github.com/dead8309/Kizzy)** (GPL-3.0, inspirasi).
-Rujukan untuk bicara ke Discord di Android, tempat soket IPC desktop tidak ada.
-Jalur presence Android langsung terhubung ke Discord Gateway, sesuai pendekatan
-yang ditunjukkan Kizzy. Tidak ada kode yang dipakai bersama.
-
-**[Yukin0a/KireiBox](https://github.com/Yukin0a/KireiBox)** (GPL-3.0, inspirasi).
-Rujukan bagaimana peluncur VN Android menyikapi mesin yang terpasang terpisah.
-README-nya menarik garis antara penyerta mesin bawaan dan meluncurkan aplikasi
-yang dipasang sendiri; VN Asyik mengambil jalur kedua dan tidak membundel apa pun.
-
-**[LunaTranslator](https://github.com/HIllya51/LunaTranslator)** (GPL-3.0, terintegrasi).
-Tersambung lewat layanan jaringannya yang terdokumentasi: endpoint websocket
-mengirimkan teks hasil ekstraksi sebagai frame teks biasa, yang dikonsumsi
-aplikasi ini. Tidak ada kode yang disalin; integrasinya adalah klien untuk API
-yang terdokumentasi.
-
-**LunaBox** (AGPL-3.0, hanya inspirasi).
-Dibaca sebagai karya yang mendahului untuk membayangkan fitur AI di atas pustaka
-VN, dan untuk tahu mode kegagalan apa yang penting (spoiler, kesimpulan karangan).
+- [EwE](https://github.com/VaternID/EwE) (GPL-3.0): kode pengolahan teks presence Discord dan
+  pergantian teks per kolom diport, dengan asal-usul tercatat di `crates/vn-core/src/presence.rs`.
+- [Kizzy](https://github.com/dead8309/Kizzy) (GPL-3.0): inspirasi presence Discord di Android.
+- [KireiBox](https://github.com/Yukin0a/KireiBox) (GPL-3.0): inspirasi peluncuran engine Android
+  yang dipasang terpisah.
+- [LunaTranslator](https://github.com/HIllya51/LunaTranslator) (GPL-3.0): integrasi teks
+  langsung lewat API jaringan yang terdokumentasi; tidak ada kode yang disalin.
+- LunaBox (AGPL-3.0): hanya inspirasi fitur; tidak ada kode yang disalin.
 
 ## Lisensi
 
 GPL-3.0-only. Lihat [LICENSE](LICENSE).
 
-Font Inter Tight memakai SIL Open Font License 1.1. Teks hak cipta dan lisensi
-lengkap tersedia di [README Inggris](README.md#inter-tight-license).
+Font Inter Tight memakai SIL Open Font License 1.1. Teks hak cipta dan lisensi lengkap ada
+di [README Inggris](README.md#inter-tight-license).

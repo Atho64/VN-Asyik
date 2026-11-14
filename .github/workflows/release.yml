@@ -39,30 +39,24 @@ jobs:
           RELEASE_NOTES: |
             ## What's new
 
-            - **Shell, startup, and window placement.** Added a collapsible
-              compact icon sidebar toggle, library startup category/filter
-              persistence (or configurable default sort), and desktop window
-              launch position preferences (centered or saved custom bounds)
-              — closing #1.
-            - **Settings & Stats organization.** Moved App Language to the top
-              of General Settings, consolidated Tracking and Window-title
-              chapter parsing inside `Settings → Tracking`, and organized Stats
-              into **Overview**, **Activity**, **Recap** (Yearly / All-time), and
-              **Taste** tabs.
-            - **Stats Recap & Discover.** Added All-time Wrapped, reading rhythm
-              metrics, exportable Wrapped share cards, and a VNDB taste-matching
-              **For you** tab in Discover.
-            - **Discord Rich Presence defaults & UI.** Switched the default VNDB
-              details line to a compact single line
-              (`★ {vndb_rating}/10 · {vndb_year} · {vndb_length}`), removed the
-              duplicate Rotate toggle, fixed the State template placeholder, and
-              added a **Reset formatting to defaults** button.
-            - **Android & Updater fixes.** Fixed Android entry-point startup,
-              ended abandoned UsageStats sessions after a 15-minute away grace
-              period, and pointed non-Windows update notices to GitHub releases.
-            - **Linux marked Beta.** Linux tracking, Discord Rich Presence, and
-              `.AppImage` builds remain usable right away for testers and are
-              now explicitly labeled as Beta in the app, READMEs, and downloads.
+            - Reading-status badges are easier to read over covers. The Script
+              card keeps import controls visible and puts extra help in
+              **Format and settings**.
+            - Fixed **Ctrl+K** for quick commands, including from text fields,
+              and fixed **Add a game** closing with the command palette.
+            - **Shift+S** takes a screenshot while the tracked game is focused
+              on Windows. The game still receives the key combination.
+            - Library filtering retains matching covers and shares image-colour
+              extraction, with a bounded cache and proper bitmap cleanup.
+            - VN Chat has clearer script-summary status, improved Markdown,
+              safer source links and spoiler-aware library search. Provider
+              streaming, retry, cancellation and error handling were corrected.
+            - Fixed companion overlay navigation, memory-edit handling and
+              selected-window vision state. These features remain in Beta.
+            - Refined desktop startup choices, taste recommendations, character
+              details, keyboard access and narrow layouts.
+            - Shortened the English and Indonesian READMEs into a practical
+              download and feature guide.
 
             ## Downloads
 
@@ -74,15 +68,18 @@ jobs:
 
             ## Notes
 
-            - Linux support is currently in Beta: active-window and idle detection
-              can still vary across distributions and Wayland compositors. If
-              tracking reports unavailable, the message names the reason.
+            - New script imports accept VNTP JSON arrays with `name` and
+              `message` fields. Previously imported documents remain stored.
+            - Linux is Beta. Tracking supports X11 and XWayland; native Wayland
+              windows cannot be tracked.
             - Android screenshots require the system screen-casting permission, and
               capture the whole screen rather than one window.
             - Companion remains experimental and further development is paused.
-            - Automated tests were rerun for this release: the Rust workspace suite,
-              clippy, the frontend lint/typecheck/build/Vitest suite, and the
-              Android cross-compile check.
+            - The implementation passed 704 frontend tests, lint, typecheck,
+              frontend build, Rust Clippy/workspace tests and the Android
+              ARM64 compile check. Final desktop UI checks covered light/Nord
+              themes and narrow layouts. Full suites were not repeated during
+              release preparation; no performance benchmark is claimed.
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release already exists"
