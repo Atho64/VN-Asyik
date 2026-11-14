@@ -110,9 +110,11 @@ export function shelfWheelScroll(
 export function VirtualLibrary({
   cards,
   view,
+  resetKey,
 }: {
   cards: GameCard[];
   view: LibraryView;
+  resetKey?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const probeRef = useRef<HTMLDivElement>(null);
@@ -269,12 +271,12 @@ export function VirtualLibrary({
   }, [horizontal, view]);
 
   useLayoutEffect(() => {
-    // The parent remounts this component for a changed filter, sort, or view.
+    // Reset browsing position without discarding artwork for surviving cards.
     const main = hostRef.current?.closest<HTMLElement>(".app__main");
     main?.scrollTo?.({ top: 0, behavior: "instant" });
     if (main) main.scrollTop = 0;
     if (horizontal && hostRef.current) hostRef.current.scrollLeft = 0;
-  }, [horizontal]);
+  }, [horizontal, resetKey]);
 
   const { measure } = virtualizer;
   useLayoutEffect(() => {

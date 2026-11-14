@@ -15,9 +15,7 @@ const t = createTranslator("en");
 
 function withProviders(ui: ReactNode) {
   return (
-    <AppContext.Provider
-      value={{ t, locale: "en", ready: true, bootError: null }}
-    >
+    <AppContext.Provider value={{ t, locale: "en", ready: true, bootError: null }}>
       <MemoryRouter>{ui}</MemoryRouter>
     </AppContext.Provider>
   );
@@ -110,6 +108,12 @@ describe("EmptyState", () => {
 describe("StatusChip", () => {
   it("carries the status as text, not colour alone", () => {
     render(withProviders(<StatusChip status="on_hold" />));
-    expect(screen.getByText("On hold")).toBeTruthy();
+    const label = screen.getByText("On hold");
+    expect(label.parentElement).toHaveClass("status-chip");
+    expect(label.parentElement).not.toHaveClass("chip");
+    expect(label.parentElement?.querySelector("svg")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
   });
 });

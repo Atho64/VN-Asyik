@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(windows)]
+pub(crate) mod shortcut;
+#[cfg(windows)]
 pub mod windows;
 
 /// Longest edge written for a capture.

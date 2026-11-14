@@ -131,28 +131,46 @@ button.chip--link:hover {
   color: var(--text);
 }
 
-/* Status chips use a 6px dot in the status hue rather than a coloured stripe or glow. */
-.chip__status {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
+/* Static reading labels stay compact; interactive filters keep their touch targets. */
+.status-chip {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface-solid);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: var(--leading-tight);
 }
 
-.chip--playing .chip__status {
-  background: var(--success);
+.status-chip__icon {
+  flex: none;
+  color: var(--status-tone, currentColor);
 }
-.chip--completed .chip__status {
-  background: var(--accent-strong);
+
+.status-chip__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.chip--wishlist .chip__status {
-  background: var(--text-faint);
+
+.status-chip--playing {
+  --status-tone: var(--success);
 }
-.chip--on-hold .chip__status {
-  background: var(--warning);
+.status-chip--completed {
+  --status-tone: var(--accent-strong);
 }
-.chip--dropped .chip__status {
-  background: var(--danger);
+.status-chip--wishlist {
+  --status-tone: var(--text-muted);
+}
+.status-chip--on-hold {
+  --status-tone: var(--warning);
+}
+.status-chip--dropped {
+  --status-tone: var(--danger);
 }
 
 /* Keep chips at a 44px minimum touch target below desktop breakpoints. */

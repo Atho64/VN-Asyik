@@ -23,6 +23,7 @@ export function ScreenshotButton({
 }) {
   const { t } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
+  const isWindows = useAppStore((state) => state.platform?.os === "windows");
   const [status, setStatus] = useState<CaptureStatus | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -62,7 +63,11 @@ export function ScreenshotButton({
       variant={variant}
       onClick={() => void capture()}
       disabled={busy || Boolean(status?.reason)}
-      title={status?.reason ? describeReason(status.reason, t) : t("screenshot.capture")}
+      title={
+        status?.reason
+          ? describeReason(status.reason, t)
+          : t(isWindows ? "screenshot.shortcutHint" : "screenshot.capture")
+      }
       aria-label={t("screenshot.capture")}
     >
       <Icon name="camera" size={16} />

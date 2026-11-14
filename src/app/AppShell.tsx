@@ -12,6 +12,7 @@ import { ContextMenuProvider } from "@/app/ContextMenuProvider";
 import { NowPlayingBar } from "@/features/tracking/NowPlayingBar";
 import { CompanionBar } from "@/features/companion/CompanionBar";
 import { CommandPalette } from "@/features/palette/CommandPalette";
+import { AddGameSheet } from "@/features/library/AddGameSheet";
 import { Button } from "@/components/Button";
 import { Sheet } from "@/components/Sheet";
 import { api } from "@/lib/ipc/client";
@@ -76,6 +77,7 @@ export function AppShell() {
     }
   };
   const [moreOpen, setMoreOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -109,7 +111,6 @@ export function AppShell() {
     let stop: (() => void) | undefined;
     let disposed = false;
     void listenScreenshotShortcut((result) => {
-
       const { pushToast } = useAppStore.getState();
       if (result.ok) {
         pushToast("success", t("screenshot.captured"));
@@ -166,6 +167,16 @@ export function AppShell() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.repeat || e.altKey) return;
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.shiftKey &&
+        (e.code === "KeyK" || e.key.toLowerCase() === "k")
+      ) {
+        e.preventDefault();
+        setPaletteOpen(!useAppStore.getState().paletteOpen);
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "H" || e.key === "h")) {
         e.preventDefault();
         void api.toggleWindow();
@@ -179,7 +190,7 @@ export function AppShell() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [navigate]);
+  }, [navigate, setPaletteOpen]);
 
   return (
     <div className={pathname === "/big-picture" ? "app app--big-picture" : "app"}>
@@ -209,7 +220,9 @@ export function AppShell() {
         <div className="rail__brand">
           <div className="rail__brand-id">
             <img className="rail__mark" src={appIcon} alt="" />
-            <span className={sidebarCompact ? "rail__name visually-hidden" : "rail__name"}>
+            <span
+              className={sidebarCompact ? "rail__name visually-hidden" : "rail__name"}
+            >
               {t("app.name")}
             </span>
           </div>
@@ -246,7 +259,11 @@ export function AppShell() {
                 <span className="rail__icon">
                   <Icon name={entry.icon} />
                 </span>
-                <span className={sidebarCompact ? "rail__label visually-hidden" : "rail__label"}>
+                <span
+                  className={
+                    sidebarCompact ? "rail__label visually-hidden" : "rail__label"
+                  }
+                >
                   {label}
                 </span>
               </NavLink>
@@ -256,13 +273,17 @@ export function AppShell() {
         <div className="rail__footer">
           <Button
             variant="ghost"
-            className={sidebarCompact ? "rail__search rail__search--compact" : "rail__search"}
+            className={
+              sidebarCompact ? "rail__search rail__search--compact" : "rail__search"
+            }
             onClick={() => setPaletteOpen(true)}
             aria-keyshortcuts="Control+K Meta+K"
             title={sidebarCompact ? t("library.search") : undefined}
           >
             <Icon name="search" />
-            <span className={sidebarCompact ? "rail__label visually-hidden" : "rail__label"}>
+            <span
+              className={sidebarCompact ? "rail__label visually-hidden" : "rail__label"}
+            >
               {t("library.search")}
             </span>
           </Button>
@@ -333,7 +354,8 @@ export function AppShell() {
         </nav>
       </Sheet>
 
-      {paletteOpen ? <CommandPalette /> : null}
+      {paletteOpen ? <CommandPalette onAddGame={() => setAddOpen(true)} /> : null}
+      {addOpen ? <AddGameSheet open onClose={() => setAddOpen(false)} /> : null}
       <Toasts />
     </div>
   );

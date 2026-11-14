@@ -6,7 +6,6 @@ import { useI18n } from "@/app/useI18n";
 import { Icon } from "@/components/Icon";
 import { rankGames } from "@/lib/library";
 import { useModalFocusTrap } from "@/lib/useModalFocusTrap";
-import { AddGameSheet } from "@/features/library/AddGameSheet";
 import { api } from "@/lib/ipc/client";
 
 interface PaletteAction {
@@ -25,7 +24,7 @@ interface PaletteAction {
  * Typing a game title navigates; there is no fuzzy "AI command" pretending to do
  * things that are not built.
  */
-export function CommandPalette() {
+export function CommandPalette({ onAddGame }: { onAddGame: () => void }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const setOpen = useAppStore((state) => state.setPaletteOpen);
@@ -34,7 +33,6 @@ export function CommandPalette() {
   const isAndroid = useAppStore((state) => state.platform?.os === "android");
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [addOpen, setAddOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -120,7 +118,7 @@ export function CommandPalette() {
         id: "add-game",
         label: t("palette.addGame"),
         run: () => {
-          setAddOpen(true);
+          onAddGame();
           close();
         },
       },
@@ -185,7 +183,7 @@ export function CommandPalette() {
       }));
 
     return [...matchedActions, ...matchedGames];
-  }, [beta, cards, close, isAndroid, navigate, query, t]);
+  }, [beta, cards, close, isAndroid, navigate, onAddGame, query, t]);
 
   useModalFocusTrap(panelRef, true, close, inputRef);
 
@@ -264,7 +262,6 @@ export function CommandPalette() {
           </div>
         </div>
       </div>
-      {addOpen ? <AddGameSheet open onClose={() => setAddOpen(false)} /> : null}
     </>
   );
 }

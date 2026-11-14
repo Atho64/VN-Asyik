@@ -362,7 +362,7 @@ describe("virtual library", () => {
     },
   );
 
-  it("resets scroll when a filter/sort key remounts a small result set", () => {
+  it("resets scroll when a filter/sort change leaves a small result set", () => {
     const result = mount("list");
     act(() => {
       result.main.scrollTop = 100_000;
@@ -370,12 +370,28 @@ describe("virtual library", () => {
     });
     result.rerender(
       <main className="app__main">
-        <VirtualLibrary key="new-filter" cards={cards.slice(4_990)} view="list" />
+        <VirtualLibrary resetKey="new-filter" cards={cards.slice(4_990)} view="list" />
       </main>,
     );
     expect(result.main.scrollTop).toBe(0);
     expect(screen.getByRole("link", { name: "Game 4990" })).toBeInTheDocument();
     expect(screen.getAllByRole("link").length).toBeLessThanOrEqual(10);
+  });
+
+  it("keeps matching cards mounted while refining the library search", () => {
+    useAppStore.setState({ cards, libraryLoaded: true, libraryError: null });
+    render(
+      <MemoryRouter>
+        <main className="app__main">
+          <LibraryScreen />
+        </main>
+      </MemoryRouter>,
+    );
+    const before = screen.getAllByRole("link");
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Game" } });
+    const after = screen.getAllByRole("link");
+    expect(after).toHaveLength(before.length);
+    after.forEach((link, index) => expect(link).toBe(before[index]));
   });
 
   it("LibraryScreen resets the real main scroller for search and sort changes", () => {

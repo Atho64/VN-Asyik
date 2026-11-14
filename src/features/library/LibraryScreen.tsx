@@ -30,14 +30,18 @@ export function LibraryScreen() {
   );
   const updateLibraryBrowse = useAppStore((state) => state.updateLibraryBrowse);
   const [addOpen, setAddOpen] = useState(false);
-  // Joined primitive key avoids remounting the virtualized grid on status-array reference churn.
+  // Reset scrolling for browse changes, not status-array reference churn.
   const collectionKey = `${view}|${query}|${statuses.join(",")}|${ratedOnly ? 1 : 0}|${sort}`;
 
   // Reuse `lib/library` normalization so card ordering matches tested sort/filter behavior.
   const filtered = useMemo(
     () =>
       // Title reads A→Z; the numeric keys read highest-first.
-      sortCards(filterCards(cards, { query, statuses, ratedOnly }), sort, sort !== "title"),
+      sortCards(
+        filterCards(cards, { query, statuses, ratedOnly }),
+        sort,
+        sort !== "title",
+      ),
     [cards, query, statuses, ratedOnly, sort],
   );
 
@@ -217,9 +221,10 @@ export function LibraryScreen() {
         />
       ) : (
         <VirtualLibrary
-          key={collectionKey}
+          key={view}
           cards={filtered}
           view={view}
+          resetKey={collectionKey}
         />
       )}
 

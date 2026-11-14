@@ -285,7 +285,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
 ///
 /// Registered in Rust so it fires while a game has focus; capture is spawned
 /// onto the async runtime so the plugin thread never blocks on COM.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(windows, target_os = "android")))]
 fn screenshot_shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 
@@ -322,7 +322,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(windows, target_os = "android")))]
     let builder = builder.plugin(screenshot_shortcut_plugin());
     builder
         .plugin(android_usage_plugin())
@@ -369,6 +369,8 @@ pub fn run() {
                 });
             commands::companion::spawn_monitor(handle.clone());
             commands::tracking::spawn_loop(handle.clone());
+            #[cfg(windows)]
+            screenshots::shortcut::spawn(handle.clone());
             tray::setup_tray(&handle)?;
             // Suppress Chromium's default right-click menu on WebView2; the UI draws its own.
             #[cfg(windows)]
@@ -382,10 +384,11 @@ pub fn run() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     // Synchronous handler: consult the in-memory mirror rather than querying SQLite.
-                    let hides = window
-                        .app_handle()
-                        .try_state::<startup::CloseBehavior>()
-                        .is_none_or(|behavior| behavior.hides_to_tray());
+                    let hides = window.label() == companion::window::LABEL
+                        || window
+                            .app_handle()
+                            .try_state::<startup::CloseBehavior>()
+                            .is_none_or(|behavior| behavior.hides_to_tray());
                     if hides {
                         api.prevent_close();
                         let _ = window.hide();

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { useI18n } from "@/app/useI18n";
 import type { GameStatus } from "@/lib/ipc/types";
+import { Icon, type IconName } from "./Icon";
 
 interface ChipProps {
   children: ReactNode;
@@ -53,16 +54,20 @@ export function Chip({
   );
 }
 
-/**
- * Status chip. The status is communicated by the label text and a small ring
- * whose colour carries the same meaning, so it never depends on colour alone.
- */
+const statusIcons: Record<GameStatus, IconName> = {
+  playing: "guide",
+  completed: "check",
+  wishlist: "clock",
+  on_hold: "pause",
+  dropped: "close",
+};
+
 export function StatusChip({ status }: { status: GameStatus }) {
   const { t } = useI18n();
   return (
-    <span className={`chip chip--${status.replace("_", "-")}`}>
-      <span className="chip__status" aria-hidden="true" />
-      {t(`status.${status}`)}
+    <span className={`status-chip status-chip--${status.replace("_", "-")}`}>
+      <Icon name={statusIcons[status]} className="status-chip__icon" />
+      <span className="status-chip__label">{t(`status.${status}`)}</span>
     </span>
   );
 }
