@@ -618,8 +618,7 @@ export const id: Messages = {
   "detail.adjustTracked": "Tercatat oleh sesi",
   "detail.adjustCurrent": "Penyesuaian saat ini",
   "detail.adjustMinutes": "Penyesuaian dalam menit",
-  "detail.adjustHint":
-    "Menit negatif mengurangi. Total tidak pernah di bawah nol.",
+  "detail.adjustHint": "Menit negatif mengurangi. Total tidak pernah di bawah nol.",
   "detail.adjustInvalid": "Masukkan jumlah menit bulat.",
   "detail.chapters": "Bab",
   "detail.chaptersEmpty": "Belum ada bab. Deteksi bab datang di fase berikutnya.",
@@ -848,8 +847,7 @@ export const id: Messages = {
     "Diurutkan terhadap 49.953 novel berdeskripsi di VNDB. Sebagian besar belum kamu miliki.",
   "catalog.owned": "Sudah di koleksimu",
   "catalog.none": "Tidak ada yang cukup mirip",
-  "catalog.noneBody":
-    "Tidak ada entri katalog yang cukup mirip untuk disarankan.",
+  "catalog.noneBody": "Tidak ada entri katalog yang cukup mirip untuk disarankan.",
   "catalog.missingBody":
     "Katalog VNDB belum diunduh, jadi game ini hanya bisa dibandingkan dengan koleksimu sendiri.",
   "catalog.missingHow":
@@ -866,8 +864,7 @@ export const id: Messages = {
     "Game ini belum disiapkan untuk perbandingan. Prosesnya sebentar dan tetap di perangkatmu.",
   "similar.index": "Siapkan perbandingan",
   "similar.none": "Tidak ada yang cukup mirip",
-  "similar.noneBody":
-    "Tidak ada game di koleksimu yang cukup mirip untuk disarankan.",
+  "similar.noneBody": "Tidak ada game di koleksimu yang cukup mirip untuk disarankan.",
   "similar.modelTitle": "Model pembanding",
   "similar.modelMissing":
     "Model pembanding belum diunduh, jadi belum ada yang bisa dibandingkan. Ukurannya sekitar 330 MB dan berjalan offline.",
@@ -940,7 +937,8 @@ export const id: Messages = {
   "review.shareTitle": "Bagikan rekap {{year}}",
   "review.shareAction": "Bagikan gambar",
   "review.saveImage": "Simpan gambar",
-  "review.shareHint": "PNG 1080 x 1350, dibuat di perangkat ini. Tidak ada yang diunggah.",
+  "review.shareHint":
+    "PNG 1080 x 1350, dibuat di perangkat ini. Tidak ada yang diunggah.",
   "review.shareSaved": "Gambar tersimpan.",
   "review.shareEyebrow": "REKAP TAHUNAN",
   "review.shareSubline": "{{days}} · {{sessions}}",
@@ -993,7 +991,8 @@ export const id: Messages = {
   "timeline.title": "Lini Masa",
   "timeline.loading": "Memuat log baca",
   "timeline.emptyTitle": "Log bacamu dimulai dari sesi pertama",
-  "timeline.emptyBody": "Sesi, catatan jurnal, akhir yang dicapai, dan game yang selesai dari semua game akan muncul di sini sebagai satu lini masa.",
+  "timeline.emptyBody":
+    "Sesi, catatan jurnal, akhir yang dicapai, dan game yang selesai dari semua game akan muncul di sini sebagai satu lini masa.",
   "timeline.errorTitle": "Lini masa gagal dimuat",
   "timeline.loadOlder": "Kejadian lebih lama",
   "timeline.eventSession": "Membaca selama {{time}}",
@@ -1011,7 +1010,8 @@ export const id: Messages = {
 
   "settings.betaTitle": "Fitur Beta",
   "settings.betaLabel": "Aktifkan fitur Beta",
-  "settings.betaHint": "Tampilkan Teman baca, Rekomendasi (pencarian VN dengan kunci API), dan Chat VN, beserta pengaturannya. Nonaktif secara bawaan. Menonaktifkan ini menjeda teman baca tanpa menghapus pengaturan dan riwayat tersimpan.",
+  "settings.betaHint":
+    "Tampilkan Teman baca, Rekomendasi (pencarian VN dengan kunci API), dan Chat VN, beserta pengaturannya. Nonaktif secara bawaan. Menonaktifkan ini menjeda teman baca tanpa menghapus pengaturan dan riwayat tersimpan.",
   "settings.betaOn": "Aktif",
   "settings.betaOff": "Nonaktif",
   "settings.betaSaving": "Menyimpan…",
@@ -1188,7 +1188,8 @@ export const id: Messages = {
   "settings.presenceSave": "Simpan pengaturan presence",
   "settings.presenceSaved": "Pengaturan presence tersimpan",
   "settings.presenceResetDefaults": "Kembalikan format bawaan",
-  "settings.presenceDefaultsRestored": "Format bawaan dikembalikan (klik Simpan untuk menerapkan)",
+  "settings.presenceDefaultsRestored":
+    "Format bawaan dikembalikan (klik Simpan untuk menerapkan)",
   "settings.presenceDiscordToken": "Token Pengguna Discord",
   "settings.presenceDiscordTokenHint":
     "Diperlukan di Android untuk berkomunikasi langsung dengan Discord Gateway.",
@@ -1469,8 +1470,7 @@ export const id: Messages = {
   "taste.studios": "Studio",
   "taste.staff": "Penulis & ilustrator",
   "taste.voices": "Pengisi suara",
-  "taste.hintRefresh":
-    "Segarkan detail VNDB game dari halamannya untuk mengisinya.",
+  "taste.hintRefresh": "Segarkan detail VNDB game dari halamannya untuk mengisinya.",
   "taste.noThemes": "Belum cukup kesamaan",
   "taste.noThemesBody":
     "Belum ada tema atau kreator yang dimiliki setidaknya dua game-mu. Tambah beberapa game lagi, atau hubungkan ke VNDB, nanti akan terisi.",
@@ -1502,17 +1502,25 @@ export const id: Messages = {
   "vnchat.personaHint":
     "Cara pendamping bicara. Fakta, sumber, dan aturan spoiler sama untuk semuanya.",
   "vnchat.persona.companion": "Pendamping",
-  "vnchat.persona.kawaii": "Kawaii (Imut)",
+  "vnchat.persona.kawaii": "Kawaii",
   "vnchat.persona.analyst": "Analis",
   "vnchat.persona.playful": "Ceria",
   "vnchat.persona.concise": "Ringkas",
   "vnchat.hookStatus": "Text Hook",
-  "vnchat.hookConnected": "Terhubung ({count} baris)",
+  "vnchat.hookConnected": "Terhubung ({{count}} baris)",
   "vnchat.hookDisconnected": "Terputus",
   "vnchat.hookHintActive": "LunaTranslator aktif mengirim teks langsung ke obrolan.",
   "vnchat.hookHintInactive":
     "LunaTranslator belum terhubung. Pastikan layanan jaringan aktif di port 2333.",
-  "vnchat.online": "Izinkan sumber online untuk chat ini",
+  "vnchat.digestStatus": "Ringkasan Skrip",
+  "vnchat.digestReady": "Siap",
+  "vnchat.digestProgress": "{{done}}/{{total}} bagian",
+  "vnchat.digestNone": "Belum diimpor",
+  "vnchat.digestHintAll":
+    "Asisten dapat mengutip ringkasan cerita yang telah dipadatkan untuk VN ini.",
+  "vnchat.digestHintLocked":
+    "Pilih “Izinkan semua spoiler” pada obrolan baru agar asisten dapat mengutip ringkasan skrip penuh.",
+  "vnchat.online": "Izinkan sumber online untuk obrolan ini",
   "vnchat.onlineHint":
     "Pencarian VNDB gratis. Pencarian web memakai kunci dan kredit Tavily kamu; sumber bisa berisi spoiler.",
   "vnchat.onlineRestricted":
@@ -1524,34 +1532,37 @@ export const id: Messages = {
   "vnchat.emptyTitle": "Lagi baca apa?",
   "vnchat.emptyBody":
     "Tanya soal backlog, bandingkan tema, atau tempel kutipan untuk dibahas. Konteks bacaan menentukan informasi yang boleh digunakan asisten.",
-  "vnchat.prompt.library": "Game apa di library-ku yang belum tamat?",
+  "vnchat.prompt.library": "Game apa di koleksiku yang belum tamat?",
   "vnchat.prompt.story": "Jelaskan premis VN ini tanpa spoiler.",
+  "vnchat.prompt.storyGeneral":
+    "Rekomendasikan visual novel dari koleksiku untuk dibaca berikutnya.",
   "vnchat.prompt.taste": "Tema apa yang paling sering muncul di koleksiku?",
   "vnchat.older": "Tampilkan pesan sebelumnya",
+  "vnchat.jumpLatest": "Ke pesan terbaru",
   "vnchat.needProvider": "Atur model yang mendukung function calling untuk mulai chat.",
   "vnchat.retry": "Coba ulang jawaban terakhir",
   "vnchat.message": "Pesan kamu",
-  "vnchat.placeholder": "Tanya tentang VN, library, atau tempel kutipan cerita…",
+  "vnchat.placeholder": "Tanya tentang VN, koleksi, atau tempel kutipan cerita…",
   "vnchat.sendHint": "Ctrl/⌘ + Enter untuk kirim · Enter untuk baris baru",
   "vnchat.stop": "Hentikan",
   "vnchat.send": "Kirim",
   "vnchat.accuracyLabel": "AI bisa salah",
   "vnchat.accuracy":
-    "Periksa sumber: app tidak memiliki naskah VN lengkap. Penyaringan spoiler tidak menjamin semua kalimat jawaban aman.",
+    "Periksa sumber: kecuali kamu mengimpor dan memadatkan ringkasan skrip, aplikasi hanya mengandalkan metadata serta baris text hook langsung. Penyaringan spoiler tidak menjamin semua kalimat jawaban aman.",
   "vnchat.you": "Kamu",
   "vnchat.assistant": "VN Asyik",
   "vnchat.thinking": "Membaca pertanyaanmu…",
   "vnchat.sources": "Sumber ({{count}})",
-  "vnchat.librarySource": "Data library lokal",
+  "vnchat.librarySource": "Data koleksi lokal",
   "vnchat.tokens": "{{count}} token penyedia",
   "vnchat.stopped": "Dihentikan. Jawaban ini belum lengkap.",
   "vnchat.stoppedEmpty": "Dihentikan sebelum ada jawaban yang ditulis.",
   "vnchat.failedPartial": "Permintaan gagal. Teks di atas belum lengkap.",
   "vnchat.tools": "Aktivitas tool",
   "vnchat.askGame": "Bahas VN ini",
-  "vnchat.tool.library": "Mencari di library",
+  "vnchat.tool.library": "Mencari di koleksi",
   "vnchat.tool.game": "Membaca detail game",
-  "vnchat.tool.stats": "Menghitung statistik library",
+  "vnchat.tool.stats": "Menghitung statistik koleksi",
   "vnchat.tool.history": "Membaca riwayat bermain",
   "vnchat.tool.taste": "Membaca tema koleksi",
   "vnchat.tool.vndb": "Mencari di VNDB",
@@ -1566,7 +1577,7 @@ export const id: Messages = {
   "vnchat.error.unknown":
     "Permintaan gagal. Coba lagi atau periksa pengaturan penyedia AI.",
   "vnchat.error.chat_key_missing":
-    "Tambahkan kunci API di Settings atau atur server model lokal.",
+    "Tambahkan kunci API di Pengaturan atau atur server model lokal.",
   "vnchat.error.provider_incompatible":
     "Endpoint menolak permintaan chat. Periksa URL dan model, lalu gunakan model/server yang mendukung function calling dan streaming Chat Completions.",
   "vnchat.error.provider_unauthorized": "Penyedia model menolak kredensial kamu.",
@@ -1579,7 +1590,7 @@ export const id: Messages = {
   "vnchat.error.request_timeout":
     "Jawaban terlalu lama dan dihentikan. Kamu bisa mencoba lagi.",
   "vnchat.error.interrupted":
-    "App tertutup sebelum jawaban selesai. Coba ulang untuk melanjutkan.",
+    "Aplikasi tertutup sebelum jawaban selesai. Coba ulang untuk melanjutkan.",
   "vnchat.error.cancelled": "Jawaban dihentikan.",
   "vnchat.error.token_limit":
     "Model mencapai batas token jawaban. Coba pertanyaan lebih spesifik atau model lain.",
@@ -1607,6 +1618,21 @@ export const id: Messages = {
   "vnchat.error.provider_response_too_large": "Respons penyedia melebihi batas ukuran.",
   "vnchat.error.invalid_provider_json":
     "Penyedia mengirim respons yang tidak dapat dibaca.",
+  "vnchat.error.invalid_provider_response":
+    "Penyedia mengembalikan struktur respons yang tidak sesuai.",
+  "vnchat.error.invalid_provider_utf8":
+    "Penyedia mengirim pengodean teks yang tidak valid.",
+  "vnchat.error.invalid_tool_call":
+    "Model menghasilkan permintaan tool yang tidak valid. Coba ulang jawabannya.",
+  "vnchat.error.tool_arguments_too_large":
+    "Model mengirim argumen tool yang melebihi batas ukuran aman.",
+  "vnchat.error.nothing_to_retry":
+    "Tidak ada jawaban gagal atau terhenti untuk dicoba ulang.",
+  "vnchat.error.invalid_persona": "Pilih kepribadian asisten yang valid.",
+  "vnchat.error.invalid_spoilers": "Pilih mode spoiler yang valid.",
+  "vnchat.error.invalid_language": "Pilih bahasa yang didukung.",
+  "vnchat.error.beta_disabled":
+    "Aktifkan fitur Beta di Pengaturan untuk menggunakan Chat VN.",
   "chat.intro":
     "Tanpa kunci kamu tetap dapat profil selera, dihitung di sini secara gratis. Kunci hanya membuat model menulis ulang kalimatnya, dan profil tetap jadi acuannya.",
   "chat.unsupported":
@@ -1678,14 +1704,14 @@ export const id: Messages = {
   "luna.recent": "Teks yang tertangkap belakangan:",
   "script.title": "Skrip",
   "script.intro":
-    "Impor skrip yang kamu ekstrak sendiri: teks biasa, JSON nama/pesan (VNTP), atau format JSON Asyik. Pilih satu berkas atau beberapa; semuanya digabung sesuai urutan nama berkas. Ringkas sekali dan chat pendamping bisa membahas seluruh ceritanya.",
+    "Gunakan JSON VNTP dengan kolom name dan message. Beberapa file digabung sesuai urutan nama file.",
+  "script.settings": "Format dan pengaturan",
   "script.import": "Impor skrip",
   "script.importing": "Mengimpor",
   "script.imported": "Skrip diimpor",
-  "script.pickTitle": "Pilih berkas skrip",
-  "script.pickFilter": "Berkas skrip",
-  "script.empty":
-    "Belum ada skrip. Ekstrak dari game dengan alatmu sendiri, lalu impor berkas teksnya di sini.",
+  "script.pickTitle": "Pilih file skrip",
+  "script.pickFilter": "Skrip JSON VNTP",
+  "script.empty": "Impor skrip agar VN Chat dan Teman baca bisa membahas ceritanya.",
   "script.kind.plain_text": "Teks biasa",
   "script.kind.json_vntp": "JSON (VNTP)",
   "script.kind.asyik_script": "Skrip Asyik",
@@ -1694,24 +1720,71 @@ export const id: Messages = {
   "script.notSummarized": "Belum diringkas",
   "script.progress": "Diringkas {{done}} dari {{count}} bagian",
   "script.progressAgents": "Diringkas {{done}} dari {{count}} bagian · {{agents}} agen",
+  "script.readyToFinalize": "Semua {{count}} bagian selesai · siap digabungkan",
+  "script.finalizing": "Menggabungkan {{count}} bagian menjadi ringkasan akhir",
   "script.agents": "Agen",
-  "script.agentsHint":
-    "Agen meringkas skrip secara paralel. Mengubah jumlahnya mengulang ringkasan yang belum selesai.",
+  "script.agentsHint": "Agen meringkas bagian skrip secara bersamaan.",
+  "script.agentsResetWarn": "Mengubah jumlahnya mengulang ringkasan yang belum selesai.",
   "script.summarize": "Ringkas",
   "script.summarizeContinue": "Lanjutkan",
+  "script.finalizeDigest": "Selesaikan ringkasan",
   "script.stop": "Hentikan",
+  "script.stopping": "Menghentikan…",
   "script.digestReady": "Ringkasan siap",
   "script.digestOld": "Ringkasan lama",
   "script.rebuild": "Bangun ulang ringkasan",
   "script.rebuildHint":
     "Ringkasan ini dibuat oleh peringkas versi lama. Membangunnya ulang membaca skrip tersimpan sekali lagi dan mempertahankan nama tokoh, urutan cerita, pilihan, dan cabang.",
   "script.remove": "Hapus",
+  "script.confirmRemove": "Konfirmasi hapus",
   "script.deleted": "Skrip dihapus",
   "script.busy": "Ringkasan lain masih berjalan. Coba lagi sebentar.",
-  "script.localOnly":
-    "Skrip tetap di perangkat ini; tidak pernah disinkronkan atau diekspor.",
+  "script.loadFailed": "Gagal memuat daftar skrip tersimpan.",
+  "script.spoilersNote": "Izinkan semua spoiler untuk memakai ringkasan di chat.",
+  "script.providerNote":
+    "Meringkas mengirim teks ke penyedia chat dan bisa dikenai biaya.",
+  "script.localOnly": "Skrip tersimpan tidak ikut sinkronisasi atau cadangan.",
   "script.error.chatKeyMissing":
     "Atur dulu penyedia AI (atau endpoint lokal) di Pengaturan.",
+  "script.error.chatModelMissing":
+    "Pilih model untuk penyedia AI aktif di Pengaturan terlebih dahulu.",
+  "script.error.providerUnauthorized":
+    "Penyedia AI menolak kunci API kamu. Periksa di Pengaturan.",
+  "script.error.providerThrottled":
+    "Penyedia AI sedang membatasi permintaan. Tunggu sebentar lalu lanjutkan.",
+  "script.error.providerOffline":
+    "Tidak dapat menghubungi penyedia AI. Periksa koneksi atau URL endpoint.",
+  "script.error.providerBudgetExhausted":
+    "Model menghabiskan batas token untuk penalaran tanpa menulis jawaban. Coba model tanpa reasoning di Pengaturan.",
+  "script.error.providerTruncated":
+    "Jawaban model terpotong batas token sebelum selesai. Coba klik Lanjutkan lagi.",
+  "script.error.providerEmpty": "Model mengembalikan jawaban kosong.",
+  "script.error.reduceIncomplete":
+    "Semua bagian sudah diringkas, tetapi penggabungan akhir belum selesai. Klik Selesaikan ringkasan untuk mencoba lagi.",
+  "script.error.noFiles": "Tidak ada file skrip yang dipilih.",
+  "script.error.emptyScript": "File yang dipilih tidak berisi baris dialog.",
+  "script.error.invalidUtf8":
+    "File ini bukan teks UTF-8 yang valid. Konversikan ke UTF-8 (misalnya dari Shift-JIS) lalu coba lagi.",
+  "script.error.invalidJson": "File skrip JSON rusak atau terpotong.",
+  "script.error.invalidFormat":
+    'File skrip harus berupa array JSON VNTP berisi objek {"name", "message"}.',
+  "script.error.fileTooLarge":
+    "Total ukuran file yang dipilih melebihi batas impor 64 MB.",
+  "script.error.lineTooLong":
+    "Ada baris dialog yang terlalu panjang untuk diimpor (lebih dari 4.000 karakter).",
+  "script.error.speakerTooLong":
+    "Ada nama pembicara yang terlalu panjang (lebih dari 120 karakter).",
+  "script.error.tooManyLines": "Gabungan skrip melebihi batas impor 300.000 baris.",
+  "script.error.scriptTooLarge":
+    "Skrip ini terpecah menjadi lebih dari 4.096 bagian sehingga tidak bisa diringkas.",
+  "script.error.scriptLimit":
+    "Game ini sudah menyimpan 20 skrip. Hapus salah satu sebelum mengimpor yang baru.",
+  "script.error.scriptMissing": "Skrip tersebut sudah tidak tersimpan.",
+  "script.error.readFailed": "Gagal membaca salah satu file skrip yang dipilih.",
+  "script.error.agentSettingsInvalid":
+    "Pengaturan jumlah agen tidak terbaca. Pilih ulang jumlahnya untuk mereset.",
+  "script.error.betaDisabled":
+    "Aktifkan fitur Beta di Pengaturan untuk mengimpor atau meringkas skrip.",
   "walkthrough.title": "Walkthrough",
   "walkthrough.intro":
     "Panduan rute visual novel dari Seiya-Saiga (seiya-saiga.com). Centang pilihan yang sudah kamu lewati seiring berjalannya cerita.",
@@ -1759,7 +1832,8 @@ export const id: Messages = {
     "Tidak ada judul yang cocok di Seiya-Saiga. Coba kata kunci lain atau gunakan URL manual.",
   "walkthrough.select": "Ambil",
   "walkthrough.orManualUrl": "atau masukkan URL manual",
-  "walkthrough.autoSearchTip": "Mencari di katalog Seiya-Saiga (PC 18+, All-ages, Konsol).",
+  "walkthrough.autoSearchTip":
+    "Mencari di katalog Seiya-Saiga (PC 18+, All-ages, Konsol).",
   "update.title": "Pembaruan",
   "update.intro":
     "Build ini memeriksa halaman rilis sekali tiap dibuka. Tidak ada yang diunduh sebelum kamu minta.",
@@ -1790,6 +1864,7 @@ export const id: Messages = {
   "screenshot.count_one": "1 screenshot",
   "screenshot.count_other": "{{count}} screenshot",
   "screenshot.capture": "Screenshot",
+  "screenshot.shortcutHint": "Screenshot (Shift+S saat jendela game aktif)",
   "screenshot.captured": "Screenshot tersimpan",
   "screenshot.delete": "Hapus",
   "screenshot.open": "Buka screenshot dari {{date}}",
@@ -1799,17 +1874,20 @@ export const id: Messages = {
   "screenshot.source.android_screen": "seluruh layar",
   "screenshot.reason.screenshot_no_game":
     "Jalankan game dari aplikasi dulu; screenshot harus dimiliki sebuah game.",
-  "screenshot.reason.screenshot_unsupported": "Perekaman layar tidak tersedia di platform ini.",
+  "screenshot.reason.screenshot_unsupported":
+    "Perekaman layar tidak tersedia di platform ini.",
   "screenshot.error.screenshot_no_game": "Tidak ada game yang sedang dilacak.",
   "screenshot.error.screenshot_window_unavailable":
     "Jendela game tidak bisa direkam. Mungkin diperkecil, ditutup, atau diganti.",
   "screenshot.error.screenshot_protected":
     "Jendela ini dilindungi dari perekaman, jadi gambarnya akan kosong.",
-  "screenshot.error.screenshot_timeout": "Game tidak menggambar frame tepat waktu. Coba lagi.",
+  "screenshot.error.screenshot_timeout":
+    "Game tidak menggambar frame tepat waktu. Coba lagi.",
   "screenshot.error.screenshot_encode": "Frame hasil rekaman tidak bisa disimpan.",
   "screenshot.error.screenshot_io": "File screenshot tidak bisa ditulis.",
   "screenshot.error.screenshot_failed": "Screenshot tidak bisa diambil.",
-  "screenshot.error.screenshot_unsupported": "Perekaman layar tidak tersedia di platform ini.",
+  "screenshot.error.screenshot_unsupported":
+    "Perekaman layar tidak tersedia di platform ini.",
   "appearance.intro":
     "Tema menentukan permukaan, teks, dan bentuk; aksen mewarnai tombol, chip, dan grafik; gambar latar menggantikan sapuan artwork di belakang semua layar. Semuanya disimpan di perangkat ini.",
   "appearance.theme": "Tema",
@@ -1837,7 +1915,8 @@ export const id: Messages = {
   "appearance.glassHint":
     "Makin rendah makin ringan digambar dan makin mudah dibaca di ponsel. Transparansi dikurangi tetap menimpanya.",
   "appearance.themeShare": "Bagikan tema ini",
-  "appearance.themeShareHint": "File tema hanya berisi warna dan bentuk, bukan pustakamu.",
+  "appearance.themeShareHint":
+    "File tema hanya berisi warna dan bentuk, bukan pustakamu.",
   "appearance.themeExport": "Ekspor tema",
   "appearance.themeImport": "Impor tema",
   "appearance.themeExported": "File tema tersimpan",
@@ -2297,4 +2376,7 @@ export const id: Messages = {
   "companion.error.vision_invalid_reaction":
     "Tanggapan otomatis tidak valid dan tidak ditampilkan.",
   "companion.error.vision_limit": "Batas panggilan otomatis tercapai.",
+  "companion.error.beta_disabled": "Fitur beta dinonaktifkan di Pengaturan.",
+  "companion.error.chat_model_missing":
+    "Masukkan nama model di Pengaturan sebelum memakai teman baca.",
 };

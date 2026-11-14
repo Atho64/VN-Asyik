@@ -615,8 +615,7 @@ export const en = {
   "detail.adjustTracked": "Tracked by sessions",
   "detail.adjustCurrent": "Current adjustment",
   "detail.adjustMinutes": "Adjustment in minutes",
-  "detail.adjustHint":
-    "Negative minutes subtract. The total never goes below zero.",
+  "detail.adjustHint": "Negative minutes subtract. The total never goes below zero.",
   "detail.adjustInvalid": "Enter a whole number of minutes.",
   "detail.chapters": "Chapters",
   "detail.chaptersEmpty": "No chapters yet. Chapter detection arrives in a later phase.",
@@ -845,8 +844,7 @@ export const en = {
     "Ranked against all 49,953 described novels on VNDB. Most you will not own.",
   "catalog.owned": "In your library",
   "catalog.none": "Nothing close enough",
-  "catalog.noneBody":
-    "No catalogue entry reads similarly enough to suggest.",
+  "catalog.noneBody": "No catalogue entry reads similarly enough to suggest.",
   "catalog.missingBody":
     "The VNDB catalogue is not downloaded, so this game can only be compared against your own library.",
   "catalog.missingHow":
@@ -863,8 +861,7 @@ export const en = {
     "This game has not been prepared for comparison. Preparing takes a moment and stays on your device.",
   "similar.index": "Prepare comparisons",
   "similar.none": "Nothing close enough",
-  "similar.noneBody":
-    "No game in your library reads similarly enough to suggest.",
+  "similar.noneBody": "No game in your library reads similarly enough to suggest.",
   "similar.modelTitle": "Comparison model",
   "similar.modelMissing":
     "The comparison model is not downloaded, so nothing can be compared yet. It is about 330 MB and runs offline.",
@@ -990,7 +987,8 @@ export const en = {
   "timeline.title": "Timeline",
   "timeline.loading": "Loading reading log",
   "timeline.emptyTitle": "Your reading log starts with a first session",
-  "timeline.emptyBody": "Sessions, journal notes, endings and finished games from every game will appear here as one feed.",
+  "timeline.emptyBody":
+    "Sessions, journal notes, endings and finished games from every game will appear here as one feed.",
   "timeline.errorTitle": "The timeline could not be loaded",
   "timeline.loadOlder": "Older events",
   "timeline.eventSession": "Read for {{time}}",
@@ -1008,7 +1006,8 @@ export const en = {
 
   "settings.betaTitle": "Beta features",
   "settings.betaLabel": "Enable Beta features",
-  "settings.betaHint": "Show Companion, Recommendations (VN search with an API key), and VN Chat, plus their setup tools. Off by default. Turning this off pauses the companion and keeps your saved settings and history.",
+  "settings.betaHint":
+    "Show Companion, Recommendations (VN search with an API key), and VN Chat, plus their setup tools. Off by default. Turning this off pauses the companion and keeps your saved settings and history.",
   "settings.betaOn": "On",
   "settings.betaOff": "Off",
   "settings.betaSaving": "Saving…",
@@ -1185,7 +1184,8 @@ export const en = {
   "settings.presenceSave": "Save presence settings",
   "settings.presenceSaved": "Presence settings saved",
   "settings.presenceResetDefaults": "Reset formatting to defaults",
-  "settings.presenceDefaultsRestored": "Default formatting restored (click Save to apply)",
+  "settings.presenceDefaultsRestored":
+    "Default formatting restored (click Save to apply)",
   "settings.presenceDiscordToken": "Discord User Token",
   "settings.presenceDiscordTokenHint":
     "Required on Android to communicate directly with Discord Gateway.",
@@ -1501,11 +1501,19 @@ export const en = {
   "vnchat.persona.playful": "Playful",
   "vnchat.persona.concise": "Concise",
   "vnchat.hookStatus": "Text Hook",
-  "vnchat.hookConnected": "Connected ({count} lines)",
+  "vnchat.hookConnected": "Connected ({{count}} lines)",
   "vnchat.hookDisconnected": "Disconnected",
   "vnchat.hookHintActive": "LunaTranslator is streaming live dialogue into the chat.",
   "vnchat.hookHintInactive":
     "LunaTranslator is not connected. Make sure the network service is enabled at port 2333.",
+  "vnchat.digestStatus": "Script Digest",
+  "vnchat.digestReady": "Ready",
+  "vnchat.digestProgress": "{{done}}/{{total}} chunks",
+  "vnchat.digestNone": "Not imported",
+  "vnchat.digestHintAll":
+    "The assistant can cite the compacted story digest for this VN.",
+  "vnchat.digestHintLocked":
+    "Switch spoilers to “Allow all spoilers” on a new chat so the assistant can cite the full-game script digest.",
   "vnchat.online": "Allow online sources for this chat",
   "vnchat.onlineHint":
     "VNDB lookup is free. Web search uses your Tavily key and credits; sources may contain spoilers.",
@@ -1520,8 +1528,10 @@ export const en = {
     "Ask about your backlog, compare themes, or paste a passage to discuss. Your reading context controls which information the assistant can use.",
   "vnchat.prompt.library": "Which games in my library are unfinished?",
   "vnchat.prompt.story": "Explain this VN’s premise without spoilers.",
+  "vnchat.prompt.storyGeneral": "Recommend a visual novel from my library to read next.",
   "vnchat.prompt.taste": "What themes appear most in my collection?",
   "vnchat.older": "Show earlier messages",
+  "vnchat.jumpLatest": "Jump to latest",
   "vnchat.needProvider": "Set up a model with function calling to start chatting.",
   "vnchat.retry": "Retry last answer",
   "vnchat.message": "Your message",
@@ -1531,7 +1541,7 @@ export const en = {
   "vnchat.send": "Send",
   "vnchat.accuracyLabel": "AI can make mistakes",
   "vnchat.accuracy":
-    "Check sources: the app does not have full VN scripts. Spoiler filtering cannot guarantee every generated sentence is safe.",
+    "Check sources: unless you import and compact a script digest, the app relies on metadata and live text hook lines. Spoiler filtering cannot guarantee every generated sentence is safe.",
   "vnchat.you": "You",
   "vnchat.assistant": "VN Asyik",
   "vnchat.thinking": "Reading your question…",
@@ -1601,6 +1611,18 @@ export const en = {
   "vnchat.error.provider_response_too_large":
     "The provider response exceeded the safety size limit.",
   "vnchat.error.invalid_provider_json": "The provider sent an unreadable response.",
+  "vnchat.error.invalid_provider_response":
+    "The provider returned an unexpected response structure.",
+  "vnchat.error.invalid_provider_utf8": "The provider sent invalid text encoding.",
+  "vnchat.error.invalid_tool_call":
+    "The model produced an invalid tool request. Retry the answer.",
+  "vnchat.error.tool_arguments_too_large":
+    "The model sent tool arguments that exceeded the safety size limit.",
+  "vnchat.error.nothing_to_retry": "There is no failed or stopped answer to retry.",
+  "vnchat.error.invalid_persona": "Select a valid assistant personality.",
+  "vnchat.error.invalid_spoilers": "Select a valid spoiler mode.",
+  "vnchat.error.invalid_language": "Select a supported language.",
+  "vnchat.error.beta_disabled": "Enable Beta features in Settings to use VN Chat.",
   "chat.intro":
     "Without a key you still get the taste profile, computed here for free. A key only lets a model rephrase it, and the profile stays the source of truth.",
   "chat.unsupported":
@@ -1672,14 +1694,14 @@ export const en = {
   "luna.recent": "Recently captured text:",
   "script.title": "Script",
   "script.intro":
-    "Import scripts you extracted yourself: plain text, name/message JSON (VNTP), or the Asyik JSON format. Pick one file or several; they are combined in file-name order. Summarize once and the companion chat can discuss the whole story.",
+    "Use VNTP JSON with name and message fields. Multiple files are combined in file-name order.",
+  "script.settings": "Format and settings",
   "script.import": "Import script",
   "script.importing": "Importing",
   "script.imported": "Script imported",
   "script.pickTitle": "Choose script files",
-  "script.pickFilter": "Script files",
-  "script.empty":
-    "No script imported yet. Extract one from the game with your own tools, then import the text file here.",
+  "script.pickFilter": "VNTP JSON script",
+  "script.empty": "Import a script so VN Chat and Companion can discuss the story.",
   "script.kind.plain_text": "Plain text",
   "script.kind.json_vntp": "JSON (VNTP)",
   "script.kind.asyik_script": "Asyik script",
@@ -1688,23 +1710,70 @@ export const en = {
   "script.notSummarized": "Not summarized",
   "script.progress": "Summarized {{done}} of {{count}} chunks",
   "script.progressAgents": "Summarized {{done}} of {{count}} chunks · {{agents}} agents",
+  "script.readyToFinalize": "All {{count}} chunks summarized · ready to combine",
+  "script.finalizing": "Combining {{count}} summarized chunks into final digest",
   "script.agents": "Agents",
-  "script.agentsHint":
-    "Agents summarize the script in parallel. Changing the count restarts an unfinished summary.",
+  "script.agentsHint": "Agents summarize parts of the script in parallel.",
+  "script.agentsResetWarn": "Changing the count restarts unfinished summaries.",
   "script.summarize": "Summarize",
   "script.summarizeContinue": "Continue",
+  "script.finalizeDigest": "Finalize digest",
   "script.stop": "Stop",
+  "script.stopping": "Stopping…",
   "script.digestReady": "Digest ready",
   "script.digestOld": "Older digest",
   "script.rebuild": "Rebuild digest",
   "script.rebuildHint":
     "This digest was written by an older summarizer. Rebuilding reads the stored script again and keeps character names, chronology, choices and branches.",
   "script.remove": "Remove",
+  "script.confirmRemove": "Confirm remove",
   "script.deleted": "Script removed",
   "script.busy": "Another summary run is still finishing. Try again in a moment.",
-  "script.localOnly": "Scripts stay on this device; they are never synced or exported.",
+  "script.loadFailed": "Could not load imported scripts.",
+  "script.spoilersNote": "Enable all spoilers to use the summary in chat.",
+  "script.providerNote":
+    "Summarizing sends text to your chat provider; usage charges may apply.",
+  "script.localOnly": "Saved scripts are excluded from sync and backups.",
   "script.error.chatKeyMissing":
     "Set an AI provider (or a local endpoint) in Settings first.",
+  "script.error.chatModelMissing":
+    "Choose a model for the active AI provider in Settings first.",
+  "script.error.providerUnauthorized":
+    "The AI provider rejected your API key. Check it in Settings.",
+  "script.error.providerThrottled":
+    "The AI provider is rate limiting requests. Wait a moment and continue.",
+  "script.error.providerOffline":
+    "Could not reach the AI provider. Check your connection or endpoint URL.",
+  "script.error.providerBudgetExhausted":
+    "The model used its reply budget on reasoning without answering. Try a non-reasoning model in Settings.",
+  "script.error.providerTruncated":
+    "The model hit its token limit before finishing a complete summary. Try Continue again.",
+  "script.error.providerEmpty": "The model returned an empty reply.",
+  "script.error.reduceIncomplete":
+    "All chunks are summarized, but combining the final digest did not finish. Click Finalize digest to retry.",
+  "script.error.noFiles": "No script files were selected.",
+  "script.error.emptyScript": "The selected file contains no dialogue lines.",
+  "script.error.invalidUtf8":
+    "This file is not valid UTF-8 text. Convert it to UTF-8 (for example from Shift-JIS) and try again.",
+  "script.error.invalidJson": "The JSON script file is malformed or truncated.",
+  "script.error.invalidFormat":
+    'The file must be a VNTP JSON array of {"name", "message"} objects.',
+  "script.error.fileTooLarge": "The selected files exceed the 64 MB script import limit.",
+  "script.error.lineTooLong":
+    "A dialogue line is too long to import cleanly (over 4,000 characters).",
+  "script.error.speakerTooLong": "A speaker name is too long (over 120 characters).",
+  "script.error.tooManyLines":
+    "The combined script exceeds the 300,000-line import limit.",
+  "script.error.scriptTooLarge":
+    "This script splits into more than 4,096 chunks and cannot be summarized.",
+  "script.error.scriptLimit":
+    "This game already has 20 imported scripts. Remove one before importing another.",
+  "script.error.scriptMissing": "That script is no longer stored.",
+  "script.error.readFailed": "Could not read one of the selected script files.",
+  "script.error.agentSettingsInvalid":
+    "Saved agent count could not be read. Pick a count again to reset it.",
+  "script.error.betaDisabled":
+    "Enable Beta features in Settings to import or summarize scripts.",
   "walkthrough.title": "Walkthrough",
   "walkthrough.intro":
     "Visual novel route walkthroughs from Seiya-Saiga (seiya-saiga.com). Check off choices as you progress through each route.",
@@ -1753,7 +1822,8 @@ export const en = {
     "No matching titles found on Seiya-Saiga. Try another keyword or use a manual URL.",
   "walkthrough.select": "Fetch",
   "walkthrough.orManualUrl": "or enter a manual URL",
-  "walkthrough.autoSearchTip": "Searches Seiya-Saiga's catalog (PC 18+, All-ages, Console).",
+  "walkthrough.autoSearchTip":
+    "Searches Seiya-Saiga's catalog (PC 18+, All-ages, Console).",
   "update.title": "Updates",
   "update.intro":
     "This build checks the release page once per launch. Nothing is downloaded until you ask.",
@@ -1783,6 +1853,7 @@ export const en = {
   "screenshot.count_one": "1 screenshot",
   "screenshot.count_other": "{{count}} screenshots",
   "screenshot.capture": "Screenshot",
+  "screenshot.shortcutHint": "Screenshot (Shift+S while the game is focused)",
   "screenshot.captured": "Screenshot saved",
   "screenshot.delete": "Delete",
   "screenshot.open": "Open the screenshot from {{date}}",
@@ -1792,17 +1863,20 @@ export const en = {
   "screenshot.source.android_screen": "whole screen",
   "screenshot.reason.screenshot_no_game":
     "Start a game from the app first; a screenshot needs a game to belong to.",
-  "screenshot.reason.screenshot_unsupported": "Capturing is not available on this platform.",
+  "screenshot.reason.screenshot_unsupported":
+    "Capturing is not available on this platform.",
   "screenshot.error.screenshot_no_game": "No game is being tracked.",
   "screenshot.error.screenshot_window_unavailable":
     "The game window could not be captured. It may be minimised, closed, or replaced.",
   "screenshot.error.screenshot_protected":
     "This window is protected from capture, so the picture would be blank.",
-  "screenshot.error.screenshot_timeout": "The game did not draw a frame in time. Try again.",
+  "screenshot.error.screenshot_timeout":
+    "The game did not draw a frame in time. Try again.",
   "screenshot.error.screenshot_encode": "The captured frame could not be saved.",
   "screenshot.error.screenshot_io": "The screenshot file could not be written.",
   "screenshot.error.screenshot_failed": "The screenshot could not be taken.",
-  "screenshot.error.screenshot_unsupported": "Capturing is not available on this platform.",
+  "screenshot.error.screenshot_unsupported":
+    "Capturing is not available on this platform.",
   "appearance.intro":
     "A theme sets the surfaces, text and shape; the accent recolours buttons, chips and charts; a background image replaces the artwork wash behind every screen. All of it is stored on this device.",
   "appearance.theme": "Theme",
@@ -1830,7 +1904,8 @@ export const en = {
   "appearance.glassHint":
     "Lower values cost less to draw and are easier to read on a phone. Reduced transparency still overrides this.",
   "appearance.themeShare": "Share this theme",
-  "appearance.themeShareHint": "A theme file carries colours and shape only, never your library.",
+  "appearance.themeShareHint":
+    "A theme file carries colours and shape only, never your library.",
   "appearance.themeExport": "Export theme",
   "appearance.themeImport": "Import theme",
   "appearance.themeExported": "Theme file saved",
@@ -2042,8 +2117,7 @@ export const en = {
   "memory.search": "Search memories",
   "memory.filter": "Show scope",
   "memory.allScopes": "All saved scopes",
-  "memory.empty":
-    "No saved memories match. Add a preference or observation above.",
+  "memory.empty": "No saved memories match. Add a preference or observation above.",
   "memory.evidence.reader": "Reader authored",
   "memory.evidence.passage": "Reader passage",
   "memory.evidence.inference": "Derived / may be speculative",
@@ -2284,6 +2358,9 @@ export const en = {
   "companion.error.vision_invalid_reaction":
     "The automatic response was invalid and was not shown.",
   "companion.error.vision_limit": "Automatic request limit reached.",
+  "companion.error.beta_disabled": "Beta features are disabled in Settings.",
+  "companion.error.chat_model_missing":
+    "Enter a model name in Settings before starting a companion turn.",
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -199,5 +199,25 @@ describe("copy hygiene", () => {
     for (const [key, value] of Object.entries(en)) {
       expect(emoji.test(value), `en:${key}`).toBe(false);
     }
+    for (const [key, value] of Object.entries(id)) {
+      expect(emoji.test(value), `id:${key}`).toBe(false);
+    }
+  });
+
+  it("never uses single-brace interpolation in vnchat, script, or companion keys", () => {
+    const singleBrace = /(?<!\{)\{[a-zA-Z_]\w*\}(?!\})/;
+    const scoped = (key: string) =>
+      key.startsWith("vnchat.") ||
+      key.startsWith("script.") ||
+      key.startsWith("companion.") ||
+      key.startsWith("vision.");
+    for (const [key, value] of Object.entries(en)) {
+      if (!scoped(key)) continue;
+      expect(singleBrace.test(value), `en:${key}`).toBe(false);
+    }
+    for (const [key, value] of Object.entries(id)) {
+      if (!scoped(key)) continue;
+      expect(singleBrace.test(value), `id:${key}`).toBe(false);
+    }
   });
 });

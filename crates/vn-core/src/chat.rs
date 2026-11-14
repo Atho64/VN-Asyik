@@ -426,6 +426,34 @@ impl CompletionStream {
         Ok(deltas)
     }
 
+    pub fn finish_eof(&mut self) -> Result<Vec<String>, String> {
+        let mut deltas = Vec::new();
+        if !self.buffer.is_empty() {
+            let raw: Vec<u8> = std::mem::take(&mut self.buffer);
+            let line = std::str::from_utf8(&raw)
+                .map_err(|_| "invalid_provider_utf8")?
+                .trim_end_matches(['\r', '\n']);
+            if let Some(data) = line.strip_prefix("data:") {
+                self.data.push(data.trim_start().to_owned());
+                if self.data.iter().map(String::len).sum::<usize>() > 262_144 {
+                    return Err("provider_response_too_large".into());
+                }
+            }
+        }
+        if !self.data.is_empty() {
+            let data = self.data.join("\n");
+            self.data.clear();
+            if data == "[DONE]" {
+                self.done = true;
+            } else {
+                deltas.extend(self.chunk(
+                    &serde_json::from_str::<Value>(&data).map_err(|_| "invalid_provider_json")?,
+                )?);
+            }
+        }
+        Ok(deltas)
+    }
+
     pub fn chunk(&mut self, value: &Value) -> Result<Vec<String>, String> {
         if value.get("error").is_some() {
             return Err("provider_error".into());
@@ -441,10 +469,12 @@ impl CompletionStream {
             if let Some(reason) = choice["finish_reason"].as_str() {
                 self.finish = Some(reason.into());
             }
-            let delta = choice
-                .get("delta")
-                .or_else(|| choice.get("message"))
-                .ok_or("invalid_provider_response")?;
+            let Some(delta) = choice.get("delta").or_else(|| choice.get("message")) else {
+                if choice.get("finish_reason").is_some() {
+                    continue;
+                }
+                return Err("invalid_provider_response".into());
+            };
             if let Some(text) = delta["content"].as_str() {
                 self.content.push_str(text);
                 deltas.push(text.to_owned());
@@ -528,7 +558,7 @@ impl CompletionStream {
         if let Some(index) = call["index"].as_u64().and_then(|n| usize::try_from(n).ok()) {
             return index;
         }
-        if let Some(id) = call["id"].as_str() {
+        if let Some(id) = call["id"].as_str().filter(|id| !id.is_empty()) {
             if let Some((slot, _)) = self.calls.iter().find(|(_, held)| held.id == id) {
                 return *slot;
             }
@@ -876,5 +906,24 @@ mod tests {
         assert_eq!(stream.validate_finished().unwrap_err(), "token_limit");
         stream.finish = None;
         assert!(stream.validate_finished().is_err());
+    }
+
+    #[test]
+    fn finish_eof_flushes_unterminated_sse_and_empty_tool_ids_merge() {
+        let mut stream = CompletionStream::default();
+        stream
+            .push(b"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_a\",\"function\":{\"name\":\"library_stats\",\"arguments\":\"{\"}}]}}]}\n\n")
+            .unwrap();
+        stream
+            .push(b"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"\",\"function\":{\"arguments\":\"}\"}}]}}]}\n\n")
+            .unwrap();
+        stream
+            .push(b"data: {\"choices\":[{\"finish_reason\":\"tool_calls\"}],\"usage\":{\"total_tokens\":42}}")
+            .unwrap();
+        stream.finish_eof().unwrap();
+        stream.validate_finished().unwrap();
+        assert_eq!(stream.calls.len(), 1);
+        assert_eq!(stream.calls[&0].function.arguments, "{}");
+        assert_eq!(stream.tokens, Some(42));
     }
 }

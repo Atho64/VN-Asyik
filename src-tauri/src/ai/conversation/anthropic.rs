@@ -14,7 +14,7 @@ pub async fn complete(
     key: Option<&ChatApiKey>,
     messages: &[Value],
     online: bool,
-    on_delta: &mut impl FnMut(String),
+    on_delta: &mut impl FnMut(String) -> bool,
 ) -> Result<CompletionStream, String> {
     let url = format!("{}/messages", config.base_url.trim_end_matches('/'));
     let (system, turns) = convert(messages)?;
@@ -77,6 +77,19 @@ pub async fn complete(
             apply(&mut stream, &value, &event, on_delta)?;
         }
     }
+    if !buffer.is_empty() {
+        let line = std::str::from_utf8(&buffer)
+            .map_err(|_| "invalid_provider_utf8")?
+            .trim_end_matches(['\r', '\n']);
+        if let Some(data) = line.strip_prefix("data:") {
+            let data = data.trim();
+            if !data.is_empty() && data != "[DONE]" {
+                let value: Value =
+                    serde_json::from_str(data).map_err(|_| "invalid_provider_json")?;
+                apply(&mut stream, &value, &event, on_delta)?;
+            }
+        }
+    }
     if stream.finish.is_none() {
         // A closed connection without `message_stop` is a truncated answer, not a
         // complete one, unless the content and the calls are both whole.
@@ -91,20 +104,25 @@ fn apply(
     stream: &mut CompletionStream,
     value: &Value,
     event: &str,
-    on_delta: &mut impl FnMut(String),
+    on_delta: &mut impl FnMut(String) -> bool,
 ) -> Result<(), String> {
     let kind = value["type"].as_str().unwrap_or(event);
     match kind {
+        "message_start" => {
+            if let Some(tokens) = value["message"]["usage"]["input_tokens"].as_u64() {
+                stream.tokens = Some(stream.tokens.unwrap_or(0).saturating_add(tokens));
+            }
+        }
         "content_block_start" => {
             let index = value["index"]
                 .as_u64()
                 .and_then(|n| usize::try_from(n).ok());
             let block = &value["content_block"];
             if block["type"].as_str() == Some("tool_use") {
-                let index = index.unwrap_or(stream.calls.len());
-                if index >= vn_core::chat::MAX_CALLS {
+                if stream.calls.len() >= vn_core::chat::MAX_CALLS {
                     return Err("tool_limit".into());
                 }
+                let index = index.unwrap_or(stream.calls.len());
                 stream.calls.insert(
                     index,
                     ToolCall {
@@ -131,7 +149,9 @@ fn apply(
                         if stream.content.len() > 64_000 {
                             return Err("provider_response_too_large".into());
                         }
-                        on_delta(text.to_owned());
+                        if !on_delta(text.to_owned()) {
+                            return Err("cancelled".into());
+                        }
                     }
                 }
                 Some("input_json_delta") => {
@@ -274,7 +294,23 @@ pub fn convert(messages: &[Value]) -> Result<(String, Vec<Value>), String> {
                 {
                     continue;
                 }
-                turns.push(json!({"role": "user", "content": text}));
+                if let Some(last) = turns.last_mut()
+                    && last["role"] == "user"
+                {
+                    let mut combined = match last["content"].take() {
+                        Value::Array(blocks) => blocks,
+                        Value::String(s) => vec![json!({"type": "text", "text": s})],
+                        other => vec![other],
+                    };
+                    match text {
+                        Value::Array(blocks) => combined.extend(blocks),
+                        Value::String(s) => combined.push(json!({"type": "text", "text": s})),
+                        other => combined.push(other),
+                    }
+                    last["content"] = Value::Array(combined);
+                } else {
+                    turns.push(json!({"role": "user", "content": text}));
+                }
             }
         }
     }
@@ -366,6 +402,7 @@ mod tests {
             let value: Value = serde_json::from_str(event).expect("event json");
             apply(&mut stream, &value, "", &mut |text: String| {
                 deltas.push(text);
+                true
             })
             .expect("apply");
         }
@@ -396,7 +433,7 @@ mod tests {
         let mut stream = CompletionStream::default();
         for event in events {
             let value: Value = serde_json::from_str(event).expect("event json");
-            apply(&mut stream, &value, "", &mut |_| {}).expect("apply");
+            apply(&mut stream, &value, "", &mut |_| true).expect("apply");
         }
         stream.validate_finished().expect("finished");
         assert_eq!(stream.content, "Done.");
@@ -410,7 +447,7 @@ mod tests {
             serde_json::from_str(r#"{"type":"error","error":{"type":"overloaded_error"}}"#)
                 .expect("event json");
         assert_eq!(
-            apply(&mut stream, &value, "", &mut |_| {}),
+            apply(&mut stream, &value, "", &mut |_| true),
             Err("provider_error".into())
         );
         // A cut-off stream never claims a stop reason, so nobody reads a partial
@@ -420,11 +457,25 @@ mod tests {
             r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"half"}}"#,
         )
         .expect("event json");
-        apply(&mut truncated, &value, "", &mut |_| {}).expect("apply");
+        apply(&mut truncated, &value, "", &mut |_| true).expect("apply");
         assert_eq!(truncated.finish, None);
         assert_eq!(
             truncated.validate_finished(),
             Err("incomplete_response".into())
         );
+    }
+
+    #[test]
+    fn adjacent_user_turns_coalesce_for_messages_api_alternation() {
+        let history = vec![
+            json!({"role": "user", "content": "Automatic companion observation, NOT a reader statement: Scene shifted."}),
+            json!({"role": "user", "content": "Who is speaking?"}),
+        ];
+        let (_, turns) = convert(&history).unwrap();
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0]["role"], "user");
+        let blocks = turns[0]["content"].as_array().expect("coalesced blocks");
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[1]["text"], "Who is speaking?");
     }
 }

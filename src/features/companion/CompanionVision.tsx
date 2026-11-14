@@ -18,9 +18,11 @@ const fullCrop: VisionCrop = { x: 0, y: 0, width: 1000, height: 1000 };
 export function CompanionVision({
   snapshot,
   overlay,
+  onOpen,
 }: {
   snapshot: CompanionSnapshot;
   overlay: boolean;
+  onOpen?: () => void;
 }) {
   const { t } = useI18n();
   const [params, setParams] = useSearchParams();
@@ -122,7 +124,10 @@ export function CompanionVision({
           variant="ghost"
           onClick={() => {
             if (overlay) void companionWindowApi.showMain("/companion?vision=1");
-            else setOpen(true);
+            else {
+              onOpen?.();
+              setOpen(true);
+            }
           }}
         >
           {t("vision.title")}

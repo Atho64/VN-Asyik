@@ -43,7 +43,12 @@ export function acceptSnapshot(next: CompanionSnapshot) {
 }
 
 export function failureCode(error: unknown): string {
-  return error instanceof IpcError ? error.message : "unknown";
+  if (error instanceof IpcError) {
+    return error.code === "companion" || error.code === "chat"
+      ? error.message
+      : error.code;
+  }
+  return "unknown";
 }
 
 export async function performAction(

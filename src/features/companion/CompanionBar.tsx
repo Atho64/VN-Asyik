@@ -4,6 +4,7 @@ import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
 import { Icon } from "@/components/Icon";
 import { companionApi } from "@/lib/ipc/companion";
+import { companionError } from "./errors";
 import { connectCompanion, performAction, useCompanionStore } from "./store";
 import { OpenOverlayButton } from "./OverlayActions";
 
@@ -13,10 +14,12 @@ export function CompanionBar() {
   const { pathname } = useLocation();
   const snapshot = useCompanionStore((state) => state.snapshot);
   const pending = useCompanionStore((state) => state.actionPending);
+  const actionError = useCompanionStore((state) => state.error);
   useEffect(connectCompanion, []);
   const session = snapshot?.session;
   if (!snapshot || !session || snapshot.lifecycle === "off" || pathname === "/companion")
     return null;
+  const error = actionError ?? snapshot.error;
   return (
     <aside className="companion-bar" aria-label={t("companion.title")}>
       <Link className="companion-bar__link" to="/companion">
@@ -24,11 +27,13 @@ export function CompanionBar() {
         <span>
           <strong>{session.gameTitle ?? t("companion.removedGame")}</strong>
           <small>
-            {t(
-              snapshot.busy
-                ? "companion.replying"
-                : `companion.state.${snapshot.lifecycle}`,
-            )}
+            {error
+              ? companionError(t, error)
+              : t(
+                  snapshot.busy
+                    ? "companion.replying"
+                    : `companion.state.${snapshot.lifecycle}`,
+                )}
           </small>
         </span>
       </Link>

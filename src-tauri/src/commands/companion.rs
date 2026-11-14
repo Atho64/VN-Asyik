@@ -147,6 +147,7 @@ pub async fn companion_memory_view(
     state: State<'_, AppState>,
     session: Option<String>,
 ) -> CommandResult<crate::companion::memory::View> {
+    super::prefs::require_beta(&state).await?;
     state
         .companion()
         .memory_view(&state, session.as_deref())

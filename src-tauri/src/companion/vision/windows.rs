@@ -227,6 +227,7 @@ impl Capture {
         Self::confirm_binding(&target)?;
         unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.map_err(|_| "vision_unavailable")?;
         let apartment = Apartment;
+        check_sdr(HWND(target.handle as *mut _))?;
         Self::create(target, apartment).map_err(|_| "vision_unavailable")
     }
     /// Confirms PID, creation time, and bind-time title before capture creation; per-tick
@@ -250,7 +251,6 @@ impl Capture {
             return Err(windows::core::Error::empty());
         }
         let hwnd = HWND(target.handle as *mut _);
-        check_sdr(hwnd)?;
         let interop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()?;
         let item: GraphicsCaptureItem = unsafe { interop.CreateForWindow(hwnd)? };
         let size = item.Size()?;
@@ -467,11 +467,11 @@ fn valid_size(size: SizeInt32) -> bool {
             .saturating_mul(u64::try_from(size.Height).unwrap_or(u64::MAX))
             <= MAX_PIXELS
 }
-fn check_sdr(hwnd: HWND) -> windows::core::Result<()> {
+fn check_sdr(hwnd: HWND) -> Result<()> {
     // Metadata-only output enumeration; never creates a desktop capture.
     unsafe {
         let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
-        let factory: IDXGIFactory1 = CreateDXGIFactory1()?;
+        let factory: IDXGIFactory1 = CreateDXGIFactory1().map_err(|_| "vision_unavailable")?;
         for a in 0..16 {
             let Ok(adapter) = factory.EnumAdapters1(a) else {
                 break;
@@ -480,15 +480,21 @@ fn check_sdr(hwnd: HWND) -> windows::core::Result<()> {
                 let Ok(output) = adapter.EnumOutputs(o) else {
                     break;
                 };
-                let output: IDXGIOutput6 = output.cast()?;
-                let desc = output.GetDesc1()?;
-                if desc.Monitor == monitor
-                    && desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709
-                {
-                    return Ok(());
+                let Ok(output): windows::core::Result<IDXGIOutput6> = output.cast() else {
+                    continue;
+                };
+                let Ok(desc) = output.GetDesc1() else {
+                    continue;
+                };
+                if desc.Monitor == monitor {
+                    return if desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709 {
+                        Ok(())
+                    } else {
+                        Err("vision_hdr_unavailable")
+                    };
                 }
             }
         }
-        Err(windows::core::Error::empty())
+        Err("vision_unavailable")
     }
 }

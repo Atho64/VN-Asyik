@@ -95,7 +95,7 @@ fn add_source(
 /// the same statement, so a page never pays for a per-game subquery.
 const GAMES_FROM: &str = "FROM games g     LEFT JOIN (SELECT p.game_id,SUM(p.counted_ms) AS active,SUM(p.afk_ms) AS afk     FROM play_sessions p JOIN games parent ON parent.id=p.game_id AND parent.deleted=0     WHERE p.deleted=0 GROUP BY p.game_id) s ON s.game_id=g.id     LEFT JOIN vndb_details d ON d.vn_id=g.vndb_id WHERE g.deleted=0";
 
-const GAMES: &str = "SELECT g.id,g.title,g.title_original,g.vndb_id,g.status,g.rating,g.manual_playtime_ms,     COALESCE(s.active,0)+g.manual_playtime_ms AS total_ms,COALESCE(s.afk,0) AS afk_ms,d.tags_json ";
+const GAMES: &str = "SELECT g.id,g.title,g.title_original,g.vndb_id,g.status,g.rating,g.manual_playtime_ms,     MAX(0,COALESCE(s.active,0)+g.manual_playtime_ms) AS total_ms,COALESCE(s.afk,0) AS afk_ms,d.tags_json,d.characters_json ";
 
 async fn game_rows(ctx: &ToolContext<'_>) -> Result<Vec<sqlx::sqlite::SqliteRow>, String> {
     let sql = format!("{GAMES}{GAMES_FROM} AND (? IS NULL OR g.id=?)");
@@ -112,7 +112,7 @@ fn safe_tags(raw: Option<&str>, all: bool) -> Vec<Value> {
         .and_then(|v| serde_json::from_str(v).ok())
         .unwrap_or_default();
     tags.into_iter()
-        .filter(|tag| all || tag["spoiler"].as_f64() == Some(0.0))
+        .filter(|tag| all || tag["spoiler"].as_f64().unwrap_or(0.0) == 0.0)
         .filter_map(|tag| {
             tag["name"]
                 .as_str()
@@ -120,6 +120,53 @@ fn safe_tags(raw: Option<&str>, all: bool) -> Vec<Value> {
         })
         .take(40)
         .collect()
+}
+
+fn row_matches_query(row: &sqlx::sqlite::SqliteRow, query: &str, all: bool) -> bool {
+    if row.get::<String, _>("title").to_lowercase().contains(query)
+        || row
+            .get::<Option<String>, _>("title_original")
+            .as_deref()
+            .is_some_and(|t| t.to_lowercase().contains(query))
+        || row
+            .get::<Option<String>, _>("vndb_id")
+            .as_deref()
+            .is_some_and(|id| id.to_lowercase().contains(query))
+    {
+        return true;
+    }
+    let tags: Vec<Value> = row
+        .get::<Option<&str>, _>("tags_json")
+        .and_then(|v| serde_json::from_str(v).ok())
+        .unwrap_or_default();
+    if tags.iter().any(|tag| {
+        (all || tag["spoiler"].as_f64().unwrap_or(0.0) == 0.0)
+            && tag["name"]
+                .as_str()
+                .is_some_and(|name| name.to_lowercase().contains(query))
+    }) {
+        return true;
+    }
+    let cast: Vec<crate::vndb::dto::Character> = row
+        .get::<Option<&str>, _>("characters_json")
+        .and_then(|v| serde_json::from_str(v).ok())
+        .unwrap_or_default();
+    cast.iter().any(|c| {
+        (all || c.spoiler.unwrap_or(0) == 0)
+            && (c
+                .name
+                .as_deref()
+                .is_some_and(|n| n.to_lowercase().contains(query))
+                || c.original
+                    .as_deref()
+                    .is_some_and(|o| o.to_lowercase().contains(query))
+                || c.traits.iter().any(|t| {
+                    (all || t.spoiler.unwrap_or(0) == 0)
+                        && t.name
+                            .as_deref()
+                            .is_some_and(|n| n.to_lowercase().contains(query))
+                }))
+    })
 }
 
 fn card(row: &sqlx::sqlite::SqliteRow, all: bool) -> Value {
@@ -158,10 +205,17 @@ async fn search_library(ctx: &ToolContext<'_>, args: &ToolArgs) -> Result<Value,
     }
     let order = match args.sort.as_deref() {
         Some("rating") => " ORDER BY g.rating IS NULL, g.rating DESC, g.title",
-        Some("playtime") => " ORDER BY COALESCE(s.active,0)+g.manual_playtime_ms DESC, g.title",
+        Some("playtime") => {
+            " ORDER BY MAX(0,COALESCE(s.active,0)+g.manual_playtime_ms) DESC, g.title"
+        }
         _ => " ORDER BY g.title",
     };
-    let sql = format!("{GAMES}{GAMES_FROM}{where_clause}{order} LIMIT {PAGE} OFFSET {offset}");
+    let all = ctx.options.spoilers == Spoilers::All;
+    let sql = if fuzzy {
+        format!("{GAMES}{GAMES_FROM}{where_clause}{order}")
+    } else {
+        format!("{GAMES}{GAMES_FROM}{where_clause}{order} LIMIT {PAGE} OFFSET {offset}")
+    };
     let count_sql = format!("SELECT COUNT(*) {GAMES_FROM}{where_clause}");
 
     let mut page_query = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(&ctx.options.game_id);
@@ -175,16 +229,28 @@ async fn search_library(ctx: &ToolContext<'_>, args: &ToolArgs) -> Result<Value,
         page_query = page_query.bind(&query);
         count_query = count_query.bind(&query);
     }
-    let rows = page_query
+    let fetched = page_query
         .fetch_all(ctx.pool)
         .await
         .map_err(|_| "db_error")?;
-    let total = count_query
-        .fetch_one(ctx.pool)
-        .await
-        .map_err(|_| "db_error")?
-        .0;
-    let all = ctx.options.spoilers == Spoilers::All;
+    let (rows, total) = if fuzzy {
+        let matched: Vec<_> = fetched
+            .into_iter()
+            .filter(|row| row_matches_query(row, &query, all))
+            .collect();
+        let total = i64::try_from(matched.len()).unwrap_or(i64::MAX);
+        let skip = usize::try_from(offset.max(0)).unwrap_or(usize::MAX);
+        let take = usize::try_from(PAGE).unwrap_or(20);
+        let page: Vec<_> = matched.into_iter().skip(skip).take(take).collect();
+        (page, total)
+    } else {
+        let total = count_query
+            .fetch_one(ctx.pool)
+            .await
+            .map_err(|_| "db_error")?
+            .0;
+        (fetched, total)
+    };
     let sorting = args.sort.as_deref();
     // Report tied leading values so equal scores are not presented as a strict ranking.
     let tie_size = match sorting {
@@ -240,6 +306,7 @@ async fn game(ctx: &ToolContext<'_>, id: &str) -> Result<Value, String> {
         let all = ctx.options.spoilers == Spoilers::All;
         let character_cards: Vec<Value> = cast
             .into_iter()
+            .filter(|c| all || c.spoiler.unwrap_or(0) == 0)
             .take(60)
             .map(|c| {
                 let safe_traits: Vec<String> = c
@@ -409,15 +476,33 @@ async fn script_digest(ctx: &ToolContext<'_>) -> Result<Value, String> {
     }
 }
 
+fn is_vndb_token(token: &str) -> Option<(char, String)> {
+    let first = token.chars().next()?;
+    if (first == 'c' || first == 'v')
+        && token.len() > 1
+        && token[1..].chars().all(|ch| ch.is_ascii_digit())
+    {
+        Some((first, token.to_owned()))
+    } else {
+        None
+    }
+}
+
 fn extract_vndb_ref(query: &str) -> Option<(char, String)> {
     let lower = query.trim().to_lowercase();
-    for token in lower.split(|c: char| c.is_whitespace() || c == '/' || c == '?') {
-        let token = token.trim();
-        if (token.starts_with('c') || token.starts_with('v'))
-            && token.len() > 1
-            && token[1..].chars().all(|ch| ch.is_ascii_digit())
-        {
-            return Some((token.chars().next().unwrap(), token.to_owned()));
+    let without_hash = lower.split('#').next().unwrap_or("");
+    let without_query = without_hash.split('?').next().unwrap_or("").trim();
+    if !without_query.contains(char::is_whitespace) && !without_query.contains('/') {
+        return is_vndb_token(without_query);
+    }
+    for word in lower.split_whitespace() {
+        let clean = word.split(['?', '#']).next().unwrap_or("");
+        if let Some((_, rest)) = clean.split_once("vndb.org/") {
+            for segment in rest.split('/') {
+                if let Some(found) = is_vndb_token(segment.trim()) {
+                    return Some(found);
+                }
+            }
         }
     }
     None
@@ -461,7 +546,7 @@ async fn vndb(
     let games: Vec<_>=result.results.iter().map(|vn| {
         let source=add_source(sources,vn.title.as_deref().unwrap_or(&vn.id),Some(format!("https://vndb.org/{}",vn.id)),None);
         let text=vn.description.as_deref().unwrap_or("");
-        json!({"source":source,"id":vn.id,"title":vn.title,"synopsis":if ctx.options.spoilers==Spoilers::All {text.chars().take(8000).collect::<String>()} else { public_text(text) },"released":vn.released,"tags":vn.tags.iter().filter(|t| ctx.options.spoilers==Spoilers::All || t.spoiler==Some(0)).map(|t| &t.name).collect::<Vec<_>>()})
+        json!({"source":source,"id":vn.id,"title":vn.title,"synopsis":if ctx.options.spoilers==Spoilers::All {text.chars().take(8000).collect::<String>()} else { public_text(text) },"released":vn.released,"tags":vn.tags.iter().filter(|t| ctx.options.spoilers==Spoilers::All || t.spoiler.unwrap_or(0)==0).map(|t| &t.name).collect::<Vec<_>>()})
     }).collect();
     Ok(
         json!({"games":games,"stale_cache":stale,"more":result.more,"coverage":"VNDB metadata, not full story scripts"}),
@@ -679,6 +764,10 @@ mod tests {
             extract_vndb_ref("https://vndb.org/c93625"),
             Some(('c', "c93625".into()))
         );
+        assert_eq!(
+            extract_vndb_ref("https://vndb.org/c93625#main"),
+            Some(('c', "c93625".into()))
+        );
         assert_eq!(extract_vndb_ref("c93625"), Some(('c', "c93625".into())));
         assert_eq!(
             extract_vndb_ref("https://vndb.org/v24351/"),
@@ -686,5 +775,7 @@ mod tests {
         );
         assert_eq!(extract_vndb_ref("v24351"), Some(('v', "v24351".into())));
         assert_eq!(extract_vndb_ref("CLANNAD"), None);
+        assert_eq!(extract_vndb_ref("Persona 4 v2"), None);
+        assert_eq!(extract_vndb_ref("Part c1 route"), None);
     }
 }

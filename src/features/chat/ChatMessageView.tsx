@@ -1,7 +1,22 @@
+import { memo } from "react";
 import { Link } from "react-router";
+import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
+import { api } from "@/lib/ipc/client";
 import type { ChatMessage, ChatTrace } from "@/lib/ipc/chat";
 import { renderMarkdown, safeHref } from "./markdown";
+
+const TOOL_SOURCE_KEYS: Record<string, string> = {
+  search_library: "vnchat.tool.library",
+  get_game: "vnchat.tool.game",
+  library_stats: "vnchat.tool.stats",
+  play_history: "vnchat.tool.history",
+  taste_profile: "vnchat.tool.taste",
+  search_vndb: "vnchat.tool.vndb",
+  search_web: "vnchat.tool.web",
+  recent_game_text: "vnchat.tool.dialogue",
+  script_digest: "vnchat.tool.script",
+};
 
 /** Sources are links only when they are plain http(s) without credentials. */
 export function safeSourceUrl(raw: string | null): string | null {
@@ -36,7 +51,7 @@ function ToolActivity({ trace }: { trace: ChatTrace }) {
   );
 }
 
-export function ChatMessageView({
+export const ChatMessageView = memo(function ChatMessageView({
   message,
   onOpenGame,
   compactTools = false,
@@ -96,12 +111,26 @@ export function ChatMessageView({
           <ol>
             {message.sources.map((source) => {
               const url = safeSourceUrl(source.url);
+              const toolKey = TOOL_SOURCE_KEYS[source.title];
+              const localLabel = toolKey
+                ? `${t("vnchat.librarySource")} (${t(toolKey)})`
+                : t("vnchat.librarySource");
               return (
                 <li key={source.id}>
                   {url ? (
-                    <a href={url} target="_blank" rel="noreferrer noopener">
+                    <button
+                      type="button"
+                      className="linkbtn"
+                      onClick={() => {
+                        void api.openExternal(url).catch(() => {
+                          useAppStore
+                            .getState()
+                            .pushToast("error", t("vnchat.error.unknown"));
+                        });
+                      }}
+                    >
                       {source.title}
-                    </a>
+                    </button>
                   ) : source.gameId ? (
                     onOpenGame ? (
                       <button
@@ -109,19 +138,17 @@ export function ChatMessageView({
                         className="btn btn--ghost"
                         onClick={() => onOpenGame(source.gameId!)}
                       >
-                        {t("vnchat.librarySource")}
+                        {localLabel}
                       </button>
                     ) : (
                       <Link to={`/game/${encodeURIComponent(source.gameId)}`}>
-                        {t("vnchat.librarySource")}
+                        {localLabel}
                       </Link>
                     )
                   ) : (
-                    t(
-                      ["manual_image", "automatic_reaction"].includes(source.id)
-                        ? "vision.inference"
-                        : "vnchat.librarySource",
-                    )
+                    ["manual_image", "automatic_reaction"].includes(source.id)
+                      ? t("vision.inference")
+                      : localLabel
                   )}
                 </li>
               );
@@ -147,4 +174,4 @@ export function ChatMessageView({
       )}
     </article>
   );
-}
+});

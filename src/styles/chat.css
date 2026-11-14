@@ -374,10 +374,42 @@
   justify-content: flex-end;
 }
 .vnchat__message--user .vnchat__message-head strong {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .vnchat__message--user .vnchat__answer {
   white-space: pre-wrap;
+}
+
+.vnchat__status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 4px;
+}
+
+.vnchat__pill {
+  font-size: 0.725rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.vnchat__pill[data-active="true"] {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
 }
 
 .vnchat__answer {
@@ -646,6 +678,25 @@
   line-height: 1.55;
 }
 
+.vnchat__jump {
+  display: flex;
+  justify-content: center;
+}
+
+.vnchat__composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.vnchat__send-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
 /* Markdown output */
 
 .md-p {
@@ -703,6 +754,24 @@
   color: var(--text);
   overflow-wrap: anywhere;
 }
+.md-pre {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+}
+.md-pre code {
+  font-family: inherit;
+  font-size: inherit;
+  background: transparent;
+  padding: 0;
+}
 .md-hr {
   margin: var(--space-4) 0;
   border: 0;
@@ -738,11 +807,11 @@
     overflow: visible;
     padding-right: 0;
   }
-  .vnchat__sidebar > label.field {
+  .vnchat__sidebar > label.field,
+  .vnchat__sidebar > .vnchat__manage,
+  .vnchat__sidebar > .vnchat__provider {
     grid-column: 1 / -1;
   }
-  .vnchat__sidebar > .vnchat__manage,
-  .vnchat__sidebar > .vnchat__provider,
   .vnchat__label {
     display: none;
   }
@@ -800,7 +869,7 @@
   }
   .vnchat__header .page-sub,
   .vnchat__disclaimer,
-  .vnchat__meta {
+  .vnchat__send-hint {
     display: none;
   }
   .vnchat__group--rules {

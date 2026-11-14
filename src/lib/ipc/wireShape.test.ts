@@ -10,6 +10,7 @@ import {
   presenceSettingsSchema,
   presenceStatusSchema,
 } from "./types";
+import { scriptDocumentSchema } from "./script";
 
 describe("localArtSchema", () => {
   it("accepts the snake_case shape both art commands return", () => {
@@ -142,5 +143,24 @@ describe("presenceActivitySchema", () => {
       buttons: [{ label: "VNDB Page", url: "https://vndb.org/v2002" }],
     });
     expect(parsed.success).toBe(true);
+  });
+});
+
+describe("scriptDocumentSchema", () => {
+  it("keeps camelCase chunkCount from ScriptDocumentInfo", () => {
+    const parsed = scriptDocumentSchema.parse({
+      id: "doc-1",
+      gameId: "game-1",
+      engine: "kirikiri",
+      sourceKind: "plain_text",
+      sourcePath: "script.txt",
+      sourceSha256: "ab".repeat(32),
+      lineCount: 120,
+      byteSize: 4096,
+      chunkCount: 3,
+      createdAt: 1700000000000,
+      compaction: null,
+    });
+    expect(parsed.chunkCount).toBe(3);
   });
 });

@@ -8,7 +8,7 @@ fn error(code: String) -> CommandError {
     CommandError::new("script", code)
 }
 
-/// Import script file(s) for a game, auto-detecting plain text, VNTP `[{name, message}]` JSON, or Asyik JSON.
+/// Import VNTP `[{name, message}]` JSON script file(s) for a game.
 /// Multiple files merge in natural filename order so split scripts import in one pick.
 #[tauri::command]
 pub async fn script_import(
@@ -16,6 +16,7 @@ pub async fn script_import(
     game_id: String,
     paths: Vec<String>,
 ) -> CommandResult<script::ScriptDocumentInfo> {
+    super::prefs::require_beta(&state).await?;
     script::import(state.db().pool(), &game_id, &paths)
         .await
         .map_err(error)
@@ -45,9 +46,13 @@ pub async fn script_compact(
     max_chunks: Option<u32>,
     rebuild: Option<bool>,
 ) -> CommandResult<script::CompactionInfo> {
+    super::prefs::require_beta(&state).await?;
     let pool = state.db().pool().clone();
     let chat = crate::ai::profiles::resolve(&pool).await;
     let config = chat.config;
+    if config.model.trim().is_empty() {
+        return Err(error("chat_model_missing".into()));
+    }
     // The active saved profile already resolved its key, off the UI thread.
     let key = chat.key;
     if key.is_none() && !crate::commands::ai::is_local_endpoint(&config.base_url) {
@@ -104,9 +109,8 @@ pub async fn script_save_agent_settings(
 fn provider_client() -> Result<reqwest::Client, CommandError> {
     crate::vndb::http_client_builder()
         .connect_timeout(std::time::Duration::from_secs(10))
-        // One map call summarizes one chunk; 90 s matches the chat transport's
-        // patience so slow local models are not cut off mid-summary.
-        .timeout(std::time::Duration::from_secs(90))
+        // Allow time for one backoff retry plus slow local model chunk replies.
+        .timeout(std::time::Duration::from_mins(2))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| error("provider_offline".into()))

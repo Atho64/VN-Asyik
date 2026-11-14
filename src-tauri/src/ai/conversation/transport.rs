@@ -9,7 +9,7 @@ pub async fn complete(
     key: Option<&ChatApiKey>,
     messages: &[Value],
     online: bool,
-    on_delta: &mut impl FnMut(String),
+    on_delta: &mut impl FnMut(String) -> bool,
 ) -> Result<CompletionStream, String> {
     // The profile says which shape the endpoint speaks; the loop above only sees
     // the accumulated completion either way.
@@ -56,7 +56,9 @@ pub async fn complete(
             json_bytes.extend_from_slice(&chunk);
         } else {
             for delta in stream.push(&chunk)? {
-                on_delta(delta);
+                if !on_delta(delta) {
+                    return Err("cancelled".into());
+                }
             }
             if stream.done {
                 break;
@@ -67,7 +69,15 @@ pub async fn complete(
         let value: Value =
             serde_json::from_slice(&json_bytes).map_err(|_| "invalid_provider_json")?;
         for delta in stream.chunk(&value)? {
-            on_delta(delta);
+            if !on_delta(delta) {
+                return Err("cancelled".into());
+            }
+        }
+    } else if !stream.done {
+        for delta in stream.finish_eof()? {
+            if !on_delta(delta) {
+                return Err("cancelled".into());
+            }
         }
     }
     stream.validate_finished()?;
@@ -132,7 +142,7 @@ mod tests {
             None,
             &[json!({"role":"user","content":"stats"})],
             false,
-            &mut |_| {},
+            &mut |_| true,
         )
         .await
         .unwrap();

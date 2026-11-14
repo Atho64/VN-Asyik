@@ -59,13 +59,15 @@ impl CompanionRuntime {
     pub async fn memory_save(&self, state: &AppState, request: Save) -> Result<Memory, String> {
         self.revoke_memory()?;
         let _gate = self.mutation.lock().await;
+        super::expire(state.db().pool()).await?;
         let session = match request.session_id.as_deref() {
             Some(id) => Some(crate::companion::store::get(state.db().pool(), id).await?),
             None => None,
         };
         let result = super::save(state.db().pool(), &request, session.as_ref()).await;
-        self.memory_changed(state, request.id.is_some()).await?;
-        result
+        let reset_cursor = result.as_ref().is_ok_and(|(_, reset)| *reset);
+        self.memory_changed(state, reset_cursor).await?;
+        result.map(|(memory, _)| memory)
     }
 
     pub async fn memory_forget(

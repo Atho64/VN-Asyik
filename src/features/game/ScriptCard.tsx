@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { useAppStore } from "@/app/store";
@@ -7,11 +7,7 @@ import { Button } from "@/components/Button";
 import { Card, CardHeader } from "@/components/Card";
 import { Icon } from "@/components/Icon";
 import { IpcError } from "@/lib/ipc/client";
-import {
-  DEFAULT_AGENT_COUNT,
-  scriptApi,
-  type ScriptDocument,
-} from "@/lib/ipc/script";
+import { DEFAULT_AGENT_COUNT, scriptApi, type ScriptDocument } from "@/lib/ipc/script";
 import { formatDateTime } from "@/lib/time";
 
 /** 1..=10, mirroring `vn_core::script::MAX_AGENTS`. */
@@ -29,16 +25,77 @@ function basename(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
-/** User-imported external scripts compacted chunk-by-chunk for companion chat grounding. */
+function scriptErrorMessage(caught: unknown, t: ReturnType<typeof useI18n>["t"]): string {
+  if (!(caught instanceof IpcError)) return t("common.error");
+  // Backend script commands emit code `"script"` with the token in `message`.
+  const token =
+    caught.code === "script" || caught.code === "ipc" ? caught.message : caught.code;
+  const map: Record<string, string> = {
+    chat_key_missing: t("script.error.chatKeyMissing"),
+    chat_model_missing: t("script.error.chatModelMissing"),
+    compaction_busy: t("script.busy"),
+    provider_unauthorized: t("script.error.providerUnauthorized"),
+    provider_throttled: t("script.error.providerThrottled"),
+    provider_offline: t("script.error.providerOffline"),
+    provider_budget_exhausted: t("script.error.providerBudgetExhausted"),
+    provider_truncated: t("script.error.providerTruncated"),
+    provider_empty: t("script.error.providerEmpty"),
+    no_files: t("script.error.noFiles"),
+    empty_script: t("script.error.emptyScript"),
+    invalid_utf8: t("script.error.invalidUtf8"),
+    invalid_json: t("script.error.invalidJson"),
+    invalid_format: t("script.error.invalidFormat"),
+    file_too_large: t("script.error.fileTooLarge"),
+    line_too_long: t("script.error.lineTooLong"),
+    speaker_too_long: t("script.error.speakerTooLong"),
+    too_many_lines: t("script.error.tooManyLines"),
+    script_too_large: t("script.error.scriptTooLarge"),
+    script_limit: t("script.error.scriptLimit"),
+    script_missing: t("script.error.scriptMissing"),
+    read_failed: t("script.error.readFailed"),
+    agent_settings_invalid: t("script.error.agentSettingsInvalid"),
+    beta_disabled: t("script.error.betaDisabled"),
+  };
+  const mapped = map[token];
+  if (mapped !== undefined) return mapped;
+  if (token.startsWith("provider_error: ")) {
+    return token.slice("provider_error: ".length);
+  }
+  if (caught.message.includes("no API key is configured")) {
+    return t("script.error.chatKeyMissing");
+  }
+  return caught.message || t("common.error");
+}
+
+function hasProgressOrDigest(doc: ScriptDocument): boolean {
+  return (
+    doc.compaction !== null &&
+    (doc.compaction.doneChunks > 0 || doc.compaction.digest !== null)
+  );
+}
+
+/** User-imported external scripts compacted chunk-by-chunk for chat grounding. */
 export function ScriptCard({ gameId }: { gameId: string }) {
+  return <ScriptCardBody key={gameId} gameId={gameId} />;
+}
+
+function ScriptCardBody({ gameId }: { gameId: string }) {
   const { t, locale } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
+  const platform = useAppStore((state) => state.platform);
+  const agentsLabelId = useId();
+  const listIdPrefix = useId();
 
   const [docs, setDocs] = useState<ScriptDocument[] | null>(null);
+  const [listError, setListError] = useState(false);
   const [importing, setImporting] = useState(false);
   // Allow only one sequential compaction loop at a time to avoid racing progress rows.
   const [compactingId, setCompactingId] = useState<string | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const stopRef = useRef(false);
+  const generationRef = useRef(0);
   // Summarizer agent count; null until the setting loads.
   const [agents, setAgents] = useState<number | null>(null);
 
@@ -57,88 +114,120 @@ export function ScriptCard({ gameId }: { gameId: string }) {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    void scriptApi
-      .list(gameId)
-      .then((next) => {
-        if (!cancelled) setDocs(next);
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) {
-          setDocs([]);
-          pushToast(
-            "error",
-            caught instanceof IpcError ? caught.message : t("common.error"),
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-      stopRef.current = true;
-    };
+  const loadDocs = useCallback(async () => {
+    const gen = generationRef.current;
+    try {
+      const next = await scriptApi.list(gameId);
+      if (generationRef.current === gen) {
+        setListError(false);
+        setDocs(next);
+      }
+    } catch (caught) {
+      if (generationRef.current !== gen) return;
+      setListError(true);
+      setDocs(null);
+      pushToast("error", scriptErrorMessage(caught, t));
+    }
   }, [gameId, pushToast, t]);
 
-  const refresh = async (): Promise<void> => {
-    setDocs(await scriptApi.list(gameId));
+  useEffect(() => {
+    let active = true;
+    generationRef.current += 1;
+    stopRef.current = false;
+    void Promise.resolve().then(() => {
+      if (active) void loadDocs();
+    });
+    return () => {
+      active = false;
+      generationRef.current += 1;
+      stopRef.current = true;
+    };
+  }, [loadDocs]);
+
+  const refreshIfCurrent = async (gen: number): Promise<void> => {
+    const next = await scriptApi.list(gameId);
+    if (generationRef.current === gen) {
+      setDocs(next);
+      setListError(false);
+    }
   };
 
   /** Persist a new agent count. Disabled mid-run because a layout change
-   * restarts an unfinished summary (the stored progress belongs to the old
-   * agent layout). */
+   * resets an unfinished summary on the next run. */
   const changeAgents = async (next: number): Promise<void> => {
     try {
       const saved = await scriptApi.saveAgentSettings({ agents: next });
       setAgents(saved.agents);
     } catch (caught) {
-      pushToast(
-        "error",
-        caught instanceof IpcError ? caught.message : t("common.error"),
-      );
+      pushToast("error", scriptErrorMessage(caught, t));
     }
   };
 
   const pick = async (): Promise<void> => {
+    const gen = generationRef.current;
     setImporting(true);
     try {
+      // Android SAF greys out valid JSON files when extension filters assume strict MIME types.
       const chosen = await open({
         multiple: true,
         directory: false,
         title: t("script.pickTitle"),
-        filters: [
-          {
-            name: t("script.pickFilter"),
-            extensions: ["txt", "json", "log", "csv"],
-          },
-        ],
+        ...(platform?.os === "android"
+          ? {}
+          : {
+              filters: [
+                {
+                  name: t("script.pickFilter"),
+                  extensions: ["json"],
+                },
+              ],
+            }),
       });
-      // One file or many: the backend merges them in file-name order into a
-      // single document, so part files do not have to be combined by hand.
       if (!chosen || chosen.length === 0) return;
       await scriptApi.import(gameId, chosen);
-      await refresh();
+      if (generationRef.current !== gen) return;
+      await refreshIfCurrent(gen);
+      if (generationRef.current !== gen) return;
       pushToast("success", t("script.imported"));
     } catch (caught) {
-      pushToast(
-        "error",
-        caught instanceof IpcError ? caught.message : t("common.error"),
-      );
+      if (generationRef.current === gen) {
+        pushToast("error", scriptErrorMessage(caught, t));
+      }
     } finally {
-      setImporting(false);
+      if (generationRef.current === gen) {
+        setImporting(false);
+      }
     }
   };
 
-  const remove = async (id: string): Promise<void> => {
+  const executeDelete = async (id: string): Promise<void> => {
+    const gen = generationRef.current;
+    setDeletingId(id);
     try {
       await scriptApi.delete(id);
-      await refresh();
+      if (generationRef.current !== gen) return;
+      setConfirmDeleteId((prev) => (prev === id ? null : prev));
+      await refreshIfCurrent(gen);
+      if (generationRef.current !== gen) return;
       pushToast("success", t("script.deleted"));
     } catch (caught) {
-      pushToast(
-        "error",
-        caught instanceof IpcError ? caught.message : t("common.error"),
-      );
+      if (generationRef.current === gen) {
+        pushToast("error", scriptErrorMessage(caught, t));
+      }
+    } finally {
+      if (generationRef.current === gen) {
+        setDeletingId(null);
+      }
     }
+  };
+
+  const requestRemove = (doc: ScriptDocument): void => {
+    if (compactingId !== null || deletingId !== null) return;
+    if (hasProgressOrDigest(doc)) {
+      setConfirmDeleteId(doc.id);
+      return;
+    }
+    void executeDelete(doc.id);
   };
 
   /**
@@ -146,13 +235,17 @@ export function ScriptCard({ gameId }: { gameId: string }) {
    * Pass `rebuild = true` to discard older chunk summaries and re-run from scratch.
    */
   const summarize = async (doc: ScriptDocument, rebuild = false): Promise<void> => {
-    if (compactingId !== null) return;
+    if (compactingId !== null || deletingId !== null) return;
+    const gen = generationRef.current;
+    setConfirmDeleteId(null);
     setCompactingId(doc.id);
+    setStopping(false);
     stopRef.current = false;
     try {
       for (let first = true; ; first = false) {
-        if (stopRef.current) return;
+        if (stopRef.current || generationRef.current !== gen) return;
         const info = await scriptApi.compact(doc.id, undefined, rebuild && first);
+        if (generationRef.current !== gen) return;
         setDocs((prev) =>
           prev
             ? prev.map((entry) =>
@@ -164,34 +257,31 @@ export function ScriptCard({ gameId }: { gameId: string }) {
           pushToast("success", t("script.digestReady"));
           return;
         }
-        // Done chunks without a digest should not occur; guard the loop anyway.
-        if (info.doneChunks >= info.chunkCount) return;
+        if (info.doneChunks >= info.chunkCount) {
+          pushToast("error", t("script.error.reduceIncomplete"));
+          return;
+        }
       }
     } catch (caught) {
-      // Surface friendly missing-provider copy; backend per-document lease reports busy if compaction is active.
-      pushToast(
-        "error",
-        caught instanceof IpcError && caught.code === "chat_key_missing"
-          ? t("script.error.chatKeyMissing")
-          : caught instanceof IpcError && caught.code === "compaction_busy"
-            ? t("script.busy")
-            : caught instanceof IpcError
-              ? caught.message
-              : t("common.error"),
-      );
+      if (generationRef.current !== gen) return;
+      await refreshIfCurrent(gen).catch(() => {});
+      pushToast("error", scriptErrorMessage(caught, t));
     } finally {
-      setCompactingId(null);
+      if (generationRef.current === gen) {
+        setCompactingId(null);
+        setStopping(false);
+      }
     }
   };
 
-  const compactionLine = (doc: ScriptDocument): ReactNode => {
+  const compactionLine = (doc: ScriptDocument, compacting: boolean): ReactNode => {
     const info = doc.compaction;
     if (!info) {
       return <span className="script-row__state">{t("script.notSummarized")}</span>;
     }
     if (info.digest) {
       return (
-        <span className="script-row__state script-row__state--done">
+        <span className="script-row__state script-row__state--done" aria-live="polite">
           <Icon name="check" size={12} />
           {info.digestOutdated ? t("script.digestOld") : t("script.digestReady")}
         </span>
@@ -199,8 +289,12 @@ export function ScriptCard({ gameId }: { gameId: string }) {
     }
     const percent =
       info.chunkCount > 0 ? Math.round((info.doneChunks / info.chunkCount) * 100) : 0;
-    const label =
-      info.agentCount > 1
+    const allChunksDone = info.chunkCount > 0 && info.doneChunks >= info.chunkCount;
+    const label = allChunksDone
+      ? compacting
+        ? t("script.finalizing", { count: info.chunkCount })
+        : t("script.readyToFinalize", { count: info.chunkCount })
+      : info.agentCount > 1
         ? t("script.progressAgents", {
             done: info.doneChunks,
             count: info.chunkCount,
@@ -211,64 +305,79 @@ export function ScriptCard({ gameId }: { gameId: string }) {
             count: info.chunkCount,
           });
     return (
-      <span className="script-row__state">
+      <span className="script-row__state" aria-live="polite">
         {label}
         <span
           className="script-row__meter"
-          aria-hidden="true"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={info.chunkCount}
+          aria-valuenow={info.doneChunks}
+          aria-label={label}
           data-percent={percent}
-          style={{ width: `${Math.max(percent, 4)}%` }}
-        />
+        >
+          <span
+            className="script-row__meter-fill"
+            style={{ width: `${Math.max(percent, 4)}%` }}
+          />
+        </span>
       </span>
     );
   };
 
+  const busyElsewhere = compactingId !== null || deletingId !== null;
+  const hasUnfinishedCompaction = Boolean(
+    docs?.some(
+      (doc) =>
+        doc.compaction !== null &&
+        doc.compaction.digest === null &&
+        doc.compaction.doneChunks > 0,
+    ),
+  );
+
   return (
-    <Card>
+    <Card className="script-card">
       <CardHeader
         title={t("script.title")}
         aside={
-          <Button variant="ghost" disabled={importing} onClick={() => void pick()}>
+          <Button
+            variant="secondary"
+            disabled={importing || deletingId !== null}
+            onClick={() => void pick()}
+          >
             {importing ? t("script.importing") : t("script.import")}
           </Button>
         }
       />
-      <p className="card__intro">{t("script.intro")}</p>
-
-      <div className="script-agents">
-        <span className="script-agents__label" id="script-agents-label">
-          {t("script.agents")}
-        </span>
-        <select
-          className="select"
-          aria-labelledby="script-agents-label"
-          title={t("script.agentsHint")}
-          value={agents ?? DEFAULT_AGENT_COUNT}
-          disabled={agents === null || compactingId !== null}
-          onChange={(event) => void changeAgents(Number(event.target.value))}
-        >
-          {AGENT_CHOICES.map((count) => (
-            <option key={count} value={count}>
-              {count}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {docs === null ? null : docs.length === 0 ? (
-        <p className="body">{t("script.empty")}</p>
+      {listError ? (
+        <div className="script-error-box">
+          <p className="body">{t("script.loadFailed")}</p>
+          <Button variant="secondary" onClick={() => void loadDocs()}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      ) : docs === null ? (
+        <div className="script-loading" aria-busy="true">
+          <div className="skeleton skeleton--row" />
+        </div>
+      ) : docs.length === 0 ? (
+        <p className="script-card__empty">{t("script.empty")}</p>
       ) : (
         <ul className="script-list">
           {docs.map((doc) => {
             const compacting = compactingId === doc.id;
-            const needsWork =
-              doc.compaction === null ||
-              (doc.compaction.digest === null &&
-                doc.compaction.doneChunks < doc.compaction.chunkCount);
+            const confirmingDelete = confirmDeleteId === doc.id;
+            const needsWork = doc.compaction === null || doc.compaction.digest === null;
+            const readyToFinalize =
+              doc.compaction !== null &&
+              doc.compaction.digest === null &&
+              doc.compaction.chunkCount > 0 &&
+              doc.compaction.doneChunks >= doc.compaction.chunkCount;
+            const titleId = `${listIdPrefix}-${doc.id}`;
             return (
               <li key={doc.id} className="script-row">
                 <div className="script-row__main">
-                  <span className="row__title" title={doc.sourcePath}>
+                  <span id={titleId} className="row__title" title={doc.sourcePath}>
                     {basename(doc.sourcePath)}
                   </span>
                   <span className="row__sub">
@@ -276,21 +385,26 @@ export function ScriptCard({ gameId }: { gameId: string }) {
                     {t("script.lines", { count: doc.lineCount })} ·{" "}
                     {formatBytes(doc.byteSize)} · {formatDateTime(doc.createdAt, locale)}
                   </span>
-                  {compactionLine(doc)}
+                  {compactionLine(doc, compacting)}
                 </div>
                 <div className="script-row__actions">
                   {compacting ? (
                     <Button
                       variant="ghost"
+                      disabled={stopping}
+                      aria-describedby={titleId}
                       onClick={() => {
                         stopRef.current = true;
+                        setStopping(true);
                       }}
                     >
-                      {t("script.stop")}
+                      {stopping ? t("script.stopping") : t("script.stop")}
                     </Button>
                   ) : doc.compaction?.digest ? (
                     <Button
                       variant="secondary"
+                      disabled={busyElsewhere}
+                      aria-describedby={titleId}
                       title={
                         doc.compaction.digestOutdated
                           ? t("script.rebuildHint")
@@ -301,16 +415,49 @@ export function ScriptCard({ gameId }: { gameId: string }) {
                       {t("script.rebuild")}
                     </Button>
                   ) : needsWork ? (
-                    <Button variant="secondary" onClick={() => void summarize(doc)}>
-                      {doc.compaction && doc.compaction.doneChunks > 0
-                        ? t("script.summarizeContinue")
-                        : t("script.summarize")}
+                    <Button
+                      variant="secondary"
+                      disabled={busyElsewhere}
+                      aria-describedby={titleId}
+                      onClick={() => void summarize(doc)}
+                    >
+                      {readyToFinalize
+                        ? t("script.finalizeDigest")
+                        : doc.compaction && doc.compaction.doneChunks > 0
+                          ? t("script.summarizeContinue")
+                          : t("script.summarize")}
                     </Button>
                   ) : null}
-                  <Button variant="ghost" onClick={() => void remove(doc.id)}>
-                    <Icon name="trash" size={14} />
-                    {t("script.remove")}
-                  </Button>
+
+                  {confirmingDelete ? (
+                    <>
+                      <Button
+                        variant="danger"
+                        disabled={busyElsewhere}
+                        aria-describedby={titleId}
+                        onClick={() => void executeDelete(doc.id)}
+                      >
+                        {t("script.confirmRemove")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={deletingId === doc.id}
+                        onClick={() => setConfirmDeleteId(null)}
+                      >
+                        {t("common.cancel")}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      disabled={busyElsewhere}
+                      aria-describedby={titleId}
+                      onClick={() => requestRemove(doc)}
+                    >
+                      <Icon name="trash" size={14} />
+                      {t("script.remove")}
+                    </Button>
+                  )}
                 </div>
               </li>
             );
@@ -318,8 +465,42 @@ export function ScriptCard({ gameId }: { gameId: string }) {
         </ul>
       )}
 
-      <p className="field__hint">{t("script.agentsHint")}</p>
-      <p className="field__hint">{t("script.localOnly")}</p>
+      {docs && docs.length > 0 ? (
+        <p className="script-card__notice">
+          {t("script.providerNote")} {t("script.spoilersNote")}
+        </p>
+      ) : null}
+
+      <details className="script-help">
+        <summary>{t("script.settings")}</summary>
+        <div className="script-help__body">
+          <p>{t("script.intro")}</p>
+          <div className="script-agents">
+            <label className="script-agents__label" htmlFor={agentsLabelId}>
+              {t("script.agents")}
+            </label>
+            <select
+              id={agentsLabelId}
+              className="select"
+              aria-describedby={`${agentsLabelId}-hint`}
+              value={agents ?? DEFAULT_AGENT_COUNT}
+              disabled={agents === null || compactingId !== null}
+              onChange={(event) => void changeAgents(Number(event.target.value))}
+            >
+              {AGENT_CHOICES.map((count) => (
+                <option key={count} value={count}>
+                  {count}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p id={`${agentsLabelId}-hint`}>
+            {t("script.agentsHint")}
+            {hasUnfinishedCompaction ? ` ${t("script.agentsResetWarn")}` : null}
+          </p>
+          <p>{t("script.localOnly")}</p>
+        </div>
+      </details>
     </Card>
   );
 }

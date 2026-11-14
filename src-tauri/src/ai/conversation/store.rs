@@ -151,7 +151,7 @@ pub(crate) async fn begin_scoped(
             .execute(&mut *tx)
             .await
             .map_err(|_| "db_error")?;
-        (last_position(&mut tx, &thread.id).await?, 2)
+        (last_position(&mut tx, &thread.id).await?, 1)
     } else {
         vn_core::chat::validate_message(text)?;
         let position = last_position(&mut tx, &thread.id).await? + 1;
@@ -173,7 +173,16 @@ pub(crate) async fn begin_scoped(
         .bind(&assistant_id).bind(&thread.id).bind(position).bind(now())
         .execute(&mut *tx).await.map_err(|_| "db_error")?;
     let title = if thread.title.is_empty() {
-        text.trim().chars().take(64).collect::<String>()
+        let source_text = if text.trim().is_empty() {
+            history
+                .iter()
+                .rev()
+                .find(|m| m.role == "user" && !m.content.trim().is_empty())
+                .map_or("", |m| m.content.as_str())
+        } else {
+            text.trim()
+        };
+        source_text.chars().take(64).collect::<String>()
     } else {
         thread.title.clone()
     };
@@ -240,17 +249,27 @@ pub(crate) async fn trim_window(
         .fetch_one(&mut **tx)
         .await
         .map_err(|_| "db_error")?;
-    let mut excess = count.0 + room - window;
+    let excess = count.0 + room - window;
     if excess <= 0 {
         return Ok(());
     }
-    // Round up so the surviving window always starts on a user turn.
-    if excess % 2 == 1 {
-        excess += 1;
-    }
+    // Advance until at least `excess` rows are dropped and the surviving window starts on a user turn.
+    let rows = sqlx::query(
+        "SELECT position, role FROM chat_messages WHERE thread_id = ? ORDER BY position ASC LIMIT ?",
+    )
+    .bind(thread_id)
+    .bind(excess + 6)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| "db_error")?;
+    let min_drop = usize::try_from(excess).unwrap_or(0).min(rows.len());
+    let drop_count = (min_drop..rows.len())
+        .find(|&i| rows[i].get::<String, _>("role") == "user")
+        .unwrap_or(rows.len());
+    let drop_limit = i64::try_from(drop_count).unwrap_or(excess);
     if let Some(capture) = capture {
         let (through,):(Option<i64>,) = sqlx::query_as("SELECT MAX(position) FROM (SELECT position FROM chat_messages WHERE thread_id=? ORDER BY position LIMIT ?)")
-            .bind(thread_id).bind(excess).fetch_one(&mut **tx).await.map_err(|_| "db_error")?;
+            .bind(thread_id).bind(drop_limit).fetch_one(&mut **tx).await.map_err(|_| "db_error")?;
         if let Some(through) = through {
             crate::companion::memory::jobs::capture(tx, capture, Some(through), true).await?;
         }
@@ -263,7 +282,7 @@ pub(crate) async fn trim_window(
          WHERE thread_id = ? ORDER BY position ASC LIMIT ?)",
     )
     .bind(thread_id)
-    .bind(excess)
+    .bind(drop_limit)
     .execute(&mut **tx)
     .await
     .map_err(|_| "db_error")?;

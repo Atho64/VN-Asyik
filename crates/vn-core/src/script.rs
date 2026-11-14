@@ -1,21 +1,9 @@
-//! Extracted VN scripts: import formats, normalization and compaction planning.
+//! Extracted VN scripts: VNTP JSON import, normalization and compaction planning.
 //!
-//! Pure and synchronous so it tests fast. Every import format shares one
-//! normalized shape ([`ScriptLine`]) so storage, chunking and the chat tools
-//! never care where a script came from:
-//!
-//! - [`ScriptFormat::PlainText`]: anything the user extracted themselves with
-//!   any tool, saved as UTF-8 text. This is the first-class "disassemble it
-//!   yourself" path: no tooling is required on our side and nothing about the
-//!   source engine is assumed.
-//! - [`ScriptFormat::JsonVntp`]: the generic VNTP name/message JSON array
-//!   (`[{ "name": "…", "message": "…" }]`, `name` absent for narration), used
-//!   verbatim so an extractor's output never needs converting by hand. The
-//!   owner's FVP/FAVORITE extractor (`fvp_tool`, `dialogue.json`) is one
-//!   producer of this shape; the kind names the shape, not the tool.
-//! - [`ScriptFormat::AsyikScript`]: this app's structured interchange format.
-//!   Built-in extractors (GARbro-derived Kirikiri/Artemis, FVP) emit it in
-//!   later phases; a user can also write it by hand for full fidelity.
+//! Pure and synchronous so it tests fast. Imported scripts use the VNTP
+//! name/message JSON array shape ([`ScriptFormat::JsonVntp`]:
+//! `[{ "name": "…", "message": "…" }]`, `name` absent for narration) and normalize
+//! into [`ScriptLine`] rows for storage, chunking and compaction.
 //!
 //! Siglus support was explicitly cancelled by the project owner (2026-10-24);
 //! do not add it back without asking.
@@ -49,23 +37,19 @@ pub struct ScriptLine {
     pub text: String,
 }
 
-/// Which importer produced a document. The strings are stored in
-/// `script_documents.source_kind` and constrained by a CHECK in migration 0024.
+/// Which importer produced a document. Stored in `script_documents.source_kind`
+/// and constrained by a CHECK in migration 0024.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScriptFormat {
-    PlainText,
     JsonVntp,
-    AsyikScript,
 }
 
 impl ScriptFormat {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::PlainText => "plain_text",
             Self::JsonVntp => "json_vntp",
-            Self::AsyikScript => "asyik_script",
         }
     }
 }
@@ -74,37 +58,27 @@ impl ScriptFormat {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedScript {
     pub format: ScriptFormat,
-    /// Human-facing engine label ("user", or the value from an Asyik
-    /// document). Stored for display only; never used for behavior.
+    /// Human-facing engine label ("user"). Stored for display only; never used
+    /// for behavior.
     pub engine: String,
     pub lines: Vec<ScriptLine>,
 }
 
-/// Detect and parse any supported import format.
+/// Parse a VNTP JSON script (`[{ "name": "…", "message": "…" }]`, `name`
+/// optional for narration).
 ///
-/// JSON is never silently treated as text: a file that looks like JSON but
-/// fails to parse is a broken export, and importing it as "text" would store
-/// punctuation noise as dialogue.
+/// Unknown object keys are tolerated so a newer extractor revision cannot break
+/// import; non-JSON text returns `invalid_json`, and valid JSON that is not an
+/// array of `{ "name"?, "message" }` objects returns `invalid_format`.
 ///
 /// # Errors
 /// Stable codes: `invalid_json`, `invalid_format`, `line_too_long`,
 /// `speaker_too_long`, `too_many_lines`, `empty_script`.
 pub fn parse(raw: &str) -> Result<ParsedScript, String> {
-    let trimmed = raw.trim_start();
-    if trimmed.starts_with('[') {
-        parse_vntp(raw)
-    } else if trimmed.starts_with('{') {
-        parse_asyik(raw)
-    } else {
-        parse_plain(raw)
-    }
+    let raw = raw.strip_prefix('\u{FEFF}').unwrap_or(raw);
+    parse_vntp(raw)
 }
 
-/// VNTP name/message JSON: an array of `{ "name": "…", "message": "…" }`
-/// objects where `name` is absent for narration. Any extractor that emits this
-/// shape imports as-is (the owner's FVP tool's `dialogue.json` is one producer).
-/// Unknown keys are tolerated so a newer tool revision cannot break import; a
-/// missing `message` is a malformed export and fails.
 fn parse_vntp(raw: &str) -> Result<ParsedScript, String> {
     #[derive(Deserialize)]
     struct Item {
@@ -112,7 +86,15 @@ fn parse_vntp(raw: &str) -> Result<ParsedScript, String> {
         name: Option<String>,
         message: String,
     }
-    let items: Vec<Item> = serde_json::from_str(raw).map_err(|_| "invalid_json")?;
+    let value: serde_json::Value = serde_json::from_str(raw).map_err(|_| "invalid_json")?;
+    let serde_json::Value::Array(raw_items) = value else {
+        return Err("invalid_format".into());
+    };
+    let mut items = Vec::with_capacity(raw_items.len());
+    for raw_item in raw_items {
+        let item: Item = serde_json::from_value(raw_item).map_err(|_| "invalid_format")?;
+        items.push(item);
+    }
     let lines = items
         .into_iter()
         .filter(|item| !item.message.trim().is_empty())
@@ -131,104 +113,28 @@ fn parse_vntp(raw: &str) -> Result<ParsedScript, String> {
     finish(ScriptFormat::JsonVntp, "user".to_owned(), lines)
 }
 
-/// The app's interchange format:
-/// `{ "engine": "…", "lines": [{ "speaker": "…", "text": "…" }] }` with
-/// `speaker` optional for narration.
-fn parse_asyik(raw: &str) -> Result<ParsedScript, String> {
-    #[derive(Deserialize)]
-    struct Doc {
-        #[serde(default)]
-        engine: String,
-        lines: Vec<RawLine>,
-    }
-    #[derive(Deserialize)]
-    struct RawLine {
-        #[serde(default)]
-        speaker: Option<String>,
-        text: String,
-    }
-    let doc: Doc = serde_json::from_str(raw).map_err(|_| "invalid_json")?;
-    if doc.engine.trim().is_empty() {
-        return Err("invalid_format".into());
-    }
-    let engine = doc.engine.trim().chars().take(60).collect::<String>();
-    let lines = doc
-        .lines
-        .into_iter()
-        .filter(|line| !line.text.trim().is_empty())
-        .map(|line| {
-            let speaker = line.speaker.and_then(|name| {
-                let trimmed = name.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed.to_owned())
-                }
-            });
-            build_line(speaker, &line.text)
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    finish(ScriptFormat::AsyikScript, engine, lines)
-}
-
-/// Plain UTF-8 text, one dialogue line per non-empty row. A row may carry a
-/// speaker as a `Name:` or `Name：` prefix; the prefix becomes the speaker only
-/// when it is short (≤ 24 chars), because mid-line colons are common in prose
-/// and mislabeling those would corrupt every digest built from the body.
-fn parse_plain(raw: &str) -> Result<ParsedScript, String> {
-    let lines = raw
-        .lines()
-        .map(str::trim_end)
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            let (speaker, text) = split_speaker(line);
-            build_line(speaker.map(str::to_owned), text)
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    finish(ScriptFormat::PlainText, "user".to_owned(), lines)
-}
-
-/// Split an optional `Name:` / `Name：` prefix. Returns the raw line when there
-/// is no plausible speaker prefix.
-///
-/// The rule is deliberately biased toward splitting: a short, clean prefix
-/// before a colon is treated as a speaker even though prose can produce the
-/// same shape ("彼はこう言った: …"). A wrong label on one narration line costs
-/// little in a digest, while dropping every real speaker name would cost the
-/// whole character list. Exact speakers come from the JSON import formats;
-/// plain text is best-effort by design.
-fn split_speaker(line: &str) -> (Option<&str>, &str) {
-    let Some(colon) = line.find([':', '：']) else {
-        return (None, line);
-    };
-    // The colon may be one byte (':') or three ('：'); step past the whole
-    // character, not one byte.
-    let after = colon + line[colon..].chars().next().map_or(1, char::len_utf8);
-    let name = &line[..colon];
-    let rest = line[after..].trim_start();
-    let plausible = !name.is_empty()
-        && name.chars().count() <= 24
-        && !name.chars().any(|c| "。．.,、!？?「」…".contains(c))
-        && !rest.is_empty();
-    if plausible {
-        (Some(name), rest)
-    } else {
-        (None, line)
-    }
-}
-
 fn build_line(speaker: Option<String>, text: &str) -> Result<ScriptLine, String> {
-    if text.chars().count() > MAX_LINE_CHARS {
+    let clean_text = text.trim();
+    if clean_text.chars().count() > MAX_LINE_CHARS {
         return Err("line_too_long".into());
     }
-    if let Some(speaker) = &speaker
+    let clean_speaker = speaker.and_then(|value| {
+        let collapsed = value.replace(['\r', '\n'], " ");
+        let trimmed = collapsed.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_owned())
+        }
+    });
+    if let Some(speaker) = &clean_speaker
         && speaker.chars().count() > MAX_SPEAKER_CHARS
     {
         return Err("speaker_too_long".into());
     }
     Ok(ScriptLine {
-        speaker,
-        text: text.trim().to_owned(),
+        speaker: clean_speaker,
+        text: clean_text.to_owned(),
     })
 }
 
@@ -252,34 +158,20 @@ fn finish(
 
 /// Merge several parsed scripts, in the given order, into one document, so a
 /// story extracted as many part files imports as one script instead of being
-/// combined by hand first.
-///
-/// The format and engine are kept only when every part agrees; a mix becomes
-/// the generic `plain_text`/"user" document, which is what the merged body
-/// honestly is. Caps are re-checked on the combined line count.
+/// combined by hand first. Caps are re-checked on the combined line count.
 ///
 /// # Errors
 /// `empty_script` for no parts, `too_many_lines` when the parts together
 /// exceed [`MAX_LINES`].
 pub fn merge(parts: &[ParsedScript]) -> Result<ParsedScript, String> {
-    let Some(first) = parts.first() else {
+    if parts.is_empty() {
         return Err("empty_script".into());
-    };
-    let format = if parts.iter().all(|part| part.format == first.format) {
-        first.format
-    } else {
-        ScriptFormat::PlainText
-    };
-    let engine = if parts.iter().all(|part| part.engine == first.engine) {
-        first.engine.clone()
-    } else {
-        "user".to_owned()
-    };
+    }
     let mut lines = Vec::new();
     for part in parts {
         lines.extend(part.lines.iter().cloned());
     }
-    finish(format, engine, lines)
+    finish(ScriptFormat::JsonVntp, "user".to_owned(), lines)
 }
 
 /// Compare strings the way a person reads file names: runs of ASCII digits
@@ -528,50 +420,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn plain_text_imports_user_extracted_scripts() {
-        let parsed = parse("雪々: ゆきゆきは、そう思う……\n\nただの地の文です。\n").expect("parses");
-        assert_eq!(parsed.format, ScriptFormat::PlainText);
-        assert_eq!(parsed.engine, "user");
-        assert_eq!(
-            parsed.lines,
-            vec![
-                ScriptLine {
-                    speaker: Some("雪々".into()),
-                    text: "ゆきゆきは、そう思う……".into()
-                },
-                ScriptLine {
-                    speaker: None,
-                    text: "ただの地の文です。".into()
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn a_fullwidth_colon_also_marks_a_speaker() {
-        let (speaker, text) = split_speaker("ひなた：この雪ですね");
-        assert_eq!(speaker, Some("ひなた"));
-        assert_eq!(text, "この雪ですね");
-    }
-
-    #[test]
-    fn a_short_clean_prefix_before_an_ascii_colon_is_a_speaker() {
-        // Prose can produce the same shape as a nameplate ("彼はこう言った:
-        // …"), and no cheap rule can tell them apart. Splitting keeps every
-        // real name at the cost of a rare wrong label, which is the documented
-        // plain-text trade-off; the JSON formats carry exact speakers.
-        let (speaker, text) = split_speaker("彼はこう言った: 「こんにちは」と、雪の中で。");
-        assert_eq!(speaker, Some("彼はこう言った"));
-        assert_eq!(text, "「こんにちは」と、雪の中で。");
-    }
-
-    #[test]
-    fn a_sentence_like_prefix_is_not_a_speaker() {
-        let (speaker, _) = split_speaker("わからない。: それでも歩く。");
-        assert_eq!(speaker, None);
-    }
-
-    #[test]
     fn vntp_name_message_json_imports_verbatim() {
         let raw = r#"[
             {"name":"雪々","message":"テストルートを選んでください"},
@@ -590,10 +438,10 @@ mod tests {
 
     #[test]
     fn merge_combines_part_files_in_order_and_enforces_caps() {
-        let first = parse("雪々: 一つ目のファイル\n").expect("parses");
-        let second = parse("雪々: 二つ目のファイル\n").expect("parses");
+        let first = parse(r#"[{"name":"雪々","message":"一つ目のファイル"}]"#).expect("parses");
+        let second = parse(r#"[{"name":"雪々","message":"二つ目のファイル"}]"#).expect("parses");
         let merged = merge(&[first, second]).expect("merges");
-        assert_eq!(merged.format, ScriptFormat::PlainText);
+        assert_eq!(merged.format, ScriptFormat::JsonVntp);
         assert_eq!(merged.engine, "user");
         assert_eq!(merged.lines.len(), 2);
         assert_eq!(merged.lines[1].text, "二つ目のファイル");
@@ -603,7 +451,7 @@ mod tests {
             text: "一行".to_owned(),
         };
         let half = ParsedScript {
-            format: ScriptFormat::PlainText,
+            format: ScriptFormat::JsonVntp,
             engine: "user".to_owned(),
             lines: vec![line; MAX_LINES / 2 + 1],
         };
@@ -612,24 +460,12 @@ mod tests {
     }
 
     #[test]
-    fn merge_of_mixed_formats_is_the_generic_document() {
-        let plain = parse("ただの地の文\n").expect("parses");
-        let asyik = parse(r#"{"engine":"kirikiri","lines":[{"text":"Hello."}]}"#).expect("parses");
-        let merged = merge(&[plain, asyik]).expect("merges");
-        // The parts disagree about their shape, so the merged document is
-        // honestly the generic one rather than claiming either engine.
-        assert_eq!(merged.format, ScriptFormat::PlainText);
-        assert_eq!(merged.engine, "user");
-        assert_eq!(merged.lines.len(), 2);
-    }
-
-    #[test]
     fn natural_order_sorts_digit_runs_as_numbers() {
-        let mut names = vec!["scene10.txt", "scene2.txt", "Scene1.txt", "scene1b.txt"];
+        let mut names = vec!["scene10.json", "scene2.json", "Scene1.json", "scene1b.json"];
         names.sort_by(|a, b| natural_cmp(a, b));
         assert_eq!(
             names,
-            vec!["Scene1.txt", "scene1b.txt", "scene2.txt", "scene10.txt"]
+            vec!["Scene1.json", "scene1b.json", "scene2.json", "scene10.json"]
         );
         // Equal-valued runs with different zero padding do not split order
         // beyond the tie: both sort after 1 and before 3.
@@ -714,62 +550,53 @@ mod tests {
     }
 
     #[test]
-    fn asyik_script_requires_an_engine_and_keeps_speakers() {
-        let raw = r#"{"engine":"kirikiri","lines":[
-            {"speaker":"Haru","text":"Hello."},
-            {"text":"Narration."}
-        ]}"#;
-        let parsed = parse(raw).expect("parses");
-        assert_eq!(parsed.format, ScriptFormat::AsyikScript);
-        assert_eq!(parsed.engine, "kirikiri");
-        assert_eq!(parsed.lines[0].speaker.as_deref(), Some("Haru"));
-        assert_eq!(parsed.lines[1].speaker, None);
-    }
-
-    #[test]
-    fn broken_json_is_an_error_never_text() {
-        // A truncated export must not be imported as "plain text" punctuation.
+    fn non_vntp_or_broken_inputs_are_rejected() {
         assert_eq!(
             parse(r#"[{"name":"雪々","mess"#).unwrap_err(),
             "invalid_json"
         );
         assert_eq!(
-            parse(r#"{"lines":"not an array"}"#).unwrap_err(),
+            parse("雪々: ゆきゆきは、そう思う……\n").unwrap_err(),
             "invalid_json"
+        );
+        assert_eq!(
+            parse(r#"{"engine":"kirikiri","lines":[{"text":"Hello."}]}"#).unwrap_err(),
+            "invalid_format"
+        );
+        assert_eq!(
+            parse(r#"[{"speaker":"Haru","text":"Hello."}]"#).unwrap_err(),
+            "invalid_format"
         );
     }
 
     #[test]
-    fn caps_are_enforced_for_every_format() {
+    fn caps_are_enforced_for_vntp_scripts() {
         let too_long = "あ".repeat(MAX_LINE_CHARS + 1);
         assert_eq!(
-            parse(&format!("雪々: {too_long}")).unwrap_err(),
+            parse(&format!(r#"[{{"name":"雪々","message":"{too_long}"}}]"#)).unwrap_err(),
             "line_too_long"
         );
         let speaker = "名".repeat(MAX_SPEAKER_CHARS + 1);
         assert_eq!(
-            parse_asyik(&format!(
-                r#"{{"engine":"x","lines":[{{"speaker":"{speaker}","text":"hi"}}]}}"#
-            ))
-            .unwrap_err(),
+            parse(&format!(r#"[{{"name":"{speaker}","message":"hi"}}]"#)).unwrap_err(),
             "speaker_too_long"
         );
-        let many: Vec<&str> = (0..=MAX_LINES).map(|_| "一行").collect();
-        assert_eq!(parse(&many.join("\n")).unwrap_err(), "too_many_lines");
+        let many: Vec<&str> = (0..=MAX_LINES).map(|_| r#"{"message":"一行"}"#).collect();
+        let raw_many = format!("[{}]", many.join(","));
+        assert_eq!(parse(&raw_many).unwrap_err(), "too_many_lines");
     }
 
     #[test]
     fn a_script_with_no_content_is_rejected() {
-        assert_eq!(parse("   \n\n  ").unwrap_err(), "empty_script");
         assert_eq!(parse("[]").unwrap_err(), "empty_script");
         assert_eq!(
-            parse(r#"{"engine":"x","lines":[]}"#).unwrap_err(),
+            parse(r#"[{"name":"雪々","message":"   \n\t  "}]"#).unwrap_err(),
             "empty_script"
         );
     }
 
     #[test]
-    fn the_body_round_trips_through_the_plaintext_convention() {
+    fn render_body_formats_speaker_and_narration_lines() {
         let lines = vec![
             ScriptLine {
                 speaker: Some("雪々".into()),
@@ -782,8 +609,6 @@ mod tests {
         ];
         let body = render_body(&lines);
         assert_eq!(body, "雪々: そう思う……\n地の文。\n");
-        let parsed = parse(&body).expect("parses");
-        assert_eq!(parsed.lines, lines);
     }
 
     #[test]
@@ -930,5 +755,13 @@ mod tests {
                 .count(),
             MAX_NAME_PAIRS
         );
+    }
+
+    #[test]
+    fn parse_strips_utf8_bom_and_sanitizes_speaker_names() {
+        let bom_vntp = "\u{FEFF}[{\"name\":\"Haru\\nSakura \",\"message\":\"Hi.\"}]";
+        let parsed = parse(bom_vntp).expect("parses BOM VNTP JSON");
+        assert_eq!(parsed.format, ScriptFormat::JsonVntp);
+        assert_eq!(parsed.lines[0].speaker.as_deref(), Some("Haru Sakura"));
     }
 }

@@ -115,8 +115,7 @@ struct Inner {
 }
 
 impl Inner {
-    fn revoke(&mut self) {
-        self.vision.stop();
+    fn revoke_turn(&mut self) {
         if let Some(summary) = &self.summary {
             summary.cancel.send_replace(true);
         }
@@ -134,6 +133,11 @@ impl Inner {
                 }
             }
         }
+    }
+
+    fn revoke(&mut self) {
+        self.vision.stop();
+        self.revoke_turn();
     }
 
     fn require_session(&self, id: &str) -> Result<store::Session, String> {

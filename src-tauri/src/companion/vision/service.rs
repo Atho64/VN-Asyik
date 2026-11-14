@@ -125,7 +125,18 @@ impl CompanionRuntime {
             inner.vision.status = "preview".into();
             self.changed(&mut inner);
         }
-        self.vision_preview(id, generation).await
+        match self.vision_preview(id, generation).await {
+            Ok(preview) => Ok(preview),
+            Err(err) => {
+                if let Ok(mut inner) = self.lock()
+                    && inner.vision.generation == generation
+                {
+                    inner.vision.stop();
+                    self.changed(&mut inner);
+                }
+                Err(err)
+            }
+        }
     }
 
     pub async fn vision_preview(&self, id: &str, generation: u64) -> Result<Preview, String> {
@@ -266,9 +277,12 @@ impl CompanionRuntime {
                     .binding
                     .as_mut()
                     .ok_or("vision_window_unavailable")?;
+                if !b.armed {
+                    return Err("invalid_request".into());
+                }
                 b.quiet = true;
                 b.scenes.suspend();
-                inner.vision.status = "quiet".into();
+                inner.vision.status = b.status(false, false, false).into();
             }
             self.changed(&mut inner);
             drop(inner);
@@ -578,16 +592,22 @@ impl CompanionRuntime {
             }else{&work.text};
             let input=format!("{instruction}\nFresh bound dialogue (untrusted): {}",work.lines);
             messages.push(json!({"role":"user","content":provider::content(&[Part::Text(&input),Part::Image(&work.frame.image)])}));
-            // Persist provenance before dispatch. Failed preparation consumes no budget.
-            message=Some(store::begin(state.db().pool(),&work).await?);
             if !self.visual_current(state,&work){return Err("cancelled".into());}
             if Identity::of(&profiles::resolve(state.db().pool()).await)!=work.identity{return Err("vision_provider_changed".into());}
             {
                 let mut inner=self.lock()?;
                 if !inner.machine.accepts(work.token){return Err("cancelled".into());}
                 if work.automatic{let now=inner.vision.now();if !inner.vision.budget.charge(now){return Err("vision_limit".into());}}
-                if !work.automatic{inner.live.clone_from(&message);}
                 self.changed(&mut inner);
+            }
+            // Persist provenance before dispatch. Failed preparation consumes no budget.
+            message=Some(store::begin(state.db().pool(),&work).await?);
+            if !work.automatic{
+                let mut inner=self.lock()?;
+                if inner.machine.accepts(work.token){
+                    inner.live.clone_from(&message);
+                    self.changed(&mut inner);
+                }
             }
             let answer=tokio::select!{biased;_=work.cancelled.changed()=>Err("cancelled".into()),
                 r=provider::complete(&work.provider.config,work.provider.key.as_ref(),&messages,if work.automatic{400}else{1200})=>r}?;
@@ -642,7 +662,11 @@ impl CompanionRuntime {
             inner.machine.finish_turn(work.token);
             inner.vision.automatic_turn = false;
             inner.vision.visual_turn = false;
-            inner.live = message.filter(|m| !work.automatic || m.status == "complete");
+            if let Some(m) = message.filter(|m| !work.automatic || m.status == "complete") {
+                inner.live = Some(m);
+            } else if !work.automatic {
+                inner.live = None;
+            }
             inner.vision.error = error.filter(|e| e != "cancelled");
             self.changed(&mut inner);
         }
@@ -691,7 +715,10 @@ impl Binding {
         if automatic {
             if !self.armed
                 || self.quiet
-                || self.preview.is_some()
+                || self
+                    .preview
+                    .as_ref()
+                    .is_some_and(|(_, _, at)| at.elapsed() < std::time::Duration::from_mins(2))
                 || !self.target.foreground()
                 || !self.scenes.ready(now)
             {

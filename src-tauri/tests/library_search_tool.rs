@@ -182,6 +182,14 @@ async fn status_narrows_and_a_hidden_spoiler_tag_is_not_returned() {
     assert_eq!(tags.len(), 1);
     assert_eq!(tags[0]["name"], "Nakige");
 
+    // Searching by the spoiler tag name or a raw JSON key does not match when spoilers are off.
+    let by_spoiler_tag = search(&db, options(Spoilers::None), r#"{"query":"school"}"#).await;
+    assert!(titles(&by_spoiler_tag).is_empty());
+    let by_json_key = search(&db, options(Spoilers::None), r#"{"query":"spoiler"}"#).await;
+    assert!(titles(&by_json_key).is_empty());
+    let by_spoiler_tag_all = search(&db, options(Spoilers::All), r#"{"query":"school"}"#).await;
+    assert_eq!(titles(&by_spoiler_tag_all), vec!["CLANNAD"]);
+
     let result = search(&db, options(Spoilers::All), r#"{"query":"clannad"}"#).await;
     let tags = result["data"]["games"][0]["tags"].as_array().expect("tags");
     assert_eq!(tags.len(), 2);

@@ -132,4 +132,21 @@ describe("source links", () => {
     expect(safeSourceUrl("file:///C:/secret.txt")).toBeNull();
     expect(safeSourceUrl(null)).toBeNull();
   });
+
+  it("renders external source links as buttons instead of anchors and labels tool sources", () => {
+    renderMessage({
+      ...base,
+      status: "complete",
+      content: "Checked.",
+      sources: [
+        { id: "S1", title: "CLANNAD", url: "https://vndb.org/v4", gameId: null },
+        { id: "S2", title: "script_digest", url: null, gameId: null },
+      ],
+    });
+    const externalBtn = screen.getByRole("button", { name: "CLANNAD" });
+    expect(externalBtn).not.toHaveAttribute("href");
+    expect(
+      screen.getByText(/Local library data \(Reading imported script digest\)/i),
+    ).toBeInTheDocument();
+  });
 });

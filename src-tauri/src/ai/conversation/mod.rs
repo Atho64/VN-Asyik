@@ -163,7 +163,13 @@ pub async fn send(
         },
     )
     .await?;
-    store::save(state.db().pool(), &message).await?;
+    if let Err(err) = store::save(state.db().pool(), &message).await {
+        let _ = sqlx::query("UPDATE chat_messages SET status='error', error='db_error' WHERE id=?")
+            .bind(&message.id)
+            .execute(state.db().pool())
+            .await;
+        return Err(err);
+    }
     Ok(message)
 }
 
@@ -196,7 +202,7 @@ pub(crate) async fn generate(
     }
     let client = crate::vndb::http_client_builder()
         .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(90))
+        .read_timeout(std::time::Duration::from_mins(1))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| "provider_offline")?;
@@ -559,6 +565,9 @@ async fn run_loop(
                 message.content.push_str(&text);
                 if channel.send(ChatEvent::Delta { text }).is_err() {
                     disconnected = true;
+                    false
+                } else {
+                    true
                 }
             },
         )

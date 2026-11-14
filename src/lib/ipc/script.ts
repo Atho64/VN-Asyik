@@ -37,6 +37,7 @@ export const scriptDocumentSchema = z.object({
   sourceSha256: z.string(),
   lineCount: z.number(),
   byteSize: z.number(),
+  chunkCount: z.number(),
   createdAt: z.number(),
   compaction: compactionInfoSchema.nullable(),
 });
@@ -44,8 +45,7 @@ export type ScriptDocument = z.infer<typeof scriptDocumentSchema>;
 
 export const scriptApi = {
   /**
-   * Import script file(s) as one document; each file's format is detected from
-   * its content and several files are merged in natural file-name order.
+   * Import VNTP JSON script file(s) as one document, merged in natural file-name order.
    */
   import: (gameId: string, paths: string[]) =>
     call("script_import", scriptDocumentSchema, { gameId, paths }),

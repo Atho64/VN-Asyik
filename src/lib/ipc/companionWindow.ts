@@ -13,6 +13,8 @@ export const companionWindowApi = {
       ({ payload }) => {
         if (
           payload === "/companion" ||
+          payload === "/companion?memory=1" ||
+          payload === "/companion?vision=1" ||
           payload === "/settings" ||
           /^\/game\/[0-9a-f-]+$/i.test(payload)
         ) {

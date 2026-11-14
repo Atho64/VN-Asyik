@@ -30,12 +30,13 @@ function doc(overrides: Partial<ScriptDocument> = {}): ScriptDocument {
   return {
     id: "d1",
     gameId: "g1",
-    engine: "kirikiri",
-    sourceKind: "plain_text",
-    sourcePath: "C:\\games\\Saku\\script.txt",
+    engine: "user",
+    sourceKind: "json_vntp",
+    sourcePath: "C:\\games\\Saku\\dialogue.json",
     sourceSha256: "ab".repeat(32),
     lineCount: 4_512,
     byteSize: 486_400,
+    chunkCount: 10,
     createdAt: 1_760_000_000_000,
     compaction: null,
     ...overrides,
@@ -66,10 +67,28 @@ function renderCard() {
 }
 
 describe("ScriptCard", () => {
-  it("shows the empty state when nothing is imported", async () => {
+  it("keeps import help and settings folded in the empty state", async () => {
     renderCard();
 
-    expect(await screen.findByText("No script imported yet. Extract one from the game with your own tools, then import the text file here.")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Import a script so VN Chat and Companion can discuss the story.",
+      ),
+    ).toBeInTheDocument();
+    const disclosure = screen.getByText("Format and settings");
+    const details = disclosure.closest("details");
+    expect(details).toHaveClass("script-help");
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("Agents")).not.toBeVisible();
+    expect(screen.getByRole("button", { name: "Import script" })).toBeVisible();
+
+    await userEvent.setup().click(disclosure);
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByLabelText("Agents")).toBeVisible();
+    expect(
+      screen.getByText("Saved scripts are excluded from sync and backups."),
+    ).toBeVisible();
+    expect(scriptApi.compact).not.toHaveBeenCalled();
   });
 
   it("lists a document inside its own row container with kind and size", async () => {
@@ -83,12 +102,17 @@ describe("ScriptCard", () => {
       return found;
     });
     expect(list.querySelector(".script-row")).not.toBeNull();
-    expect(screen.getByText("script.txt")).toBeInTheDocument();
-    expect(screen.getByText(/Plain text/)).toBeInTheDocument();
+    expect(screen.getByText("dialogue.json")).toBeInTheDocument();
+    expect(screen.getByText(/JSON \(VNTP\)/)).toBeInTheDocument();
     expect(screen.getByText(/4512 lines/)).toBeInTheDocument();
     // 486_400 bytes is exactly 475 KB, so the formatter's rounding is stable.
     expect(screen.getByText(/475.0 KB/)).toBeInTheDocument();
     expect(screen.getByText("Not summarized")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Summarizing sends text to your chat provider; usage charges may apply. Enable all spoilers to use the summary in chat.",
+      ),
+    ).toBeVisible();
   });
 
   it("shows the digest state without a summarize button once done", async () => {
@@ -109,9 +133,7 @@ describe("ScriptCard", () => {
     renderCard();
 
     expect(await screen.findByText("Digest ready")).toBeInTheDocument();
-    expect(
-      document.querySelector(".script-row__state--done"),
-    ).not.toBeNull();
+    expect(document.querySelector(".script-row__state--done")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Summarize" })).not.toBeInTheDocument();
   });
 
@@ -158,7 +180,16 @@ describe("ScriptCard", () => {
   it("summarizes in batches until the digest exists, showing progress", async () => {
     vi.mocked(scriptApi.list).mockResolvedValue([
       doc({
-        compaction: { modelId: "qwen", chunkCount: 2, doneChunks: 0, agentCount: 1, compactorVersion: 2, currentVersion: 2, digestOutdated: false, digest: null },
+        compaction: {
+          modelId: "qwen",
+          chunkCount: 2,
+          doneChunks: 0,
+          agentCount: 1,
+          compactorVersion: 2,
+          currentVersion: 2,
+          digestOutdated: false,
+          digest: null,
+        },
       }),
     ]);
     vi.mocked(scriptApi.compact)
@@ -184,7 +215,9 @@ describe("ScriptCard", () => {
       });
 
     renderCard();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Summarize" }));
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Summarize" }));
 
     await waitFor(() => {
       expect(scriptApi.compact).toHaveBeenCalledTimes(2);
@@ -197,17 +230,21 @@ describe("ScriptCard", () => {
   it("maps a missing provider key to an in-app instruction", async () => {
     vi.mocked(scriptApi.list).mockResolvedValue([doc()]);
     vi.mocked(scriptApi.compact).mockRejectedValue(
-      new IpcError("chat_key_missing", "chat_key_missing"),
+      new IpcError("script", "chat_key_missing"),
     );
 
     renderCard();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Summarize" }));
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Summarize" }));
 
     await waitFor(() => {
       const toasts = useAppStore.getState().toasts;
       expect(
         toasts.some((toast) =>
-          toast.message.includes("Set an AI provider (or a local endpoint) in Settings first."),
+          toast.message.includes(
+            "Set an AI provider (or a local endpoint) in Settings first.",
+          ),
         ),
       ).toBe(true);
     });
@@ -225,16 +262,20 @@ describe("ScriptCard", () => {
       ]);
 
     renderCard();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Import script" }));
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Import script" }));
 
     await waitFor(() => {
-      expect(scriptApi.import).toHaveBeenCalledWith("g1", ["C:\\games\\Saku\\dialogue.json"]);
+      expect(scriptApi.import).toHaveBeenCalledWith("g1", [
+        "C:\\games\\Saku\\dialogue.json",
+      ]);
     });
     expect(await screen.findByText("dialogue.json")).toBeInTheDocument();
     // The kind label lives in the row's sub line, not only in the card intro.
-    expect(
-      document.querySelector(".script-row .row__sub")?.textContent,
-    ).toContain("JSON (VNTP)");
+    expect(document.querySelector(".script-row .row__sub")?.textContent).toContain(
+      "JSON (VNTP)",
+    );
   });
 
   it("imports several chosen files as one merged document", async () => {
@@ -247,7 +288,9 @@ describe("ScriptCard", () => {
     vi.mocked(scriptApi.import).mockResolvedValue(doc({ lineCount: 9_001 }));
 
     renderCard();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Import script" }));
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Import script" }));
 
     await waitFor(() => {
       expect(scriptApi.import).toHaveBeenCalledTimes(1);
@@ -259,14 +302,10 @@ describe("ScriptCard", () => {
   });
 
   it("removes a document", async () => {
-    vi.mocked(scriptApi.list)
-      .mockResolvedValueOnce([doc()])
-      .mockResolvedValueOnce([]);
+    vi.mocked(scriptApi.list).mockResolvedValueOnce([doc()]).mockResolvedValueOnce([]);
     renderCard();
 
-    await userEvent
-      .setup()
-      .click(await screen.findByRole("button", { name: /Remove/ }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: /Remove/ }));
 
     await waitFor(() => {
       expect(scriptApi.delete).toHaveBeenCalledWith("d1");
@@ -278,10 +317,12 @@ describe("ScriptCard", () => {
   it("shows and saves the agent count", async () => {
     renderCard();
 
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Format and settings"));
     const select = await screen.findByLabelText("Agents");
     expect(select).toHaveValue("3");
 
-    await userEvent.setup().selectOptions(select, "5");
+    await user.selectOptions(select, "5");
     await waitFor(() => {
       expect(scriptApi.saveAgentSettings).toHaveBeenCalledWith({ agents: 5 });
     });
@@ -289,6 +330,10 @@ describe("ScriptCard", () => {
     await waitFor(() => {
       expect(select).toHaveValue("5");
     });
+    await user.click(screen.getByText("Format and settings"));
+    expect(select).not.toBeVisible();
+    await user.click(screen.getByText("Format and settings"));
+    expect(select).toHaveValue("5");
   });
 
   it("locks the agent count while a summary is running", async () => {
@@ -296,7 +341,16 @@ describe("ScriptCard", () => {
     // for exactly as long as the loop owns the document.
     vi.mocked(scriptApi.list).mockResolvedValue([
       doc({
-        compaction: { modelId: "qwen", chunkCount: 1, doneChunks: 0, agentCount: 1, compactorVersion: 2, currentVersion: 2, digestOutdated: false, digest: null },
+        compaction: {
+          modelId: "qwen",
+          chunkCount: 1,
+          doneChunks: 0,
+          agentCount: 1,
+          compactorVersion: 2,
+          currentVersion: 2,
+          digestOutdated: false,
+          digest: null,
+        },
       }),
     ]);
     let finish:
@@ -319,8 +373,11 @@ describe("ScriptCard", () => {
     );
 
     renderCard();
+    await userEvent.setup().click(screen.getByText("Format and settings"));
     const select = await screen.findByLabelText("Agents");
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Summarize" }));
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Summarize" }));
 
     await waitFor(() => {
       expect(select).toBeDisabled();
@@ -344,7 +401,16 @@ describe("ScriptCard", () => {
   it("counts the agents in the progress line", async () => {
     vi.mocked(scriptApi.list).mockResolvedValue([
       doc({
-        compaction: { modelId: "qwen", chunkCount: 40, doneChunks: 12, agentCount: 3, compactorVersion: 2, currentVersion: 2, digestOutdated: false, digest: null },
+        compaction: {
+          modelId: "qwen",
+          chunkCount: 40,
+          doneChunks: 12,
+          agentCount: 3,
+          compactorVersion: 2,
+          currentVersion: 2,
+          digestOutdated: false,
+          digest: null,
+        },
       }),
     ]);
     renderCard();
@@ -352,5 +418,128 @@ describe("ScriptCard", () => {
     expect(
       await screen.findByText("Summarized 12 of 40 chunks · 3 agents"),
     ).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "12");
+  });
+
+  it("recovers when chunks finished summarizing without a final digest", async () => {
+    vi.mocked(scriptApi.list).mockResolvedValue([
+      doc({
+        chunkCount: 4,
+        compaction: {
+          modelId: "qwen",
+          chunkCount: 4,
+          doneChunks: 4,
+          agentCount: 2,
+          compactorVersion: 3,
+          currentVersion: 3,
+          digestOutdated: false,
+          digest: null,
+        },
+      }),
+    ]);
+    vi.mocked(scriptApi.compact).mockResolvedValue({
+      modelId: "qwen",
+      chunkCount: 4,
+      doneChunks: 4,
+      agentCount: 2,
+      compactorVersion: 3,
+      currentVersion: 3,
+      digestOutdated: false,
+      digest: "Final digest.",
+    });
+
+    renderCard();
+    expect(
+      await screen.findByText("All 4 chunks summarized · ready to combine"),
+    ).toBeInTheDocument();
+
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "Finalize digest" }));
+
+    await waitFor(() => {
+      expect(scriptApi.compact).toHaveBeenCalledWith("d1", undefined, false);
+    });
+    expect(await screen.findByText("Digest ready")).toBeInTheDocument();
+  });
+
+  it("refreshes partial progress after an error and asks confirmation to remove compacted scripts", async () => {
+    const partial = doc({
+      chunkCount: 6,
+      compaction: {
+        modelId: "qwen",
+        chunkCount: 6,
+        doneChunks: 2,
+        agentCount: 1,
+        compactorVersion: 3,
+        currentVersion: 3,
+        digestOutdated: false,
+        digest: null,
+      },
+    });
+    vi.mocked(scriptApi.list)
+      .mockResolvedValueOnce([doc({ chunkCount: 6 })])
+      .mockResolvedValueOnce([partial])
+      .mockResolvedValueOnce([]);
+    vi.mocked(scriptApi.compact).mockRejectedValue(
+      new IpcError("script", "provider_throttled"),
+    );
+
+    renderCard();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Summarize" }));
+
+    expect(await screen.findByText("Summarized 2 of 6 chunks")).toBeInTheDocument();
+    expect(
+      useAppStore
+        .getState()
+        .toasts.some((toast) => toast.message.includes("rate limiting")),
+    ).toBe(true);
+
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(scriptApi.delete).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Confirm remove" }));
+    await waitFor(() => {
+      expect(scriptApi.delete).toHaveBeenCalledWith("d1");
+    });
+  });
+
+  it("shows a retry state when listing scripts fails and omits picker filters on Android", async () => {
+    useAppStore.setState({
+      toasts: [],
+      platform: {
+        os: "android",
+        kind: "mobile",
+        first_class: true,
+        process_tracking: "unavailable",
+        chapter_detection: "unavailable",
+        discord_presence: "unavailable",
+        cloud_sync: "supported",
+      },
+    });
+    vi.mocked(scriptApi.list)
+      .mockRejectedValueOnce(new IpcError("script", "db_error"))
+      .mockResolvedValueOnce([]);
+
+    renderCard();
+    const user = userEvent.setup();
+    expect(
+      await screen.findByText("Could not load imported scripts."),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(
+      await screen.findByText(
+        "Import a script so VN Chat and Companion can discuss the story.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Import script" }));
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith({
+        multiple: true,
+        directory: false,
+        title: "Choose script files",
+      });
+    });
   });
 });

@@ -169,11 +169,13 @@ fn now() -> i64 {
 /// `no_files`, `game_missing`, `invalid_game`, `read_failed`, `file_too_large`,
 /// `invalid_utf8`, `vn_core::script` parse/merge codes, `db_error`, or
 /// `script_limit`. Any bad file fails the entire import.
+#[allow(clippy::too_many_lines)]
 pub async fn import(
     pool: &SqlitePool,
     game_id: &str,
     paths: &[String],
 ) -> Result<ScriptDocumentInfo, String> {
+    use sha2::Digest;
     if paths.is_empty() {
         return Err("no_files".into());
     }
@@ -204,12 +206,16 @@ pub async fn import(
     resolved.sort_by(|a, b| natural_cmp(a.display_name(), b.display_name()));
 
     let mut parts = Vec::with_capacity(resolved.len());
-    let mut raws = Vec::with_capacity(resolved.len());
+    let mut hasher = sha2::Sha256::new();
+    let mut total_bytes = 0_u64;
     for file in &resolved {
         let meta = tokio::fs::metadata(file.path())
             .await
             .map_err(|_| "read_failed")?;
-        if meta.len() > MAX_FILE_BYTES {
+        total_bytes = total_bytes
+            .checked_add(meta.len())
+            .ok_or("file_too_large")?;
+        if total_bytes > MAX_FILE_BYTES {
             return Err("file_too_large".into());
         }
         let bytes = tokio::fs::read(file.path())
@@ -217,11 +223,11 @@ pub async fn import(
             .map_err(|_| "read_failed")?;
         let raw = String::from_utf8(bytes).map_err(|_| "invalid_utf8")?;
         parts.push(parse(&raw)?);
-        raws.push(raw);
+        hasher.update(raw.as_bytes());
     }
     let parsed = merge(&parts)?;
     let body = render_body(&parsed.lines);
-    let source_sha256 = sha256_hex(&raws);
+    let source_sha256 = finalize_sha256(hasher);
 
     // Require both `source_sha256` and rendered `body` to match so different splits cannot collide on concatenated bytes.
     if let Some(row) = sqlx::query(
@@ -406,10 +412,11 @@ pub async fn digest_for_game(
     game_id: &str,
 ) -> Result<Option<DigestState>, String> {
     let row = sqlx::query(
-        "SELECT c.chunk_count AS c_chunks, c.done_chunks AS c_done, c.compactor_version AS c_version, \
-         c.digest AS c_digest \
+        "SELECT d.chunk_count AS d_chunks, c.chunk_count AS c_chunks, c.done_chunks AS c_done, \
+         c.compactor_version AS c_version, c.digest AS c_digest \
          FROM script_documents d LEFT JOIN script_compaction c ON c.document_id = d.id \
-         WHERE d.game_id=? ORDER BY d.created_at DESC, d.id LIMIT 1",
+         WHERE d.game_id=? \
+         ORDER BY CASE WHEN c.digest IS NOT NULL THEN 0 ELSE 1 END, d.created_at DESC, d.id LIMIT 1",
     )
     .bind(game_id)
     .fetch_optional(pool)
@@ -427,9 +434,12 @@ pub async fn digest_for_game(
         (digest_freshness(stored_version, COMPACTOR_VERSION) == DigestFreshness::Outdated)
             .then_some("built by an older summarizer, so it may be shorter and less specific than the script supports; rebuild it from the script card")
     });
+    let d_chunks = row.get::<Option<i64>, _>("d_chunks");
+    let c_chunks = row.get::<Option<i64>, _>("c_chunks");
+    let c_done = row.get::<Option<i64>, _>("c_done");
     Ok(Some(DigestState {
-        chunk_count: usize::try_from(row.get::<i64, _>("c_chunks")).unwrap_or(0),
-        done_chunks: usize::try_from(row.get::<i64, _>("c_done")).unwrap_or(0),
+        chunk_count: usize::try_from(c_chunks.or(d_chunks).unwrap_or(0).max(0)).unwrap_or(0),
+        done_chunks: usize::try_from(c_done.unwrap_or(0).max(0)).unwrap_or(0),
         compactor_version: stored_version,
         digest,
         outdated,
@@ -898,7 +908,7 @@ pub async fn compact(
             8192,
         )
         .await
-        .map_err(|err| err.to_string())?;
+        .map_err(chat_error_code)?;
         let digest = merged.trim().chars().take(MAX_DIGEST_CHARS).collect();
         let mut guard = state.lock().await;
         guard.digest = Some(digest);
@@ -1019,7 +1029,7 @@ async fn run_agent(call: &CallCtx<'_>, job: AgentJob<'_>) -> Result<(), String> 
         let summary =
             crate::ai::chat::complete(call.client, call.config, call.key, MAP_SYSTEM_PROMPT, &user)
                 .await
-                .map_err(|err| err.to_string())?;
+                .map_err(chat_error_code)?;
         let summary = summary
             .trim()
             .chars()
@@ -1060,7 +1070,7 @@ async fn make_segment_digest(call: &CallCtx<'_>, index: usize) -> Result<(), Str
         8192,
     )
     .await
-    .map_err(|err| err.to_string())?;
+    .map_err(chat_error_code)?;
     let digest = digest.trim().chars().take(MAX_DIGEST_CHARS).collect();
     let mut guard = call.state.lock().await;
     guard.segment_digests[index] = Some(digest);
@@ -1068,13 +1078,28 @@ async fn make_segment_digest(call: &CallCtx<'_>, index: usize) -> Result<(), Str
     Ok(())
 }
 
-/// SHA-256 over concatenated file contents in merge order (ignores paths/filenames).
-fn sha256_hex(parts: &[String]) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    for part in parts {
-        hasher.update(part.as_bytes());
+fn chat_error_code(err: crate::ai::chat::ChatError) -> String {
+    match err {
+        crate::ai::chat::ChatError::NoKey => "chat_key_missing".into(),
+        crate::ai::chat::ChatError::Unauthorized => "provider_unauthorized".into(),
+        crate::ai::chat::ChatError::Throttled => "provider_throttled".into(),
+        crate::ai::chat::ChatError::Offline(_) => "provider_offline".into(),
+        crate::ai::chat::ChatError::BadResponse(reason) => {
+            if reason.contains("whole reply budget on reasoning") {
+                "provider_budget_exhausted".into()
+            } else if reason.contains("token limit") {
+                "provider_truncated".into()
+            } else if reason == "empty response" {
+                "provider_empty".into()
+            } else {
+                format!("provider_error: {reason}")
+            }
+        }
     }
+}
+
+fn finalize_sha256(hasher: sha2::Sha256) -> String {
+    use sha2::Digest;
     let digest = hasher.finalize();
     let mut hex = String::with_capacity(digest.len() * 2);
     for byte in digest {
@@ -1082,6 +1107,17 @@ fn sha256_hex(parts: &[String]) -> String {
         let _ = write!(hex, "{byte:02x}");
     }
     hex
+}
+
+/// SHA-256 over concatenated file contents in merge order (ignores paths/filenames).
+#[cfg(test)]
+fn sha256_hex(parts: &[String]) -> String {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    for part in parts {
+        hasher.update(part.as_bytes());
+    }
+    finalize_sha256(hasher)
 }
 
 #[cfg(test)]
@@ -1275,10 +1311,14 @@ mod plan_tests {
         .expect("insert game");
 
         // Long enough for more than one chunk at the 48 KB budget.
-        let line = "雪々: ゆきゆきは、そう思う……\n";
-        let body = line.repeat(12_000);
-        let path = std::env::temp_dir().join(format!("vn-plan-{}.txt", std::process::id()));
-        std::fs::write(&path, &body).expect("write script");
+        let rendered_line = "雪々: ゆきゆきは、そう思う……\n";
+        let expected_body = rendered_line.repeat(12_000);
+        let json_items: Vec<&str> = (0..12_000)
+            .map(|_| r#"{"name":"雪々","message":"ゆきゆきは、そう思う……"}"#)
+            .collect();
+        let raw_json = format!("[{}]", json_items.join(","));
+        let path = std::env::temp_dir().join(format!("vn-plan-{}.json", std::process::id()));
+        std::fs::write(&path, &raw_json).expect("write script");
         let stored = import(&pool, game, &[path.to_string_lossy().into_owned()])
             .await
             .expect("import");
@@ -1292,7 +1332,10 @@ mod plan_tests {
                 .expect("read plan");
         let plan: Vec<(usize, usize)> =
             serde_json::from_str(plan_json.as_deref().expect("stored plan")).expect("decode");
-        assert_eq!(plan.len(), plan_chunks(&body, DEFAULT_CHUNK_BYTES).len());
+        assert_eq!(
+            plan.len(),
+            plan_chunks(&expected_body, DEFAULT_CHUNK_BYTES).len()
+        );
         assert_eq!(
             chunk_count.and_then(|n| usize::try_from(n).ok()),
             Some(plan.len()),
@@ -1301,5 +1344,56 @@ mod plan_tests {
         // And the document info reports it before any compaction row exists.
         assert_eq!(usize::try_from(stored.chunk_count).unwrap_or(0), plan.len());
         assert!(stored.compaction.is_none());
+
+        // Without a compaction row, `digest_for_game` must still succeed instead of panicking on NULLs.
+        let uncompacted = digest_for_game(&pool, game)
+            .await
+            .expect("digest_for_game on uncompacted script")
+            .expect("document exists");
+        assert_eq!(uncompacted.chunk_count, plan.len());
+        assert_eq!(uncompacted.done_chunks, 0);
+        assert!(uncompacted.digest.is_none());
+
+        // When a newer uncompacted script exists alongside a ready digest, keep serving the ready digest.
+        let ready_id = "01a151db-6666-7000-8000-000000000099";
+        let ready_path = std::env::temp_dir().join(format!("vn-ready-{}.json", std::process::id()));
+        std::fs::write(&ready_path, r#"[{"name":"雪々","message":"準備完了。"}]"#)
+            .expect("write ready script");
+        let ready_doc = import(&pool, game, &[ready_path.to_string_lossy().into_owned()])
+            .await
+            .expect("import ready");
+        std::fs::remove_file(&ready_path).ok();
+        RunState {
+            model_id: "qwen".into(),
+            chunk_count: 1,
+            agent_count: 1,
+            done: 1,
+            summaries: vec![vec!["Ready outline".into()]],
+            segment_digests: vec![None],
+            digest: Some(format!("Ready digest {ready_id}")),
+        }
+        .save(&pool, &ready_doc.id)
+        .await
+        .expect("save digest");
+        // Import a newer uncompacted script for the same game.
+        let newer_path = std::env::temp_dir().join(format!("vn-newer-{}.json", std::process::id()));
+        std::fs::write(
+            &newer_path,
+            r#"[{"name":"雪々","message":"新しいファイル。"}]"#,
+        )
+        .expect("write newer script");
+        let _newer = import(&pool, game, &[newer_path.to_string_lossy().into_owned()])
+            .await
+            .expect("import newer");
+        std::fs::remove_file(&newer_path).ok();
+
+        let served = digest_for_game(&pool, game)
+            .await
+            .expect("digest_for_game with newer uncompacted")
+            .expect("digest state");
+        assert_eq!(
+            served.digest.as_deref(),
+            Some("Ready digest 01a151db-6666-7000-8000-000000000099")
+        );
     }
 }

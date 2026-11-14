@@ -63,6 +63,7 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryPassage, setMemoryPassage] = useState<ChatMessage | null>(null);
   const memoryRequested = !overlay && params.get("memory") === "1";
+  const visionRequested = !overlay && params.get("vision") === "1";
   const closeMemory = useCallback(() => {
     setMemoryOpen(false);
     setMemoryPassage(null);
@@ -78,6 +79,7 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
     setDeleteConfirm(false);
   }, []);
   const end = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const follow = useRef(true);
   const active = snapshot?.session && snapshot.lifecycle !== "off";
   const session = historyId
@@ -198,6 +200,13 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
     }
   }
 
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [draft, sessionId]);
+
   return (
     <section className={overlay ? "companion companion--overlay" : "companion"}>
       <header className="companion__header">
@@ -253,8 +262,11 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
               aria-label={t("companion.options")}
               title={t("companion.options")}
               aria-haspopup="dialog"
-              aria-expanded={optionsOpen && !memoryRequested}
-              onClick={() => setOptionsOpen(true)}
+              aria-expanded={optionsOpen && !memoryRequested && !visionRequested}
+              onClick={() => {
+                closeMemory();
+                setOptionsOpen(true);
+              }}
             >
               <Icon name="settings" />
             </Button>
@@ -335,7 +347,16 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
           ) : (
             session && (
               <div className="companion__session">
-                {viewingLive && <CompanionVision snapshot={snapshot} overlay={overlay} />}
+                {viewingLive && (
+                  <CompanionVision
+                    snapshot={snapshot}
+                    overlay={overlay}
+                    onOpen={() => {
+                      closeOptions();
+                      closeMemory();
+                    }}
+                  />
+                )}
                 {session.replayExcluded && (
                   <p className="companion__notice">{t("memory.replayExcluded")}</p>
                 )}
@@ -363,8 +384,9 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
                     </Button>
                   )}
                   {history?.id !== session.id ? (
-                    <p role="status">{t("companion.loading")}</p>
+                    !historyError && <p role="status">{t("companion.loading")}</p>
                   ) : (
+                    !historyError &&
                     messages.length === 0 && (
                       <p className="companion__empty">{t("companion.emptyHint")}</p>
                     )
@@ -441,6 +463,7 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
                     <label className="companion__field">
                       <span>{t("companion.message")}</span>
                       <textarea
+                        ref={inputRef}
                         rows={2}
                         maxLength={16000}
                         value={draft}
@@ -509,7 +532,7 @@ export function CompanionScreen({ overlay = false }: { overlay?: boolean }) {
         </>
       )}
       <Sheet
-        open={optionsOpen && !memoryRequested}
+        open={optionsOpen && !memoryRequested && !visionRequested}
         title={t("companion.options")}
         onClose={closeOptions}
       >

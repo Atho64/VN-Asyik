@@ -25,10 +25,36 @@ describe("inline formatting", () => {
     expect(screen.queryByText(/\*\*/)).toBeNull();
   });
 
-  it("renders *italic* and _italic_", () => {
-    show("A *quiet* and _gentle_ story.");
+  it("renders *italic* and _italic_ without mangling snake_case identifiers", () => {
+    show("A *quiet* and _gentle_ story with search_library_tool.");
     expect(screen.getByText("quiet").tagName).toBe("EM");
     expect(screen.getByText("gentle").tagName).toBe("EM");
+    expect(screen.getByText(/search_library_tool/)).toBeInTheDocument();
+  });
+
+  it("supports links with balanced parentheses in URLs", () => {
+    show("See [Fate](https://en.wikipedia.org/wiki/Fate_(franchise)) now.");
+    const link = screen.getByRole("button", { name: "Fate" });
+    link.click();
+    expect(mocks.openExternal).toHaveBeenCalledWith(
+      "https://en.wikipedia.org/wiki/Fate_(franchise)",
+    );
+  });
+
+  it("renders fenced code blocks and separates unordered from ordered lists", () => {
+    show(
+      ["```ts", "const x = 1;", "```", "", "- bullet", "1. first"].join("\n"),
+    );
+    expect(screen.getByText("const x = 1;").tagName).toBe("CODE");
+    const lists = screen.getAllByRole("list");
+    expect(lists).toHaveLength(2);
+    expect(lists[0]?.tagName).toBe("UL");
+    expect(lists[1]?.tagName).toBe("OL");
+  });
+
+  it("joins CJK wrapped lines without inserting ASCII spaces", () => {
+    show("最初の行\n次の行");
+    expect(screen.getByText("最初の行次の行")).toBeInTheDocument();
   });
 
   it("keeps backtick content literal so it cannot be bolded or linked", () => {

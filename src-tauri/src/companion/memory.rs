@@ -260,7 +260,7 @@ pub(super) async fn save(
     pool: &SqlitePool,
     request: &Save,
     session: Option<&Session>,
-) -> Result<Memory, String> {
+) -> Result<(Memory, bool), String> {
     uuid::Uuid::parse_str(&request.request_id).map_err(|_| "invalid_memory")?;
     if !body_valid(&request.body) {
         return Err("invalid_memory".into());
@@ -290,7 +290,7 @@ pub(super) async fn save(
             {
                 return Err("memory_stale".into());
             }
-            return Ok(saved);
+            return Ok((saved, false));
         }
         let (used,): (bool,) = sqlx::query_as(
             "SELECT EXISTS(SELECT 1 FROM companion_memories WHERE idempotency_key=?)",
@@ -328,20 +328,22 @@ pub(super) async fn save(
             Evidence::Passage
         };
     }
-    if request.id.is_some() {
+    let reset_cursor = if request.id.is_some() {
         let (updated, evidence) = edit_memory(&mut tx, request, m).await?;
         m = updated;
         if let Some(evidence) = evidence {
             source = evidence;
+            true
         } else {
             tx.commit().await.map_err(|_| "db_error")?;
-            return Ok(m);
+            return Ok((m, false));
         }
     } else {
         insert(&mut tx, &m, &request.request_id).await?;
         bump(&mut tx).await?;
         cancel_jobs(&mut tx).await?;
-    }
+        false
+    };
     add_source(
         &mut tx,
         &m,
@@ -353,7 +355,7 @@ pub(super) async fn save(
     )
     .await?;
     tx.commit().await.map_err(|_| "db_error")?;
-    Ok(m)
+    Ok((m, reset_cursor))
 }
 
 fn new_memory(request: &Save, session: Option<&Session>) -> Result<Memory, String> {

@@ -288,27 +288,18 @@
 .cover__badge {
   position: absolute;
   left: var(--space-2);
+  right: var(--space-2);
   bottom: var(--space-2);
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
-/* Status chips over cover art use a dark scrim for reliable contrast in both themes. */
-.cover__badge .chip {
+/* A fixed scrim and monochrome marks stay legible over any artwork or theme. */
+.cover__badge .status-chip {
+  --status-tone: var(--badge-scrim-text);
   background: var(--badge-scrim-bg);
-  border-color: rgb(255 255 255 / 0.18);
   color: var(--badge-scrim-text);
-  font-weight: 500;
-}
-
-.cover__badge .chip svg,
-.cover__badge .chip [class*="dot"] {
-  filter: brightness(1.15);
-}
-
-:root[data-reduce-effects="true"] .cover__badge .chip {
-  background: var(--badge-scrim-bg);
 }
 
 .cover__title {
@@ -1339,6 +1330,56 @@
   }
 }
 
+.script-card .card__header {
+  flex-wrap: wrap;
+}
+
+.script-card__empty {
+  color: var(--text-muted);
+  font-size: var(--text-s);
+  line-height: var(--leading-normal);
+}
+
+.script-card__notice {
+  margin-block: var(--space-3);
+  max-width: 72ch;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.script-help {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.script-help > summary {
+  min-height: var(--touch-target);
+  padding-block: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-s);
+  border-radius: var(--radius-xs);
+}
+
+.script-help > summary:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: var(--space-1);
+}
+
+.script-help > summary:active {
+  background: var(--surface-2);
+}
+
+.script-help__body {
+  display: grid;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  max-width: 72ch;
+  color: var(--text-muted);
+  font-size: var(--text-s);
+  overflow-wrap: anywhere;
+}
+
 /* Imported script list: cap track width so long filenames ellipsis cleanly. */
 .script-list {
   display: grid;
@@ -1369,9 +1410,10 @@
 
 .script-row__state {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-size-xs);
+  font-size: var(--text-xs);
   color: var(--text-faint);
 }
 
@@ -1379,41 +1421,59 @@
   color: var(--success);
 }
 
-/* A thin meter beside the chunk count: the text says 12/40, the bar is the
- * glanceable "how far along". Sized by an inline width from the component. */
+/* Progress track + fill bar matching chunk completion percentage. */
 .script-row__meter {
+  position: relative;
   display: inline-block;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--accent, var(--text-faint));
-  opacity: 0.6;
+  width: 88px;
+  max-width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-faint) 24%, transparent);
+  overflow: hidden;
+  flex: none;
+}
+
+.script-row__meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, var(--text-muted));
+  transition: width 0.2s ease;
 }
 
 .script-row__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
   flex: none;
   margin-left: auto;
 }
 
-/* The agent count sits in the card body, above the list: it is a compaction
- * setting that only matters here. The select is the shared `.select` field
- * shrunk to its content instead of the full-width form look. */
 .script-agents {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
 }
 
 .script-agents__label {
-  font-size: var(--font-size-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .script-agents .select {
   width: auto;
+}
+
+.script-loading,
+.script-error-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 
 /* Live-text preview: clamp dialogue lines to two rows so long lines cannot stretch the settings column. */
@@ -1430,7 +1490,7 @@
 }
 
 .luna-preview__line {
-  font-size: var(--font-size-xs);
+  font-size: var(--text-xs);
   color: var(--text-muted);
   overflow: hidden;
   display: -webkit-box;
@@ -1446,8 +1506,16 @@
     align-items: stretch;
   }
 
+  .script-row .row__sub {
+    white-space: normal;
+  }
+
   .script-row__actions {
     margin-left: 0;
+  }
+
+  .script-row__actions .btn {
+    min-height: 44px;
   }
 }
 

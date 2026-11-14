@@ -13,6 +13,7 @@ import {
   type ChatThread,
 } from "@/lib/ipc/chat";
 import { hookApi, type HookStatusView } from "@/lib/ipc/hook";
+import { scriptApi, type ScriptDocument } from "@/lib/ipc/script";
 import type { LlmProfiles } from "@/lib/ipc/types";
 import { ChatMessageView } from "./ChatMessageView";
 
@@ -68,8 +69,15 @@ export function ChatScreen() {
   const [live, setLive] = useState<ChatMessage | null>(null);
   const [provider, setProvider] = useState<LlmProfiles | null>(null);
   const [hookStatus, setHookStatus] = useState<HookStatusView | null>(null);
+  const [scriptDocs, setScriptDocs] = useState<{
+    gameId: string;
+    docs: ScriptDocument[];
+  } | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const queryGame = params.get("game");
+  const [lastQueryGame, setLastQueryGame] = useState(queryGame);
   const [options, setOptions] = useState<ChatOptions>({
-    gameId: params.get("game"),
+    gameId: queryGame,
     spoilers: "none",
     boundary: "",
     allowOnline: false,
@@ -81,6 +89,16 @@ export function ChatScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  if (lastQueryGame !== queryGame) {
+    setLastQueryGame(queryGame);
+    if (!current && messages.length === 0 && !busy && queryGame) {
+      setOptions((previous) =>
+        previous.gameId === queryGame
+          ? previous
+          : { ...previous, gameId: queryGame },
+      );
+    }
+  }
   const [cancellable, setCancellable] = useState(false);
   const [visible, setVisible] = useState(30);
   const [deleting, setDeleting] = useState(false);
@@ -115,7 +133,19 @@ export function ChatScreen() {
       hookApi
         .status()
         .then((status) => {
-          if (mounted.current) setHookStatus(status);
+          if (!mounted.current) return;
+          setHookStatus((prev) => {
+            if (
+              prev &&
+              prev.connected === status.connected &&
+              prev.lineCount === status.lineCount &&
+              prev.lines.at(-1)?.at === status.lines.at(-1)?.at &&
+              prev.lines.at(-1)?.text === status.lines.at(-1)?.text
+            ) {
+              return prev;
+            }
+            return status;
+          });
         })
         .catch(() => {});
     };
@@ -148,6 +178,23 @@ export function ChatScreen() {
   }, [draft]);
 
   useEffect(() => {
+    const gameId = options.gameId;
+    if (!gameId) return;
+    let active = true;
+    scriptApi
+      .list(gameId)
+      .then((docs) => {
+        if (active && mounted.current) setScriptDocs({ gameId, docs });
+      })
+      .catch(() => {
+        if (active && mounted.current) setScriptDocs(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [options.gameId]);
+
+  useEffect(() => {
     if (follow.current)
       endRef.current?.scrollIntoView?.({ block: "end", behavior: "instant" });
   }, [live?.content, live?.tools.length, messages.length]);
@@ -169,8 +216,11 @@ export function ChatScreen() {
       setVisible(30);
       setDraft("");
       follow.current = true;
+      setAtBottom(true);
     } catch (caught) {
-      setError(errorCode(caught));
+      if (version === selection.current && mounted.current) {
+        setError(errorCode(caught));
+      }
     } finally {
       if (version === selection.current && mounted.current) setLoading(false);
     }
@@ -186,6 +236,8 @@ export function ChatScreen() {
     setError(null);
     setDeleting(false);
     setVisible(30);
+    follow.current = true;
+    setAtBottom(true);
     setOptions({
       gameId: params.get("game"),
       spoilers: "none",
@@ -202,6 +254,7 @@ export function ChatScreen() {
       busy ||
       loading ||
       (!retry && !draft.trim()) ||
+      (options.spoilers === "boundary" && !options.boundary.trim()) ||
       !usable
     )
       return;
@@ -211,6 +264,7 @@ export function ChatScreen() {
     setLive(null);
     setCancellable(false);
     follow.current = true;
+    setAtBottom(true);
     let thread = current;
     const text = draft.trim();
     try {
@@ -219,17 +273,21 @@ export function ChatScreen() {
         if (!mounted.current) return;
         setCurrent(thread);
         setThreads((previous) => [thread as ChatThread, ...previous]);
-      } else {
-        thread = await chatApi.update(thread.id, title, { ...options, language: locale });
+      } else if (messages.length === 0) {
+        thread = await chatApi.update(thread.id, thread.title, {
+          ...options,
+          language: locale,
+        });
         if (!mounted.current) return;
         setCurrent(thread);
       }
       requestId.current = thread.id;
+      setCancellable(true);
       const result = await chatApi.send(thread.id, text, retry, (event) => {
         if (!mounted.current) return;
         if (event.type === "started") {
           setCancellable(true);
-          setDraft("");
+          if (!retry) setDraft("");
           if (retry) setMessages((previous) => previous.slice(0, -1));
           else
             setMessages((previous) => [
@@ -466,6 +524,7 @@ export function ChatScreen() {
               <input
                 className="vnchat__select"
                 aria-label={t("vnchat.boundary")}
+                aria-invalid={!locked && !options.boundary.trim()}
                 value={options.boundary}
                 maxLength={500}
                 disabled={locked}
@@ -510,7 +569,7 @@ export function ChatScreen() {
               <input
                 type="checkbox"
                 checked={options.allowOnline}
-                disabled={busy}
+                disabled={locked}
                 onChange={(event) =>
                   setOptions((previous) => ({
                     ...previous,
@@ -530,22 +589,11 @@ export function ChatScreen() {
           </div>
 
           <div className="vnchat__group vnchat__group--rules">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <div className="vnchat__status-row">
               <span className="vnchat__label">{t("vnchat.hookStatus")}</span>
               <span
-                style={{
-                  fontSize: "0.725rem",
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  fontWeight: 600,
-                  background: hookStatus?.connected
-                    ? "var(--success-soft)"
-                    : "color-mix(in srgb, var(--text-muted) 15%, transparent)",
-                  color: hookStatus?.connected ? "var(--success)" : "var(--text-muted)",
-                  border: hookStatus?.connected
-                    ? "1px solid color-mix(in srgb, var(--success) 30%, transparent)"
-                    : "1px solid var(--border)",
-                }}
+                className="vnchat__pill"
+                data-active={hookStatus?.connected ? "true" : "false"}
               >
                 {hookStatus?.connected
                   ? t("vnchat.hookConnected", { count: hookStatus.lineCount })
@@ -554,10 +602,51 @@ export function ChatScreen() {
             </div>
             <p className="vnchat__hint">
               {hookStatus?.connected
-                ? t("vnchat.hookHintActive", { count: hookStatus.lines.length })
+                ? t("vnchat.hookHintActive")
                 : t("vnchat.hookHintInactive")}
             </p>
           </div>
+
+          {options.gameId && scriptDocs?.gameId === options.gameId && (
+            <div className="vnchat__group vnchat__group--rules">
+              {(() => {
+                const currentDocs = scriptDocs.docs;
+                const readyDoc = currentDocs.find((d) => Boolean(d.compaction?.digest));
+                const latestDoc = currentDocs[0];
+                return (
+                  <>
+                    <div className="vnchat__status-row">
+                      <span className="vnchat__label">{t("vnchat.digestStatus")}</span>
+                      <span
+                        className="vnchat__pill"
+                        data-active={readyDoc ? "true" : "false"}
+                      >
+                        {readyDoc
+                          ? t("vnchat.digestReady")
+                          : latestDoc
+                            ? t("vnchat.digestProgress", {
+                                done: latestDoc.compaction?.doneChunks ?? 0,
+                                total:
+                                  latestDoc.compaction?.chunkCount ??
+                                  latestDoc.chunkCount,
+                              })
+                            : t("vnchat.digestNone")}
+                      </span>
+                    </div>
+                    {readyDoc && (
+                      <p className="vnchat__hint">
+                        {t(
+                          options.spoilers === "all"
+                            ? "vnchat.digestHintAll"
+                            : "vnchat.digestHintLocked",
+                        )}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
 
           <div className="vnchat__provider">
             <span>{t("vnchat.provider")}</span>
@@ -579,9 +668,12 @@ export function ChatScreen() {
               ref={scrollRef}
               onScroll={() => {
                 const box = scrollRef.current;
-                if (box)
-                  follow.current =
+                if (box) {
+                  const near =
                     box.scrollHeight - box.scrollTop - box.clientHeight < 100;
+                  follow.current = near;
+                  setAtBottom(near);
+                }
               }}
             >
               {messages.length === 0 && !live && (
@@ -590,8 +682,15 @@ export function ChatScreen() {
                   <h2>{t("vnchat.emptyTitle")}</h2>
                   <p>{t("vnchat.emptyBody")}</p>
                   <div className="vnchat__prompts">
-                    {["library", "story", "taste"].map((key) => (
+                    {(
+                      [
+                        "library",
+                        options.gameId ? "story" : "storyGeneral",
+                        "taste",
+                      ] as const
+                    ).map((key) => (
                       <button
+                        type="button"
                         className="vnchat__prompt"
                         key={key}
                         onClick={() => setDraft(t(`vnchat.prompt.${key}`))}
@@ -609,6 +708,7 @@ export function ChatScreen() {
                       variant="ghost"
                       onClick={() => {
                         follow.current = false;
+                        setAtBottom(false);
                         setVisible((previous) => previous + 30);
                       }}
                     >
@@ -632,6 +732,23 @@ export function ChatScreen() {
           )}
           <div className="vnchat__composer">
             <div className="vnchat__composer-inner">
+              {!atBottom && (messages.length > 0 || live) && (
+                <div className="vnchat__jump">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      follow.current = true;
+                      setAtBottom(true);
+                      endRef.current?.scrollIntoView?.({
+                        block: "end",
+                        behavior: "smooth",
+                      });
+                    }}
+                  >
+                    {t("vnchat.jumpLatest")}
+                  </Button>
+                </div>
+              )}
               {!configured && !loading && (
                 <p className="notice">
                   {t("vnchat.needProvider")}{" "}
@@ -723,10 +840,13 @@ export function ChatScreen() {
                   </div>
                 )}
               </form>
-              <details className="vnchat__footnote">
-                <summary>{t("vnchat.accuracyLabel")}</summary>
-                <p>{t("vnchat.accuracy")}</p>
-              </details>
+              <div className="vnchat__composer-foot">
+                <details className="vnchat__footnote">
+                  <summary>{t("vnchat.accuracyLabel")}</summary>
+                  <p>{t("vnchat.accuracy")}</p>
+                </details>
+                <p className="vnchat__send-hint">{t("vnchat.sendHint")}</p>
+              </div>
             </div>
           </div>
         </div>

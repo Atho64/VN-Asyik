@@ -24,6 +24,52 @@ export function safeHref(raw: string): string | null {
   }
 }
 
+function matchMarkdownLink(
+  rest: string,
+): { full: string; label: string; url: string } | null {
+  const head = /^\[([^\]\n]+)\]\(/.exec(rest);
+  if (!head) return null;
+  const label = head[1] ?? "";
+  let pos = head[0].length;
+  let depth = 0;
+  while (pos < rest.length) {
+    const ch = rest[pos]!;
+    if (ch === "\n" || /\s/.test(ch)) return null;
+    if (ch === "(") {
+      depth += 1;
+    } else if (ch === ")") {
+      if (depth === 0) {
+        const url = rest.slice(head[0].length, pos);
+        if (!url) return null;
+        return { full: rest.slice(0, pos + 1), label, url };
+      }
+      depth -= 1;
+    }
+    pos += 1;
+  }
+  return null;
+}
+
+const CJK_CHAR = /[\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;
+
+function joinParagraphLines(lines: string[]): string {
+  let out = "";
+  for (const part of lines) {
+    if (!out) {
+      out = part;
+      continue;
+    }
+    const prev = out[out.length - 1] ?? "";
+    const next = part[0] ?? "";
+    if (CJK_CHAR.test(prev) && CJK_CHAR.test(next)) {
+      out += part;
+    } else {
+      out += ` ${part}`;
+    }
+  }
+  return out;
+}
+
 /**
  * Inline spans for one line of text. Unmatched or nested-by-one-character
  * delimiters degrade to literal text rather than swallowing the rest of a reply:
@@ -50,9 +96,9 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
       index += code[0].length;
       continue;
     }
-    const link = /^\[([^\]\n]+)\]\(([^)\s]+)\)/.exec(rest);
+    const link = matchMarkdownLink(rest);
     if (link) {
-      const href = safeHref(link[2] ?? "");
+      const href = safeHref(link.url);
       if (href) {
         // Use a button backed by Rust's scheme allowlist; target="_blank" anchors navigate inside Android WebView.
         out.push(
@@ -64,10 +110,10 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
               void api.openExternal(href).catch(() => undefined);
             }}
           >
-            {inline(link[1] ?? "", `${keyPrefix}-a${index}`)}
+            {inline(link.label, `${keyPrefix}-a${index}`)}
           </button>,
         );
-        index += link[0].length;
+        index += link.full.length;
         continue;
       }
       // Not a safe link: fall through so it renders as the literal source.
@@ -82,14 +128,28 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
       index += bold[0].length;
       continue;
     }
-    const italic = /^\*([^*\n]+)\*|^_([^_\n]+)_/.exec(rest);
-    if (italic) {
+    const starItalic = /^\*([^*\n]+)\*/.exec(rest);
+    if (starItalic) {
       out.push(
         <em key={`${keyPrefix}-i${index}`}>
-          {inline(italic[1] ?? italic[2] ?? "", `${keyPrefix}-i${index}`)}
+          {inline(starItalic[1] ?? "", `${keyPrefix}-i${index}`)}
         </em>,
       );
-      index += italic[0].length;
+      index += starItalic[0].length;
+      continue;
+    }
+    const underItalic = /^_([^_\n]+)_/.exec(rest);
+    if (
+      underItalic &&
+      (index === 0 || !/[a-zA-Z0-9_]/.test(text[index - 1] ?? "")) &&
+      !/^[a-zA-Z0-9_]/.test(rest.slice(underItalic[0].length))
+    ) {
+      out.push(
+        <em key={`${keyPrefix}-i${index}`}>
+          {inline(underItalic[1] ?? "", `${keyPrefix}-i${index}`)}
+        </em>,
+      );
+      index += underItalic[0].length;
       continue;
     }
     pushText(text[index] ?? "");
@@ -100,8 +160,9 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
 
 const BULLET = /^\s{0,3}[-*+]\s+(.*)$/;
 const NUMBERED = /^\s{0,3}(\d{1,3})[.)]\s+(.*)$/;
-const HEADING = /^\s{0,3}(#{1,4})\s+(.*)$/;
+const HEADING = /^\s{0,3}(#{1,6})\s+(.*)$/;
 const RULE = /^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/;
+const FENCE = /^\s{0,3}```([\w-]*)\s*$/;
 
 export function renderMarkdown(source: string): ReactNode {
   if (!source) return null;
@@ -115,7 +176,7 @@ export function renderMarkdown(source: string): ReactNode {
     const key = `p${blocks.length}`;
     blocks.push(
       <p key={key} className="md-p">
-        {inline(paragraph.join(" "), key)}
+        {inline(joinParagraphLines(paragraph), key)}
       </p>,
     );
     paragraph = [];
@@ -123,6 +184,32 @@ export function renderMarkdown(source: string): ReactNode {
 
   while (index < lines.length) {
     const line = lines[index] ?? "";
+    const fence = FENCE.exec(line);
+    if (fence) {
+      flush();
+      const lang = fence[1] ?? "";
+      const codeLines: string[] = [];
+      index += 1;
+      while (index < lines.length) {
+        const current = lines[index] ?? "";
+        if (/^\s{0,3}```\s*$/.test(current)) {
+          index += 1;
+          break;
+        }
+        codeLines.push(current);
+        index += 1;
+      }
+      blocks.push(
+        <pre
+          key={`code${blocks.length}`}
+          className="md-pre"
+          data-lang={lang || undefined}
+        >
+          <code>{codeLines.join("\n")}</code>
+        </pre>,
+      );
+      continue;
+    }
     if (!line.trim()) {
       flush();
       index += 1;
@@ -137,7 +224,7 @@ export function renderMarkdown(source: string): ReactNode {
     const heading = HEADING.exec(line);
     if (heading) {
       flush();
-      const level = Math.min((heading[1] ?? "#").length + 2, 4);
+      const level = Math.min((heading[1] ?? "#").length + 2, 6);
       const Tag = `h${level}` as "h3" | "h4" | "h5" | "h6";
       blocks.push(
         <Tag key={`h${blocks.length}`} className={`md-h${level}`}>
@@ -154,13 +241,16 @@ export function renderMarkdown(source: string): ReactNode {
       let start = 1;
       while (index < lines.length) {
         const current = lines[index] ?? "";
-        const bullet = BULLET.exec(current);
-        const numbered = NUMBERED.exec(current);
-        if (bullet) items.push(bullet[1] ?? "");
-        else if (numbered) {
+        if (!ordered) {
+          const bullet = BULLET.exec(current);
+          if (!bullet) break;
+          items.push(bullet[1] ?? "");
+        } else {
+          const numbered = NUMBERED.exec(current);
+          if (!numbered) break;
           if (items.length === 0) start = Number(numbered[1]);
           items.push(numbered[2] ?? "");
-        } else break;
+        }
         index += 1;
       }
       const key = `l${blocks.length}`;

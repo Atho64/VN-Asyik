@@ -87,19 +87,79 @@ impl Default for ChatConfig {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct Message<'a> {
-    role: &'a str,
-    content: &'a str,
+const MAX_RATE_LIMIT_RETRIES: u8 = 3;
+const MAX_RETRY_AFTER_SECS: u64 = 15;
+
+fn is_official_openai(base_url: &str) -> bool {
+    reqwest::Url::parse(base_url).is_ok_and(|url| url.host_str() == Some("api.openai.com"))
 }
 
-#[derive(Debug, Serialize)]
-struct ChatRequest<'a> {
-    model: &'a str,
-    messages: Vec<Message<'a>>,
-    /// Low temperature: this is a restatement task, not a creative one.
-    temperature: f32,
+fn is_openai_reasoning_model(model: &str) -> bool {
+    let lower = model.trim().to_ascii_lowercase();
+    lower.starts_with("o1")
+        || lower.starts_with("o3")
+        || lower.starts_with("o4")
+        || lower.starts_with("gpt-5")
+}
+
+fn build_openai_payload(
+    config: &ChatConfig,
+    system: &str,
+    user: &str,
     max_tokens: u32,
+) -> serde_json::Value {
+    let official = is_official_openai(&config.base_url);
+    let mut body = serde_json::json!({
+        "model": config.model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user}
+        ],
+    });
+    // OpenAI's API uses `max_completion_tokens` and rejects custom `temperature` on reasoning models.
+    body[if official {
+        "max_completion_tokens"
+    } else {
+        "max_tokens"
+    }] = serde_json::json!(max_tokens);
+    if !(official && is_openai_reasoning_model(&config.model)) {
+        body["temperature"] = serde_json::json!(0.3);
+    }
+    body
+}
+
+fn retry_delay(headers: &reqwest::header::HeaderMap, attempt: u8) -> std::time::Duration {
+    if let Some(raw) = headers
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        && let Ok(secs) = raw.trim().parse::<u64>()
+    {
+        return std::time::Duration::from_secs(secs.clamp(1, MAX_RETRY_AFTER_SECS));
+    }
+    std::time::Duration::from_secs(1_u64 << attempt.min(3))
+}
+
+async fn send_with_retry(
+    mut build: impl FnMut() -> reqwest::RequestBuilder,
+) -> Result<reqwest::Response, ChatError> {
+    let mut attempt = 0_u8;
+    loop {
+        let response = build()
+            .send()
+            .await
+            .map_err(|err| ChatError::Offline(err.to_string()))?;
+        match response.status().as_u16() {
+            200..=299 => return Ok(response),
+            401 | 403 => return Err(ChatError::Unauthorized),
+            429 if attempt < MAX_RATE_LIMIT_RETRIES => {
+                let wait = retry_delay(response.headers(), attempt);
+                attempt += 1;
+                tokio::time::sleep(wait).await;
+            }
+            429 => return Err(ChatError::Throttled),
+            other => return Err(ChatError::BadResponse(format!("HTTP {other}"))),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -180,40 +240,15 @@ async fn request(
         return request_anthropic(client, config, key, system, user, max_tokens).await;
     }
     let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
-    let body = ChatRequest {
-        model: &config.model,
-        messages: vec![
-            Message {
-                role: "system",
-                content: system,
-            },
-            Message {
-                role: "user",
-                content: user,
-            },
-        ],
-        // Low temperature: recommendations should not be creative with facts.
-        temperature: 0.3,
-        max_tokens,
-    };
-
-    let mut request = client.post(&url).json(&body);
-    if let Some(key) = key {
-        request = request.bearer_auth(key.expose());
-    }
-    let response = request
-        .send()
-        .await
-        .map_err(|err| ChatError::Offline(err.to_string()))?;
-
-    match response.status().as_u16() {
-        200..=299 => {}
-        401 | 403 => return Err(ChatError::Unauthorized),
-        429 => return Err(ChatError::Throttled),
-        other => {
-            return Err(ChatError::BadResponse(format!("HTTP {other}")));
+    let body = build_openai_payload(config, system, user, max_tokens);
+    let response = send_with_retry(|| {
+        let mut req = client.post(&url).json(&body);
+        if let Some(key) = key {
+            req = req.bearer_auth(key.expose());
         }
-    }
+        req
+    })
+    .await?;
 
     let parsed: ChatResponse = response
         .json()
@@ -243,7 +278,7 @@ async fn request(
         }
         // Surface exhausted thinking budget instead of reporting a generic empty reply.
         _ if choice.message.reasoning_content.is_some() => Err(ChatError::BadResponse(
-            "the model used its whole reply budget on reasoning and produced no answer;              raise the token limit, or use a model that does not reason first"
+            "the model used its whole reply budget on reasoning and produced no answer; raise the token limit, or use a model that does not reason first"
                 .to_owned(),
         )),
         _ if is_length_finish => Err(ChatError::BadResponse(
@@ -270,23 +305,17 @@ async fn request_anthropic(
         "system": system,
         "messages": [{"role": "user", "content": user}],
     });
-    let mut request = client
-        .post(&url)
-        .header("anthropic-version", ANTHROPIC_VERSION)
-        .json(&body);
-    if let Some(key) = key {
-        request = request.header("x-api-key", key.expose());
-    }
-    let response = request
-        .send()
-        .await
-        .map_err(|err| ChatError::Offline(err.to_string()))?;
-    match response.status().as_u16() {
-        200..=299 => {}
-        401 | 403 => return Err(ChatError::Unauthorized),
-        429 => return Err(ChatError::Throttled),
-        other => return Err(ChatError::BadResponse(format!("HTTP {other}"))),
-    }
+    let response = send_with_retry(|| {
+        let mut req = client
+            .post(&url)
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .json(&body);
+        if let Some(key) = key {
+            req = req.header("x-api-key", key.expose());
+        }
+        req
+    })
+    .await?;
     let parsed: AnthropicResponse = response
         .json()
         .await
@@ -432,5 +461,48 @@ mod tests {
     fn clean_truncated_tail_preserves_complete_sentences() {
         let input = "This is a full sentence.";
         assert_eq!(clean_truncated_tail(input), "This is a full sentence.");
+    }
+
+    #[test]
+    fn openai_payload_adapts_token_and_temperature_fields() {
+        let compatible = ChatConfig {
+            provider: Provider::OpenAi,
+            base_url: "http://127.0.0.1:11434/v1".into(),
+            model: "qwen2.5".into(),
+        };
+        let payload = build_openai_payload(&compatible, "sys", "usr", 2400);
+        assert_eq!(payload["max_tokens"], json!(2400));
+        assert!(payload.get("max_completion_tokens").is_none());
+        assert!(payload.get("temperature").is_some());
+
+        let gpt4o = ChatConfig {
+            provider: Provider::OpenAi,
+            base_url: "https://api.openai.com/v1".into(),
+            model: "gpt-4o-mini".into(),
+        };
+        let payload = build_openai_payload(&gpt4o, "sys", "usr", 2400);
+        assert_eq!(payload["max_completion_tokens"], json!(2400));
+        assert!(payload.get("max_tokens").is_none());
+        assert!(payload.get("temperature").is_some());
+
+        let reasoning = ChatConfig {
+            provider: Provider::OpenAi,
+            base_url: "https://api.openai.com/v1".into(),
+            model: "gpt-5-mini".into(),
+        };
+        let payload = build_openai_payload(&reasoning, "sys", "usr", 2400);
+        assert_eq!(payload["max_completion_tokens"], json!(2400));
+        assert!(payload.get("temperature").is_none());
+    }
+
+    #[test]
+    fn retry_delay_clamps_retry_after_header() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::RETRY_AFTER, "99".parse().unwrap());
+        assert_eq!(retry_delay(&headers, 0).as_secs(), MAX_RETRY_AFTER_SECS);
+        headers.insert(reqwest::header::RETRY_AFTER, "0".parse().unwrap());
+        assert_eq!(retry_delay(&headers, 0).as_secs(), 1);
+        headers.clear();
+        assert_eq!(retry_delay(&headers, 1).as_secs(), 2);
     }
 }

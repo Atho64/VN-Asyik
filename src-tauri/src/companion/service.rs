@@ -135,7 +135,7 @@ impl CompanionRuntime {
                 return Err("invalid_session_state".into());
             }
             inner.machine.cancel_turn();
-            inner.revoke();
+            inner.revoke_turn();
             self.changed(&mut inner);
             inner.machine.epoch
         };
@@ -254,7 +254,11 @@ impl CompanionRuntime {
                 }
                 _ => (),
             }
-            inner.revoke();
+            if matches!(action, Action::CancelTurn) {
+                inner.revoke_turn();
+            } else {
+                inner.revoke();
+            }
             self.changed(&mut inner);
         }
         if matches!(action, Action::CancelTurn) {

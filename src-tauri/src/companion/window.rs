@@ -87,7 +87,12 @@ fn allowed_main_path(path: &str) -> bool {
 }
 
 #[tauri::command]
-pub async fn companion_show_main(app: tauri::AppHandle, path: String) -> CommandResult<()> {
+pub async fn companion_show_main(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::state::AppState>,
+    path: String,
+) -> CommandResult<()> {
+    crate::commands::prefs::require_beta(&state).await?;
     if !allowed_main_path(&path) {
         return Err(CommandError::new("companion", "overlay_invalid_path"));
     }
