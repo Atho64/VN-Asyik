@@ -136,12 +136,15 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
       ? "loading"
       : remote.status;
 
-  const addReveal = useCallback((imageId: string) => {
-    setRevealed((current) => ({
-      key: revealScope,
-      ids: current.key === revealScope ? [...current.ids, imageId] : [imageId],
-    }));
-  }, [revealScope]);
+  const addReveal = useCallback(
+    (imageId: string) => {
+      setRevealed((current) => ({
+        key: revealScope,
+        ids: current.key === revealScope ? [...current.ids, imageId] : [imageId],
+      }));
+    },
+    [revealScope],
+  );
 
   const closeLightbox = useCallback(() => {
     setOpenIndex(null);
@@ -257,7 +260,11 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
                     ? "blur"
                     : "hide";
                 const painted =
-                  policy === "blur" ? shot.blurred_src : policy === "hide" ? null : shot.src;
+                  policy === "blur"
+                    ? shot.blurred_src
+                    : policy === "hide"
+                      ? null
+                      : shot.src;
                 return (
                   <li key={shot.image_id} className="gallery__item">
                     <button
@@ -290,6 +297,7 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
                               : "gallery__img"
                           }
                           src={painted}
+                          data-screenshot-filename={`screenshot-${shot.image_id}.png`}
                           alt={
                             concealed
                               ? ""
@@ -395,51 +403,57 @@ export function ScreenshotGallery({ vnId, title, version = 0 }: ScreenshotGaller
           </>
         }
       >
-        {current ? (
-          (() => {
-            // Gate sharp full-size image loads behind `show` or an active per-tile reveal.
-            const revealed = revealedIds.includes(current.image_id);
-            const concealed = nsfw !== "show" && current.explicit && !revealed;
-            const blurSrc = fullView?.blurred_src ?? current.blurred_src;
-            const policy: "visible" | "blur" | "hide" = !concealed
-              ? "visible"
-              : nsfw === "blur" && blurSrc
-                ? "blur"
-                : "hide";
-            const painted =
-              policy === "blur" ? blurSrc : policy === "hide" ? null : (fullView?.src ?? current.src);
-            const full = policy === "visible" ? fullView : null;
-            return (
-              <figure className="lightbox">
-                {fullFailed ? (
-                  <p className="body">{t("detail.screenshotFailed")}</p>
-                ) : painted ? (
-                  <img
-                    className="lightbox__img"
-                    src={painted}
-                    alt={
-                      concealed
-                        ? ""
-                        : t("detail.screenshotAlt", {
-                            title,
-                            index: (openIndex ?? 0) + 1,
-                            total: shots.length,
-                          })
-                    }
-                    aria-hidden={concealed ? "true" : undefined}
-                    width={full?.width ?? current.width ?? undefined}
-                    height={full?.height ?? current.height ?? undefined}
-                  />
-                ) : null}
-                {concealed ? (
-                  <figcaption className="caption lightbox__caption">
-                    {t("detail.screenshotHidden")}
-                  </figcaption>
-                ) : null}
-              </figure>
-            );
-          })()
-        ) : null}
+        {current
+          ? (() => {
+              // Gate sharp full-size image loads behind `show` or an active per-tile reveal.
+              const revealed = revealedIds.includes(current.image_id);
+              const concealed = nsfw !== "show" && current.explicit && !revealed;
+              const blurSrc = fullView?.blurred_src ?? current.blurred_src;
+              const policy: "visible" | "blur" | "hide" = !concealed
+                ? "visible"
+                : nsfw === "blur" && blurSrc
+                  ? "blur"
+                  : "hide";
+              const painted =
+                policy === "blur"
+                  ? blurSrc
+                  : policy === "hide"
+                    ? null
+                    : (fullView?.src ?? current.src);
+              const full = policy === "visible" ? fullView : null;
+              return (
+                <figure className="lightbox">
+                  {fullFailed ? (
+                    <p className="body">{t("detail.screenshotFailed")}</p>
+                  ) : painted ? (
+                    <img
+                      className="lightbox__img"
+                      src={painted}
+                      data-screenshot-filename={`screenshot-${current.image_id}.png`}
+                      tabIndex={concealed ? undefined : 0}
+                      alt={
+                        concealed
+                          ? ""
+                          : t("detail.screenshotAlt", {
+                              title,
+                              index: (openIndex ?? 0) + 1,
+                              total: shots.length,
+                            })
+                      }
+                      aria-hidden={concealed ? "true" : undefined}
+                      width={full?.width ?? current.width ?? undefined}
+                      height={full?.height ?? current.height ?? undefined}
+                    />
+                  ) : null}
+                  {concealed ? (
+                    <figcaption className="caption lightbox__caption">
+                      {t("detail.screenshotHidden")}
+                    </figcaption>
+                  ) : null}
+                </figure>
+              );
+            })()
+          : null}
       </Sheet>
     </>
   );

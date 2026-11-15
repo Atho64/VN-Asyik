@@ -37,6 +37,7 @@ const TEMPLATE_TOKENS = [
   "{elapsed_time}",
   "{date}",
   "{time}",
+  "{game_state}",
 ];
 
 /** Mirrors `vn_core::presence::MIN_CYCLE_SECONDS`: Discord throttles presence to
@@ -301,6 +302,156 @@ function TransformEditor({
   );
 }
 
+function AssetEditor({
+  size,
+  image,
+  text,
+  onImage,
+  onText,
+  useExeIcon,
+  onExeIcon,
+}: {
+  size: "large" | "small";
+  image: string;
+  text: string;
+  onImage: (value: string) => void;
+  onText: (value: string) => void;
+  useExeIcon?: boolean;
+  onExeIcon?: ((value: boolean) => void) | undefined;
+}) {
+  const { t } = useI18n();
+  return (
+    <details className="settings__details presence-assets">
+      <summary>
+        {t(
+          size === "large"
+            ? "settings.presenceLargeImageOptions"
+            : "settings.presenceSmallImageOptions",
+        )}
+      </summary>
+      <div className="presence-assets__body">
+        {onExeIcon ? (
+          <div className="settings__row">
+            <span className="settings__label">{t("settings.presenceExeIcon")}</span>
+            <div className="settings__control">
+              <Chip
+                selected={useExeIcon ?? true}
+                ariaLabel={t("settings.presenceExeIcon")}
+                onClick={() => onExeIcon(!(useExeIcon ?? true))}
+              >
+                {t((useExeIcon ?? true) ? "common.enabled" : "common.disabled")}
+              </Chip>
+            </div>
+          </div>
+        ) : null}
+        <div className="settings__field">
+          <label htmlFor={`presence-${size}-image`} className="settings__label">
+            {t(
+              size === "large"
+                ? "settings.presenceLargeImage"
+                : "settings.presenceSmallImage",
+            )}
+          </label>
+          <input
+            id={`presence-${size}-image`}
+            className="input"
+            value={image}
+            maxLength={512}
+            onChange={(event) => onImage(event.target.value)}
+            placeholder={
+              size === "large" ? t("settings.presenceLibraryCover") : undefined
+            }
+          />
+          {size === "small" ? (
+            <span className="settings__hint">
+              {t(
+                onExeIcon
+                  ? "settings.presenceExeIconHint"
+                  : "settings.presenceSmallImageHint",
+              )}
+            </span>
+          ) : null}
+          <span className="settings__hint">{t("settings.presenceImageAssetHint")}</span>
+        </div>
+        <div className="settings__field">
+          <label htmlFor={`presence-${size}-text`} className="settings__label">
+            {t(
+              size === "large"
+                ? "settings.presenceLargeText"
+                : "settings.presenceSmallText",
+            )}
+          </label>
+          <input
+            id={`presence-${size}-text`}
+            className="input"
+            value={text}
+            maxLength={2048}
+            onChange={(event) => onText(event.target.value)}
+            placeholder={size === "large" ? "{vn_name}" : undefined}
+          />
+          <span className="settings__hint">{t("settings.presenceImageTextHint")}</span>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function CustomButtonEditor({
+  buttons,
+  onChange,
+}: {
+  buttons: { label: string; url: string }[];
+  onChange: (buttons: { label: string; url: string }[]) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="presence-buttons-editor">
+      <span className="settings__hint">{t("settings.presenceCustomButtonsHint")}</span>
+      {[0, 1].map((index) => {
+        const button = buttons[index] ?? { label: "", url: "" };
+        const patch = (next: Partial<typeof button>) => {
+          const slots = [0, 1].map((slot) => buttons[slot] ?? { label: "", url: "" });
+          slots[index] = { ...button, ...next };
+          onChange(slots);
+        };
+        return (
+          <fieldset key={index} className="presence-buttons-editor__slot">
+            <legend>{t("settings.presenceButtonNumber", { number: index + 1 })}</legend>
+            <div className="settings__field">
+              <label
+                htmlFor={`presence-button-${index}-label`}
+                className="settings__label"
+              >
+                {t("settings.presenceButtonLabel")}
+              </label>
+              <input
+                id={`presence-button-${index}-label`}
+                className="input"
+                value={button.label}
+                maxLength={128}
+                onChange={(event) => patch({ label: event.target.value })}
+              />
+            </div>
+            <div className="settings__field">
+              <label htmlFor={`presence-button-${index}-url`} className="settings__label">
+                {t("settings.presenceButtonUrl")}
+              </label>
+              <input
+                id={`presence-button-${index}-url`}
+                className="input"
+                value={button.url}
+                maxLength={512}
+                onChange={(event) => patch({ url: event.target.value })}
+                placeholder="{vndb_url}"
+              />
+            </div>
+          </fieldset>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PresencePanel() {
   const { t } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
@@ -308,6 +459,8 @@ export function PresencePanel() {
   const isAndroid = platform?.os === "android";
 
   const [settings, setSettings] = useState<PresenceSettings | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [status, setStatus] = useState<PresenceStatus | null>(null);
   const [preview, setPreview] = useState<PresenceActivity | null>(null);
   const [busy, setBusy] = useState(false);
@@ -318,9 +471,15 @@ export function PresencePanel() {
   const [previewGameId, setPreviewGameId] = useState<string>("");
   // `""` edits global defaults; a game id edits per-game overrides (untouched fields inherit global).
   const [scopeGameId, setScopeGameId] = useState<string>("");
+  const scopeGeneration = useRef(0);
+  const scopeGameRef = useRef("");
+  const scopeReady = useRef(true);
+  const [scopeLoading, setScopeLoading] = useState(false);
+  const [scopeError, setScopeError] = useState<string | null>(null);
   const [games, setGames] = useState<{ id: string; title: string }[]>([]);
   const [previewStateCycle, setPreviewStateCycle] = useState(0);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [hasToken, setHasToken] = useState(false);
   const [tokenPreview, setTokenPreview] = useState<string | null>(null);
@@ -338,8 +497,10 @@ export function PresencePanel() {
 
   useEffect(() => {
     let active = true;
+    const generation = scopeGeneration.current;
+    const gameId = scopeGameRef.current;
     void Promise.all([
-      api.presenceGetSettings(),
+      gameId ? api.presenceEffectiveSettings(gameId) : api.presenceGetSettings(),
       api.presenceStatus(),
       api.presenceHasToken(),
       api.presenceTokenPreview(),
@@ -347,13 +508,20 @@ export function PresencePanel() {
     ])
       .then(([initialSettings, initialStatus, tokenExists, previewStr, keyPreview]) => {
         if (!active) return;
-        setSettings(initialSettings);
+        setLoadError(null);
+        if (generation === scopeGeneration.current) {
+          scopeReady.current = true;
+          setSettings(initialSettings);
+        }
         setStatus(initialStatus);
         setHasToken(tokenExists);
         setTokenPreview(previewStr);
         setImageKeyPreview(keyPreview);
       })
-      .catch(() => undefined);
+      .catch((caught: unknown) => {
+        if (active)
+          setLoadError(caught instanceof IpcError ? caught.message : t("common.error"));
+      });
 
     const interval = window.setInterval(() => {
       void api
@@ -368,7 +536,15 @@ export function PresencePanel() {
       active = false;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [loadAttempt, t]);
+
+  useEffect(
+    () => () => {
+      scopeGeneration.current += 1;
+      scopeReady.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     let active = true;
@@ -391,8 +567,9 @@ export function PresencePanel() {
   }, []);
 
   useEffect(() => {
-    if (!settings) return;
+    if (!settings || scopeLoading || scopeError) return;
     let active = true;
+    const generation = scopeGeneration.current;
     void api
       .presencePreview(
         settings,
@@ -401,14 +578,22 @@ export function PresencePanel() {
         previewStateCycle,
       )
       .then((next) => {
-        if (active) setPreview(next);
+        if (active && generation === scopeGeneration.current) setPreview(next);
       })
       .catch(() => undefined);
 
     return () => {
       active = false;
     };
-  }, [settings, previewCycle, previewStateCycle, previewGameId, imageKeyPreview]);
+  }, [
+    settings,
+    previewCycle,
+    previewStateCycle,
+    previewGameId,
+    imageKeyPreview,
+    scopeLoading,
+    scopeError,
+  ]);
 
   const resetPreview = useCallback(() => {
     setPreviewCycle(0);
@@ -439,6 +624,16 @@ export function PresencePanel() {
   // Load effective baseline values for the selected scope so inherited fields remain visible.
   const switchScope = useCallback(
     (gameId: string) => {
+      const generation = ++scopeGeneration.current;
+      scopeGameRef.current = gameId;
+      scopeReady.current = false;
+      setScopeLoading(true);
+      setScopeError(null);
+      setBusy(false);
+      setSaved(false);
+      setSaveError(null);
+      setLinkError(null);
+      setPreview(null);
       setScopeGameId(gameId);
       if (gameId) {
         setPreviewGameId(gameId);
@@ -447,18 +642,44 @@ export function PresencePanel() {
       void api
         .presenceEffectiveSettings(gameId || undefined)
         .then((next) => {
+          if (generation !== scopeGeneration.current) return;
+          scopeReady.current = true;
+          setScopeLoading(false);
           setSettings(next);
-          setSaved(false);
         })
-        .catch(() => undefined);
+        .catch((caught: unknown) => {
+          if (generation !== scopeGeneration.current) return;
+          setScopeLoading(false);
+          setScopeError(caught instanceof IpcError ? caught.message : t("common.error"));
+        });
     },
-    [resetPreview],
+    [resetPreview, t],
   );
 
-  if (!settings) return null;
+  if (!settings)
+    return (
+      <Card className="settings__card">
+        <CardHeader title={t("settings.presence")} />
+        <div className="presence-panel">
+          <p role={loadError ? "alert" : "status"}>{loadError ?? t("common.loading")}</p>
+          {loadError ? (
+            <Button
+              onClick={() => {
+                setLoadError(null);
+                setLoadAttempt((attempt) => attempt + 1);
+              }}
+            >
+              {t("common.retry")}
+            </Button>
+          ) : null}
+        </div>
+      </Card>
+    );
 
   const updateSettings = (patch: Partial<PresenceSettings>) => {
+    if (!scopeReady.current) return;
     setSaved(false);
+    setSaveError(null);
     setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
   };
 
@@ -473,37 +694,48 @@ export function PresencePanel() {
   };
 
   const resetToGlobal = async (): Promise<void> => {
-    if (!scopeGameId) return;
+    if (!scopeGameId || !scopeReady.current || busy) return;
+    const generation = scopeGeneration.current;
     setBusy(true);
     try {
       const next = await api.presenceResetGameSettings(scopeGameId);
+      if (generation !== scopeGeneration.current) return;
       setSettings(next);
       setSaved(false);
       pushToast("info", t("settings.presenceScopeReset"));
     } catch (caught) {
+      if (generation !== scopeGeneration.current) return;
       pushToast("error", caught instanceof IpcError ? caught.message : t("common.error"));
     } finally {
-      setBusy(false);
+      if (generation === scopeGeneration.current) setBusy(false);
     }
   };
 
   const save = async () => {
+    if (!scopeReady.current || busy) return;
+    const generation = scopeGeneration.current;
     setBusy(true);
     setSaved(false);
     setLinkError(null);
+    setSaveError(null);
     try {
       await api.presenceSaveSettings(settings, scopeGameId || undefined);
+      if (generation !== scopeGeneration.current) return;
+      const nextStatus = await api.presenceStatus();
+      if (generation !== scopeGeneration.current) return;
       setSaved(true);
-      setStatus(await api.presenceStatus());
+      setStatus(nextStatus);
       pushToast("info", t("settings.presenceSaved"));
     } catch (caught) {
+      if (generation !== scopeGeneration.current) return;
       const message = caught instanceof IpcError ? caught.message : t("common.error");
+      setSaveError(message);
       if (caught instanceof IpcError && caught.code === "invalid_profile_link") {
         setLinkError(message);
       }
       pushToast("error", message);
     } finally {
-      setBusy(false);
+      if (generation === scopeGeneration.current) setBusy(false);
     }
   };
 
@@ -554,6 +786,7 @@ export function PresencePanel() {
   };
 
   const resetFormatting = () => {
+    if (!scopeReady.current || busy) return;
     const emptyTransform: TextTransform = {
       prefix: "",
       suffix: "",
@@ -586,6 +819,13 @@ export function PresencePanel() {
       custom_state_transform: emptyTransform,
       manual_details: "",
       manual_state: "",
+      large_image: "",
+      large_text: "",
+      small_image: "",
+      use_exe_icon: true,
+      small_text: "",
+      use_custom_buttons: false,
+      custom_buttons: [],
     });
     pushToast("info", t("settings.presenceDefaultsRestored"));
   };
@@ -1084,82 +1324,96 @@ export function PresencePanel() {
               </span>
 
               {settings.show_cover ? (
-                <>
-                  {/* Opt-in cover host for blurred/custom artwork Discord cannot fetch; "none" stays local. */}
-                  <div className="presence-mode">
-                    <span className="settings__label">
-                      {t("settings.presenceImageHost")}
-                    </span>
-                    <div className="settings__control">
-                      {(
-                        [
-                          ["none", "settings.presenceImageHostNone"],
-                          ["catbox", "settings.presenceImageHostCatbox"],
-                          ["imgbb", "settings.presenceImageHostImgbb"],
-                        ] as const
-                      ).map(([host, labelKey]) => (
-                        <Chip
-                          key={host}
-                          selected={settings.rpc_image_host === host}
-                          onClick={() => updateSettings({ rpc_image_host: host })}
-                        >
-                          {t(labelKey)}
-                        </Chip>
-                      ))}
-                    </div>
-                    <span className="settings__hint">
-                      {t("settings.presenceImageHostHint")}
-                    </span>
-                  </div>
+                <AssetEditor
+                  size="large"
+                  image={settings.large_image ?? ""}
+                  text={settings.large_text ?? ""}
+                  onImage={(large_image) => updateSettings({ large_image })}
+                  onText={(large_text) => updateSettings({ large_text })}
+                />
+              ) : null}
+              {/* The host also publishes the default small icon when the large cover is off. */}
+              <div className="presence-mode">
+                <span className="settings__label">{t("settings.presenceImageHost")}</span>
+                <div className="settings__control">
+                  {(
+                    [
+                      ["none", "settings.presenceImageHostNone"],
+                      ["catbox", "settings.presenceImageHostCatbox"],
+                      ["imgbb", "settings.presenceImageHostImgbb"],
+                    ] as const
+                  ).map(([host, labelKey]) => (
+                    <Chip
+                      key={host}
+                      selected={settings.rpc_image_host === host}
+                      onClick={() => updateSettings({ rpc_image_host: host })}
+                    >
+                      {t(labelKey)}
+                    </Chip>
+                  ))}
+                </div>
+                <span className="settings__hint">
+                  {t("settings.presenceImageHostHint")}
+                </span>
+              </div>
 
-                  {settings.rpc_image_host === "imgbb" ? (
-                    <div className="settings__field">
-                      <label htmlFor="imgbb-key" className="settings__label">
-                        {t("settings.presenceImageKey")}
-                      </label>
-                      {imageKeyPreview ? (
-                        <div className="presence-tokens presence-tokens--key">
-                          <code className="presence-token-preview">
-                            {imageKeyPreview}
-                          </code>
-                          <Button variant="ghost" onClick={() => void handleRemoveImageKey()}>
-                            {t("settings.presenceImageKeyRemove")}
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <input
-                            id="imgbb-key"
-                            type="password"
-                            className="input"
-                            value={imageKeyInput}
-                            onChange={(event) => {
-                              setImageKeyInput(event.target.value);
-                              setImageKeyError(null);
-                            }}
-                            placeholder={t("settings.presenceImageKeyPlaceholder")}
-                          />
-                          <div className="presence-actions">
-                            <Button
-                              disabled={imageKeyBusy || !imageKeyInput.trim()}
-                              onClick={() => void handleSaveImageKey()}
-                            >
-                              {t("settings.presenceImageKeySave")}
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                      <span className="settings__hint">
-                        {t("settings.presenceImageKeyHint")}
-                      </span>
-                      {imageKeyError ? (
-                        <span className="presence-error">{imageKeyError}</span>
-                      ) : null}
+              {settings.rpc_image_host === "imgbb" ? (
+                <div className="settings__field">
+                  <label htmlFor="imgbb-key" className="settings__label">
+                    {t("settings.presenceImageKey")}
+                  </label>
+                  {imageKeyPreview ? (
+                    <div className="presence-tokens presence-tokens--key">
+                      <code className="presence-token-preview">{imageKeyPreview}</code>
+                      <Button variant="ghost" onClick={() => void handleRemoveImageKey()}>
+                        {t("settings.presenceImageKeyRemove")}
+                      </Button>
                     </div>
+                  ) : (
+                    <>
+                      <input
+                        id="imgbb-key"
+                        type="password"
+                        className="input"
+                        value={imageKeyInput}
+                        onChange={(event) => {
+                          setImageKeyInput(event.target.value);
+                          setImageKeyError(null);
+                        }}
+                        placeholder={t("settings.presenceImageKeyPlaceholder")}
+                      />
+                      <div className="presence-actions">
+                        <Button
+                          disabled={imageKeyBusy || !imageKeyInput.trim()}
+                          onClick={() => void handleSaveImageKey()}
+                        >
+                          {t("settings.presenceImageKeySave")}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                  <span className="settings__hint">
+                    {t("settings.presenceImageKeyHint")}
+                  </span>
+                  {imageKeyError ? (
+                    <span className="presence-error">{imageKeyError}</span>
                   ) : null}
-                </>
+                </div>
               ) : null}
 
+              <AssetEditor
+                size="small"
+                image={settings.small_image ?? ""}
+                text={settings.small_text ?? ""}
+                onImage={(small_image) => updateSettings({ small_image })}
+                onText={(small_text) => updateSettings({ small_text })}
+                useExeIcon={settings.use_exe_icon ?? true}
+                onExeIcon={
+                  platform?.os === "windows"
+                    ? (use_exe_icon) => updateSettings({ use_exe_icon })
+                    : undefined
+                }
+              />
               <div className="settings__row">
                 <span className="settings__label">
                   {t("settings.presenceShowTimestamps")}
@@ -1201,9 +1455,32 @@ export function PresencePanel() {
                 {t("settings.presenceShowWhenUnfocusedHint")}
               </span>
 
+              <div className="presence-mode">
+                <span className="settings__label">
+                  {t("settings.presenceButtonMode")}
+                </span>
+                <div className="settings__control">
+                  <Chip
+                    selected={!settings.use_custom_buttons}
+                    onClick={() => updateSettings({ use_custom_buttons: false })}
+                  >
+                    {t("settings.presenceButtonModeDefault")}
+                  </Chip>
+                  <Chip
+                    selected={settings.use_custom_buttons ?? false}
+                    onClick={() => updateSettings({ use_custom_buttons: true })}
+                  >
+                    {t("settings.presenceButtonModeCustom")}
+                  </Chip>
+                </div>
+              </div>
               <div className="settings__row">
                 <span className="settings__label">
-                  {t("settings.presenceShowButtons")}
+                  {t(
+                    settings.use_custom_buttons
+                      ? "settings.presenceShowCustomButtons"
+                      : "settings.presenceShowButtons",
+                  )}
                 </span>
                 <div className="settings__control">
                   <Chip
@@ -1217,50 +1494,59 @@ export function PresencePanel() {
                 </div>
               </div>
 
-              <div className="settings__row">
-                <span className="settings__label">
-                  {t("settings.presenceShowListButton")}
-                </span>
-                <div className="settings__control">
-                  <Chip
-                    selected={settings.show_list_button}
-                    onClick={() =>
-                      updateSettings({ show_list_button: !settings.show_list_button })
-                    }
-                  >
-                    {settings.show_list_button
-                      ? t("common.enabled")
-                      : t("common.disabled")}
-                  </Chip>
-                </div>
-              </div>
-
-              {settings.show_list_button ? (
-                <div className="settings__field">
-                  <label htmlFor="my-vndb-link" className="settings__label">
-                    {t("settings.presenceMyVndbLink")}
-                  </label>
-                  <input
-                    id="my-vndb-link"
-                    type="url"
-                    className="input"
-                    aria-invalid={linkError !== null}
-                    value={settings.my_vndb_link}
-                    onChange={(event) => {
-                      setLinkError(null);
-                      updateSettings({ my_vndb_link: event.target.value });
-                    }}
-                    placeholder="https://vndb.org/u123456"
-                  />
-                  {linkError ? (
-                    <span className="presence-error">{linkError}</span>
-                  ) : (
-                    <span className="settings__hint">
-                      {t("settings.presenceMyVndbLinkHint")}
+              {settings.use_custom_buttons ? (
+                <CustomButtonEditor
+                  buttons={settings.custom_buttons ?? []}
+                  onChange={(custom_buttons) => updateSettings({ custom_buttons })}
+                />
+              ) : (
+                <>
+                  <div className="settings__row">
+                    <span className="settings__label">
+                      {t("settings.presenceShowListButton")}
                     </span>
-                  )}
-                </div>
-              ) : null}
+                    <div className="settings__control">
+                      <Chip
+                        selected={settings.show_list_button}
+                        onClick={() =>
+                          updateSettings({ show_list_button: !settings.show_list_button })
+                        }
+                      >
+                        {settings.show_list_button
+                          ? t("common.enabled")
+                          : t("common.disabled")}
+                      </Chip>
+                    </div>
+                  </div>
+
+                  {settings.show_list_button ? (
+                    <div className="settings__field">
+                      <label htmlFor="my-vndb-link" className="settings__label">
+                        {t("settings.presenceMyVndbLink")}
+                      </label>
+                      <input
+                        id="my-vndb-link"
+                        type="url"
+                        className="input"
+                        aria-invalid={linkError !== null}
+                        value={settings.my_vndb_link}
+                        onChange={(event) => {
+                          setLinkError(null);
+                          updateSettings({ my_vndb_link: event.target.value });
+                        }}
+                        placeholder="https://vndb.org/u123456"
+                      />
+                      {linkError ? (
+                        <span className="presence-error">{linkError}</span>
+                      ) : (
+                        <span className="settings__hint">
+                          {t("settings.presenceMyVndbLinkHint")}
+                        </span>
+                      )}
+                    </div>
+                  ) : null}
+                </>
+              )}
 
               <div className="settings__field">
                 <label htmlFor="client-id" className="settings__label">
@@ -1297,11 +1583,27 @@ export function PresencePanel() {
                     ))}
                   </select>
                   {scopeGameId ? (
-                    <Button onClick={() => void resetToGlobal()} disabled={busy}>
+                    <Button
+                      onClick={() => void resetToGlobal()}
+                      disabled={busy || scopeLoading || scopeError !== null}
+                    >
                       {t("settings.presenceScopeResetButton")}
                     </Button>
                   ) : null}
                 </div>
+                {scopeLoading ? (
+                  <span role="status" className="settings__hint">
+                    {t("common.loading")}
+                  </span>
+                ) : null}
+                {scopeError ? (
+                  <div className="presence-error" role="alert">
+                    {scopeError}
+                    <Button onClick={() => switchScope(scopeGameId)}>
+                      {t("common.retry")}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
 
               <div className="settings__field">
@@ -1346,17 +1648,26 @@ export function PresencePanel() {
                   label={t("settings.presencePlaying")}
                   defaultTitle={t("settings.presenceDefaultTitle")}
                   elapsedLabel={t("settings.presencePreviewElapsed")}
+                  imagePlaceholder={t("settings.presenceRemoteImagePreview")}
                 />
               </div>
 
+              {saveError && !linkError ? (
+                <span className="presence-error" role="alert">
+                  {saveError}
+                </span>
+              ) : null}
               <div className="presence-actions">
-                <Button onClick={() => void save()} disabled={busy}>
+                <Button
+                  onClick={() => void save()}
+                  disabled={busy || scopeLoading || scopeError !== null}
+                >
                   {t("settings.presenceSave")}
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={resetFormatting}
-                  disabled={busy}
+                  disabled={busy || scopeLoading || scopeError !== null}
                 >
                   {t("settings.presenceResetDefaults")}
                 </Button>
@@ -1440,27 +1751,45 @@ function DiscordCardPreview({
   label,
   defaultTitle,
   elapsedLabel,
+  imagePlaceholder,
 }: {
   activity: PresenceActivity | null;
   label: string;
   defaultTitle: string;
   elapsedLabel: string;
+  imagePlaceholder: string;
 }) {
   const buttons = (activity?.buttons ?? []).slice(0, MAX_BUTTONS);
+  const localImage = (source?: string | null) =>
+    source?.startsWith("data:image/") ? source : undefined;
+  const largeImage = localImage(activity?.large_image);
+  const smallImage = localImage(activity?.small_image);
+  const hasRemoteImage =
+    (activity?.large_image && !largeImage) || (activity?.small_image && !smallImage);
 
   return (
     <div className="dc-card">
       <div className="dc-card__label">{label}</div>
       <div className="dc-card__body">
-        <div
-          className="dc-card__art"
-          style={
-            activity?.large_image
-              ? { backgroundImage: `url(${activity.large_image})` }
-              : undefined
-          }
-        >
-          {activity?.large_image ? null : <Icon name="image" size={28} />}
+        <div className="dc-card__art-wrap">
+          <div
+            className="dc-card__art"
+            title={activity?.large_text ?? undefined}
+            style={largeImage ? { backgroundImage: `url(${largeImage})` } : undefined}
+          >
+            {largeImage ? null : <Icon name="image" size={28} />}
+          </div>
+          {activity?.small_image ? (
+            <div
+              className="dc-card__small-art"
+              role="img"
+              aria-label={activity.small_text || imagePlaceholder}
+              title={activity.small_text || imagePlaceholder}
+              style={smallImage ? { backgroundImage: `url(${smallImage})` } : undefined}
+            >
+              {smallImage ? null : <Icon name="image" size={14} />}
+            </div>
+          ) : null}
         </div>
 
         <div className="dc-card__lines">
@@ -1483,6 +1812,7 @@ function DiscordCardPreview({
         </div>
       </div>
 
+      {hasRemoteImage ? <p className="dc-card__image-hint">{imagePlaceholder}</p> : null}
       {buttons.length > 0 ? (
         <div className="dc-card__buttons">
           {buttons.map((button) => (

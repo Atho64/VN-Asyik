@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import { ContextMenu, type MenuItem } from "@/components/ContextMenu";
+import { createPortal } from "react-dom";
+import { ScreenshotMenu } from "@/features/screenshots/ScreenshotMenu";
 
 interface MenuState {
   x: number;
@@ -48,9 +50,17 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
   return (
     <MenuContext.Provider value={api}>
       {children}
-      {menu ? (
-        <ContextMenu position={{ x: menu.x, y: menu.y }} items={menu.items} onClose={close} />
-      ) : null}
+      <ScreenshotMenu openMenu={openMenu} />
+      {menu
+        ? createPortal(
+            <ContextMenu
+              position={{ x: menu.x, y: menu.y }}
+              items={menu.items}
+              onClose={close}
+            />,
+            document.querySelector('[role="dialog"][aria-modal="true"]') ?? document.body,
+          )
+        : null}
     </MenuContext.Provider>
   );
 }

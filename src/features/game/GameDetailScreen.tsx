@@ -489,70 +489,76 @@ export function GameDetailScreen() {
           <div className="detail__intro">
             <h2 className="detail__title over-art">{game.title}</h2>
             {otherTitles.length > 0 ? (
-              <ul className="detail__alts" aria-label={t("detail.alsoKnownAs")}>
-                {otherTitles.map((title) => (
-                  <li key={`${title.role}:${title.text}`} className="detail__alt">
-                    <span className="detail__alt-role">
-                      {t(`detail.titleRole.${title.role}`)}
-                    </span>
-                    <span className="detail__alt-text">{title.text}</span>
-                  </li>
-                ))}
-              </ul>
+              <details className="detail__titles" key={game.meta.id}>
+                <summary className="detail__titles-toggle">
+                  {t("detail.alsoKnownAs")}
+                  <span className="detail__titles-count tnum">{otherTitles.length}</span>
+                </summary>
+                <ul className="detail__alts" aria-label={t("detail.alsoKnownAs")}>
+                  {otherTitles.map((title) => (
+                    <li key={`${title.role}:${title.text}`} className="detail__alt">
+                      <span className="detail__alt-role">
+                        {t(`detail.titleRole.${title.role}`)}
+                      </span>
+                      <span className="detail__alt-text">{title.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
+          </div>
 
-            <div className="detail__facts">
-              <StatusChip status={game.status} />
-              <RatingPicker
-                value={game.rating}
-                onChange={(rating) => void updateGame({ id: game.meta.id, rating })}
-              />
-              {vndb?.rating ? (
-                <span
-                  className="chip tnum"
-                  title={t("detail.vndbRatingHint", {
-                    count: vndb.votecount ?? 0,
-                  })}
-                >
-                  <Icon name="star" size={12} />
-                  {t("detail.vndbRating", {
-                    value: (vndb.rating / 10).toFixed(1),
-                  })}
-                </span>
-              ) : null}
-              {/* The link to the entry itself, next to the score it came from. The
+          <div className="detail__facts">
+            <StatusChip status={game.status} />
+            <RatingPicker
+              value={game.rating}
+              onChange={(rating) => void updateGame({ id: game.meta.id, rating })}
+            />
+            {vndb?.rating ? (
+              <span
+                className="chip tnum"
+                title={t("detail.vndbRatingHint", {
+                  count: vndb.votecount ?? 0,
+                })}
+              >
+                <Icon name="star" size={12} />
+                {t("detail.vndbRating", {
+                  value: (vndb.rating / 10).toFixed(1),
+                })}
+              </span>
+            ) : null}
+            {/* The link to the entry itself, next to the score it came from. The
                 facts card below repeats it because that is where a reader looks
                 for "more", but a VN page is something people want one click away
                 from the hero, which is where they decide to go. */}
-              {game.vndb_id ? (
-                <button
-                  type="button"
-                  className="chip chip--link tnum"
-                  title={t("detail.viewOnVndbHint", { vn: game.vndb_id })}
-                  onClick={() => {
-                    void api
-                      .openExternal(vndbVnUrl(game.vndb_id ?? ""))
-                      .catch((caught: unknown) => {
-                        pushToast(
-                          "error",
-                          caught instanceof IpcError ? caught.message : t("common.error"),
-                        );
-                      });
-                  }}
-                >
-                  {game.vndb_id}
-                </button>
-              ) : null}
-              <span className="chip tnum">
-                <Icon name="clock" size={12} />
-                {formatDurationLong(totalMs, locale)}
+            {game.vndb_id ? (
+              <button
+                type="button"
+                className="chip chip--link tnum"
+                title={t("detail.viewOnVndbHint", { vn: game.vndb_id })}
+                onClick={() => {
+                  void api
+                    .openExternal(vndbVnUrl(game.vndb_id ?? ""))
+                    .catch((caught: unknown) => {
+                      pushToast(
+                        "error",
+                        caught instanceof IpcError ? caught.message : t("common.error"),
+                      );
+                    });
+                }}
+              >
+                {game.vndb_id}
+              </button>
+            ) : null}
+            <span className="chip tnum">
+              <Icon name="clock" size={12} />
+              {formatDurationLong(totalMs, locale)}
+            </span>
+            {afkMs > 0 ? (
+              <span className="chip tnum" title={t("game.afkHint")}>
+                {t("detail.away")}: {formatDurationLong(afkMs, locale)}
               </span>
-              {afkMs > 0 ? (
-                <span className="chip tnum" title={t("game.afkHint")}>
-                  {t("detail.away")}: {formatDurationLong(afkMs, locale)}
-                </span>
-              ) : null}
-            </div>
+            ) : null}
           </div>
 
           <div className="detail__actions">
@@ -1094,7 +1100,11 @@ export function AdjustPlaytimeSheet({
         />
         <p className="caption">{t("detail.adjustHint")}</p>
       </div>
-      {error ? <p className="field__error" role="alert">{error}</p> : null}
+      {error ? (
+        <p className="field__error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </Sheet>
   );
 }

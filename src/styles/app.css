@@ -46,7 +46,6 @@
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  transition: width var(--dur-fast) var(--ease);
 }
 
 .rail--compact {

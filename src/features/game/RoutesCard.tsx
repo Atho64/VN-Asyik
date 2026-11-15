@@ -7,7 +7,7 @@ import { Card, CardHeader } from "@/components/Card";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
-import { api } from "@/lib/ipc/client";
+import { api, startPolling } from "@/lib/ipc/client";
 import type {
   ChapterCapabilityView,
   ManualTimerView,
@@ -102,18 +102,22 @@ export function RoutesCard({
     };
   }, [gameId]);
 
-  // One interval for the whole card rather than per-row, so a long route list costs
-  // nothing extra while a timer runs.
   useEffect(() => {
-    if (!timer?.active || !timer.running) return;
-    const id = window.setInterval(() => {
-      void api
-        .trackingManualStatus()
-        .then(setTimer)
-        .catch(() => undefined);
+    if (!timer?.active || busy) return;
+    let cancelled = false;
+    const stopPolling = startPolling(async () => {
+      try {
+        const next = await api.trackingManualStatus();
+        if (!cancelled) setTimer(next);
+      } catch {
+        // Retain the last snapshot; the next poll can retry.
+      }
     }, 1000);
-    return () => window.clearInterval(id);
-  }, [timer?.active, timer?.running]);
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
+  }, [gameId, timer?.active, timer?.running, busy]);
 
   /** Renders the chapter detection availability notice (supported, unsupported, or unverified). */
   const intro = useMemo(() => {
@@ -754,9 +758,13 @@ export function RoutesCard({
                 {formatDuration(timer.elapsedMs, locale)}
               </span>
               <span className="manual-timer__label">
-                {timer.running
-                  ? t("manual.running", { name: timer.chapterName ?? "" })
-                  : t("manual.paused", { time: formatDuration(timer.elapsedMs, locale) })}
+                {timer.phase === "unfocused"
+                  ? t("tracking.unfocused")
+                  : timer.running
+                    ? t("manual.running", { name: timer.chapterName ?? "" })
+                    : t("manual.paused", {
+                        time: formatDuration(timer.elapsedMs, locale),
+                      })}
               </span>
               {/* Counted the way playtime is, so away time is shown rather than
                   silently folded into the clock. */}

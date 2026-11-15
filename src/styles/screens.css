@@ -530,11 +530,6 @@
     grid-row: 1;
   }
 
-  .detail__alt {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
   .detail__head > .detail__actions {
     grid-column: 2;
     grid-row: 1 / span 2;
@@ -847,40 +842,114 @@
 }
 
 .heatmap__cell {
+  --heatmap-event-color: var(--text);
+  position: relative;
   width: 11px;
   height: 11px;
   border-radius: 2px;
   background: var(--surface-2);
 }
 
-.heatmap__cell[data-level="1"] {
+.heatmap__cell[data-level="1"],
+.heatmap__swatch[data-level="1"] {
   background: color-mix(in srgb, var(--accent) 32%, var(--surface-2));
 }
-.heatmap__cell[data-level="2"] {
+.heatmap__cell[data-level="2"],
+.heatmap__swatch[data-level="2"] {
   background: color-mix(in srgb, var(--accent) 55%, var(--surface-2));
 }
-.heatmap__cell[data-level="3"] {
+.heatmap__cell[data-level="3"],
+.heatmap__swatch[data-level="3"] {
   background: color-mix(in srgb, var(--accent) 78%, var(--surface-2));
 }
-.heatmap__cell[data-level="4"] {
+.heatmap__cell[data-level="4"],
+.heatmap__swatch[data-level="4"] {
   background: var(--accent-strong);
 }
 
-/* Finished mark: centered theme-ink dot with contrast ring to remain legible over any heatmap level. */
-.heatmap__cell[data-finished="true"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  block-size: 4px;
-  inline-size: 4px;
-  border-radius: 50%;
-  background: var(--text);
-  box-shadow: 0 0 0 1.5px var(--surface-2);
+/* Bright activity cells need dark ink in the dark theme, without a bulky halo. */
+.heatmap__cell[data-level="2"],
+.heatmap__cell[data-level="3"],
+.heatmap__cell[data-level="4"] {
+  --heatmap-event-color: var(--on-accent);
 }
 
-.heatmap__cell[data-finished="true"] {
-  position: relative;
+:root[data-theme="light"] .heatmap__cell[data-level="2"] {
+  --heatmap-event-color: var(--text);
+}
+
+.heatmap__marker {
+  color: var(--heatmap-event-color, var(--text));
+  fill: currentColor;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+}
+
+.heatmap__marker--started {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.heatmap__marks {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.heatmap__cell[data-started="true"][data-finished="true"] .heatmap__marker {
+  width: 5px;
+  height: 5px;
+}
+
+.heatmap__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.heatmap__scale,
+.heatmap__swatches,
+.heatmap__legend,
+.heatmap__legend > span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.heatmap__scale {
+  gap: var(--space-2);
+}
+
+.heatmap__swatches {
+  gap: 3px;
+}
+
+.heatmap__swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+
+.heatmap__legend {
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.heatmap__legend > span {
+  gap: var(--space-2);
+}
+
+.lightbox__img:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--space-1);
 }
 
 @media (max-width: 899px) {
@@ -1166,6 +1235,127 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.walkthrough__translation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.walkthrough__translation-actions > .btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.walkthrough__editor {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  background: var(--bg-elevated);
+}
+
+.walkthrough__editor-heading h3,
+.walkthrough__editor-heading p,
+.walkthrough__editor-source p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.walkthrough__editor-heading p {
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+}
+
+.walkthrough__editor-route,
+.walkthrough__editor-line label {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.walkthrough__editor-line {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.walkthrough__editor-source {
+  min-width: 0;
+  color: var(--text-muted);
+}
+
+.walkthrough__editor-source span {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.walkthrough__editor-route .select,
+.walkthrough__editor-line textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.walkthrough__editor-line textarea {
+  min-height: var(--touch-target);
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  color: var(--text);
+  background: var(--field-bg);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.walkthrough__editor-error {
+  margin: 0;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 720px) {
+  .walkthrough__editor-line {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.map-exe__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.map-exe__windows {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.map-exe__windows .select {
+  width: 100%;
+  min-width: 0;
+}
+
+.map-exe__windows p {
+  margin: 0;
+}
+
+.map-exe__window-path {
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
 }
 
 .map-exe--android {
@@ -1831,21 +2021,13 @@
   width: 100%;
 }
 
-/* Legend and streaks travel as one aside on the header's right edge. */
-.heatmap__aside {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-/* Streak chips beside the heatmap legend. Real information, so unlike the
- * decorative legend they stay visible to assistive tech. */
 .heatmap__streaks {
   display: flex;
-  gap: var(--space-2);
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.heatmap__streaks > span {
   white-space: nowrap;
 }
 
@@ -2049,6 +2231,25 @@
 }
 
 /* Reader captures grid: 16:9 uncropped tiles with object-fit: contain instead of 4:3 VNDB reference crops. */
+.screenshot-capture {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.screenshot-capture .btn {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.screenshot-capture .caption {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .shots {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -2260,6 +2461,14 @@
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-4);
+  min-width: 0;
+}
+
+.presence-panel .settings__field,
+.presence-panel .input,
+.presence-panel .textarea {
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* A row whose control should sit under its label rather than beside it: the
@@ -2329,9 +2538,48 @@
 
 .presence-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-2);
+}
+
+.presence-actions > .btn,
+.presence-sheet-actions > .btn,
+.presence-panel .settings__scope > .btn {
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  padding-block: var(--space-2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.presence-assets__body,
+.presence-buttons-editor {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.presence-assets__body {
+  padding-top: var(--space-3);
+}
+
+.presence-buttons-editor__slot {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+.presence-buttons-editor__slot legend {
+  padding-inline: var(--space-1);
+  font-size: var(--text-s);
 }
 
 /* Rotation list editor. The list itself is a textarea, so a user can add and
@@ -2453,6 +2701,34 @@
   color: #6d6f78;
 }
 
+.dc-card__art-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+}
+
+.dc-card__small-art {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #1e1f22;
+  border-radius: 50%;
+  background: #2b2d31 center / cover no-repeat;
+  color: #b5bac1;
+}
+
+.dc-card__image-hint {
+  margin: var(--space-3) 0 0;
+  font-size: 12px;
+  color: #b5bac1;
+}
+
 .dc-card__lines {
   display: flex;
   flex-direction: column;
@@ -2515,8 +2791,32 @@
 
 .presence-sheet-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+@media (max-width: 600px) {
+  .presence-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .presence-actions > .btn {
+    width: 100%;
+  }
+
+  .presence-panel .settings__scope {
+    flex-wrap: wrap;
+  }
+
+  .presence-panel .settings__scope > .btn {
+    width: 100%;
+  }
+
+  .presence-buttons-editor__slot {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .presence-warning {

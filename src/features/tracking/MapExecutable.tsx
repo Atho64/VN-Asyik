@@ -8,6 +8,7 @@ import { Chip } from "@/components/Chip";
 import { Icon } from "@/components/Icon";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { GameCard, RunnerKind } from "@/lib/ipc/types";
+import { WindowExecutablePicker } from "./WindowExecutablePicker";
 
 const RUNNER_DEFAULTS: Record<
   RunnerKind,
@@ -131,6 +132,7 @@ export function MapExecutable({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [showWindows, setShowWindows] = useState(false);
 
   const defaultRunner: RunnerKind = isAndroid ? "kirikiroid2" : "vita3k";
   const [runnerKind, setRunnerKind] = useState<RunnerKind>(defaultRunner);
@@ -330,10 +332,39 @@ export function MapExecutable({
       )}
 
       {effectiveMode === "native" ? (
-        <Button variant="secondary" onClick={() => void pickNative()} disabled={busy}>
-          <Icon name="plus" />
-          {busy ? t("tracking.picking") : t("tracking.pickExe")}
-        </Button>
+        <>
+          <div className="map-exe__choices">
+            <Button variant="secondary" onClick={() => void pickNative()} disabled={busy}>
+              <Icon name="plus" />
+              {busy ? t("tracking.picking") : t("tracking.pickExe")}
+            </Button>
+            {platform?.os === "windows" ? (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                aria-expanded={showWindows}
+                onClick={() => {
+                  setShowWindows((value) => !value);
+                  setError(null);
+                  setDone(null);
+                }}
+              >
+                {t("tracking.chooseWindow")}
+              </Button>
+            ) : null}
+          </div>
+          {showWindows && platform?.os === "windows" ? (
+            <WindowExecutablePicker
+              key={fixedGameId ?? gameId}
+              gameId={fixedGameId ?? gameId}
+              onMapped={async (name) => {
+                setDone(name);
+                setShowWindows(false);
+                await onMapped();
+              }}
+            />
+          ) : null}
+        </>
       ) : (
         <div style={{ display: "grid", gap: "var(--space-3)" }}>
           <label className="field">
@@ -573,7 +604,9 @@ function AndroidRunnerMapping({
       </label>
       <details className="map-exe__advanced">
         <summary>{t("tracking.manualPackage")}</summary>
-        <div style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+        <div
+          style={{ display: "grid", gap: "var(--space-2)", marginTop: "var(--space-2)" }}
+        >
           <label className="field">
             <span className="field__label">{t("tracking.runner")}</span>
             <select

@@ -31,3 +31,35 @@ it("asks for the cross-game library with no arguments", async () => {
   await expect(api.screenshotListAll()).resolves.toEqual([]);
   expect(invoke).toHaveBeenCalledWith("screenshot_list_all", undefined);
 });
+
+it("scopes a capture to the game where its control was opened", async () => {
+  invoke.mockResolvedValue({
+    id: "shot",
+    gameId: "game",
+    width: 1,
+    height: 1,
+    capturedAt: 1000,
+    source: "android_projection",
+    caption: "",
+  });
+  await api.screenshotCapture("game");
+  expect(invoke).toHaveBeenLastCalledWith("screenshot_capture", { gameId: "game" });
+});
+
+it("passes painted image bytes to native copy and preserves save cancellation", async () => {
+  invoke.mockResolvedValue(null);
+  await expect(
+    api.screenshotCopy("data:image/png;base64,pixels"),
+  ).resolves.toBeUndefined();
+  expect(invoke).toHaveBeenLastCalledWith("screenshot_copy", {
+    dataUrl: "data:image/png;base64,pixels",
+  });
+  invoke.mockResolvedValue(false);
+  await expect(
+    api.screenshotSave("data:image/png;base64,pixels", "shot.png"),
+  ).resolves.toBe(false);
+  expect(invoke).toHaveBeenLastCalledWith("screenshot_save", {
+    dataUrl: "data:image/png;base64,pixels",
+    filename: "shot.png",
+  });
+});

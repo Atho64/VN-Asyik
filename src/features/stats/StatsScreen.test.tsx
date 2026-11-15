@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   statusBreakdown: vi.fn(),
   playtimeByDay: vi.fn(),
   finishedByDay: vi.fn(),
+  startedByDay: vi.fn(),
 }));
 
 vi.mock("@/lib/ipc/client", () => ({
@@ -18,6 +19,7 @@ vi.mock("@/lib/ipc/client", () => ({
     statusBreakdown: mocks.statusBreakdown,
     playtimeByDay: mocks.playtimeByDay,
     finishedByDay: mocks.finishedByDay,
+    startedByDay: mocks.startedByDay,
   },
 }));
 
@@ -65,6 +67,7 @@ describe("StatsScreen", () => {
     });
     mocks.playtimeByDay.mockResolvedValue([[20_000, 3_600_000]]);
     mocks.finishedByDay.mockResolvedValue([]);
+    mocks.startedByDay.mockResolvedValue([]);
     useAppStore.setState({
       libraryLoaded: true,
       cards: [
@@ -112,7 +115,9 @@ describe("StatsScreen", () => {
 
     await user.click(within(tabs).getByRole("tab", { name: "Activity" }));
     expect(screen.getByTestId("time-stats")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Play days, last 12 months" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Play days, last 12 months" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Overview" })).toBeNull();
 
     await user.click(within(tabs).getByRole("tab", { name: "Recap" }));
@@ -155,5 +160,44 @@ describe("StatsScreen", () => {
     expect(
       Array.from(marked).some((cell) => cell.getAttribute("data-level") !== "0"),
     ).toBe(true);
+  });
+
+  it("distinguishes starts and finishes and keeps both on a shared day", async () => {
+    const today = dayIndex(Date.now() - new Date().getTimezoneOffset() * 60_000);
+    mocks.startedByDay.mockResolvedValue([
+      [today, 2],
+      [today - 2, 1],
+    ]);
+    mocks.finishedByDay.mockResolvedValue([
+      [today, 1],
+      [today - 1, 1],
+    ]);
+    mocks.playtimeByDay.mockResolvedValue([]);
+    const { container } = renderStats();
+    await userEvent.click(await screen.findByRole("tab", { name: "Activity" }));
+    const both = container.querySelector(
+      '.heatmap__cell[data-started="true"][data-finished="true"]',
+    );
+    expect(both).not.toBeNull();
+    expect(both?.querySelector(".heatmap__marker--started circle")).not.toBeNull();
+    expect(both?.querySelector(".heatmap__marker--finished circle")).not.toBeNull();
+    expect(both?.querySelector(".heatmap__marks")?.children).toHaveLength(2);
+    expect(both?.querySelector("path")).toBeNull();
+    expect(both).toHaveAttribute(
+      "title",
+      expect.stringContaining("started a VN · finished a VN"),
+    );
+    expect(
+      container.querySelectorAll('.heatmap__cell[data-started="true"]'),
+    ).toHaveLength(2);
+    expect(
+      container.querySelectorAll('.heatmap__cell[data-finished="true"]'),
+    ).toHaveLength(2);
+    expect(screen.getByText("Started")).toBeInTheDocument();
+    expect(screen.getByText("Finished")).toBeInTheDocument();
+    const footer = container.querySelector(".heatmap__footer");
+    expect(footer).toContainElement(screen.getByText("Started"));
+    expect(footer).toContainElement(screen.getByText("Finished"));
+    expect(footer?.querySelectorAll(".heatmap__swatch")).toHaveLength(5);
   });
 });

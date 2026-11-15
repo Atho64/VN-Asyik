@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppContext } from "@/app/AppProvider";
 import { useAppStore } from "@/app/store";
@@ -7,6 +7,7 @@ import { createTranslator } from "@/i18n";
 import { PresencePanel } from "./PresencePanel";
 import { api } from "@/lib/ipc/client";
 import type { PresenceSettings } from "@/lib/ipc/types";
+import { readFileSync } from "node:fs";
 
 const emptyTransform = { prefix: "", suffix: "", remove: [], replace: [], trim: false };
 
@@ -138,7 +139,274 @@ function renderPanel() {
   );
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+function twoScopeGames() {
+  vi.mocked(api.listGames).mockResolvedValue([
+    { game: { meta: { id: "g1" }, title: "First game" } },
+    { game: { meta: { id: "g2" }, title: "Second game" } },
+  ] as never);
+}
+
 describe("PresencePanel", () => {
+  it("discards an earlier scope reply and saves the selected game's settings", async () => {
+    const user = userEvent.setup();
+    const first = deferred<PresenceSettings>();
+    const second = deferred<PresenceSettings>();
+    twoScopeGames();
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    vi.mocked(api.presenceEffectiveSettings).mockImplementation((id) =>
+      id === "g1" ? first.promise : second.promise,
+    );
+    vi.mocked(api.presenceSaveSettings).mockResolvedValue();
+    renderPanel();
+    const scope = await screen.findByRole("combobox", { name: "Presence scope" });
+    await user.selectOptions(scope, "g1");
+    const save = screen.getByRole("button", { name: "Save presence settings" });
+    expect(save).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Reset formatting to defaults" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Reset this game to global" }),
+    ).toBeDisabled();
+    await user.selectOptions(scope, "g2");
+    await act(async () =>
+      second.resolve({ ...defaultSettings, enabled: true, activity_name: "Second" }),
+    );
+    expect(save).toBeEnabled();
+    expect(screen.getByLabelText("Card title")).toHaveValue("Second");
+    await act(async () =>
+      first.resolve({ ...defaultSettings, enabled: true, activity_name: "First" }),
+    );
+    expect(screen.getByLabelText("Card title")).toHaveValue("Second");
+    await user.click(save);
+    expect(api.presenceSaveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ activity_name: "Second" }),
+      "g2",
+    );
+  });
+
+  it("keeps save and reset disabled after a scope load fails until Retry succeeds", async () => {
+    const user = userEvent.setup();
+    twoScopeGames();
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    vi.mocked(api.presenceEffectiveSettings)
+      .mockRejectedValueOnce(new Error("scope failed"))
+      .mockResolvedValueOnce({
+        ...defaultSettings,
+        enabled: true,
+        activity_name: "Ready",
+      });
+    renderPanel();
+    const scope = await screen.findByRole("combobox", { name: "Presence scope" });
+    await user.selectOptions(scope, "g2");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong");
+    expect(screen.getByRole("button", { name: "Save presence settings" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Reset this game to global" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Save presence settings" }),
+      ).toBeEnabled(),
+    );
+    expect(screen.getByLabelText("Card title")).toHaveValue("Ready");
+  });
+
+  it("discards a late save failure after switching to another scope", async () => {
+    const user = userEvent.setup();
+    const save = deferred<void>();
+    twoScopeGames();
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    vi.mocked(api.presenceEffectiveSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+      activity_name: "Second",
+    });
+    vi.mocked(api.presenceSaveSettings).mockReturnValue(save.promise);
+    renderPanel();
+    await user.click(
+      await screen.findByRole("button", { name: "Save presence settings" }),
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Presence scope" }),
+      "g2",
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Card title")).toHaveValue("Second"),
+    );
+    const { IpcError } = await import("@/lib/ipc/client");
+    await act(async () =>
+      save.reject(new IpcError("invalid_presence_customization", "Old scope error")),
+    );
+    expect(screen.queryByText("Old scope error")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save presence settings" })).toBeEnabled();
+    expect(api.presenceSaveSettings).toHaveBeenCalledWith(expect.anything(), undefined);
+  });
+
+  it("keeps a newer scope's save busy when the previous save completes", async () => {
+    const user = userEvent.setup();
+    const firstSave = deferred<void>();
+    const secondSave = deferred<void>();
+    twoScopeGames();
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    vi.mocked(api.presenceEffectiveSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+      activity_name: "Second",
+    });
+    vi.mocked(api.presenceSaveSettings)
+      .mockReturnValueOnce(firstSave.promise)
+      .mockReturnValueOnce(secondSave.promise);
+    renderPanel();
+    const save = await screen.findByRole("button", { name: "Save presence settings" });
+    await user.click(save);
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Presence scope" }),
+      "g2",
+    );
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+    expect(save).toBeDisabled();
+    await act(async () => firstSave.resolve());
+    expect(save).toBeDisabled();
+    expect(document.querySelector(".presence-saved")).toBeNull();
+    await act(async () => secondSave.resolve());
+    await waitFor(() => expect(save).toBeEnabled());
+    expect(document.querySelector(".presence-saved")).toHaveTextContent(
+      "Presence settings saved",
+    );
+    expect(api.presenceSaveSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ activity_name: "Second" }),
+      "g2",
+    );
+  });
+
+  it("keeps the save and reset buttons in a responsive action container", async () => {
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    renderPanel();
+    const save = await screen.findByRole("button", { name: "Save presence settings" });
+    const reset = screen.getByRole("button", { name: "Reset formatting to defaults" });
+    expect(save.parentElement).toHaveClass("presence-actions");
+    expect(reset.parentElement).toBe(save.parentElement);
+    const css = readFileSync("src/styles/screens.css", "utf8");
+    expect(css).toMatch(/\.presence-actions\s*\{[^}]*flex-wrap:\s*wrap/s);
+    expect(css).toMatch(
+      /@media \(max-width: 600px\)\s*\{\s*\.presence-actions\s*\{[^}]*flex-direction:\s*column/s,
+    );
+    expect(css).toMatch(
+      /\.presence-actions > \.btn,\s*\.presence-sheet-actions > \.btn,[^{]*\{[^}]*white-space:\s*normal/s,
+    );
+  });
+
+  it("saves custom button labels, URLs, assets, and tooltip templates", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    vi.mocked(api.presenceSaveSettings).mockResolvedValue();
+    renderPanel();
+    await user.click(await screen.findByText("Small circle icon and tooltip"));
+    fireEvent.change(screen.getByLabelText("Small icon URL or asset key"), {
+      target: { value: "reading" },
+    });
+    fireEvent.change(screen.getByLabelText("Small icon tooltip"), {
+      target: { value: "{route}" },
+    });
+    await user.click(screen.getByText("Large image and tooltip"));
+    fireEvent.change(screen.getByLabelText("Large image URL or asset key"), {
+      target: { value: "cover_asset" },
+    });
+    fireEvent.change(screen.getByLabelText("Large image tooltip"), {
+      target: { value: "{vn_name}" },
+    });
+    await user.click(screen.getByRole("button", { name: "Custom buttons" }));
+    expect(screen.queryByText("Your VNDB profile")).not.toBeInTheDocument();
+    const labels = screen.getAllByLabelText("Button label");
+    const urls = screen.getAllByLabelText("Button URL");
+    expect(labels).toHaveLength(2);
+    fireEvent.change(labels[0]!, { target: { value: "Open {vn_name}" } });
+    fireEvent.change(urls[0]!, { target: { value: "{vndb_url}" } });
+    fireEvent.change(labels[1]!, { target: { value: "Walkthrough" } });
+    fireEvent.change(urls[1]!, { target: { value: "https://example.com/guide" } });
+    await user.click(screen.getByRole("button", { name: "Save presence settings" }));
+    expect(api.presenceSaveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        use_custom_buttons: true,
+        custom_buttons: [
+          { label: "Open {vn_name}", url: "{vndb_url}" },
+          { label: "Walkthrough", url: "https://example.com/guide" },
+        ],
+        large_image: "cover_asset",
+        large_text: "{vn_name}",
+        small_image: "reading",
+        small_text: "{route}",
+      }),
+      undefined,
+    );
+  });
+
+  it("previews the small circle and tooltip without fetching custom remote art", async () => {
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    vi.mocked(api.presencePreview).mockResolvedValue({
+      name: "Test VN",
+      buttons: [],
+      large_image: "https://example.com/cover.png",
+      large_text: "Cover tooltip",
+      small_image: "https://example.com/icon.png",
+      small_text: "Common route",
+    });
+    renderPanel();
+    const small = await screen.findByRole("img", { name: "Common route" });
+    expect(small).toHaveClass("dc-card__small-art");
+    expect(small.style.backgroundImage).toBe("");
+    const large = document.querySelector<HTMLElement>(".dc-card__art")!;
+    expect(large.style.backgroundImage).toBe("");
+    expect(large.title).toBe("Cover tooltip");
+    expect(
+      screen.getByText(/Custom and uncached images are shown as placeholders/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a load error and retries instead of disappearing", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.presenceGetSettings).mockRejectedValueOnce(new Error("load failed"));
+    renderPanel();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong");
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Enable Rich Presence")).toBeInTheDocument();
+    expect(api.presenceGetSettings).toHaveBeenCalledTimes(2);
+  });
+
   it("renders discord presence title and disabled status by default", async () => {
     renderPanel();
 
@@ -256,7 +524,7 @@ describe("PresencePanel", () => {
     expect(await screen.findByLabelText("Your VNDB profile")).toBeInTheDocument();
   });
 
-  it("offers the image host only while cover art shows, and the key field on ImgBB", async () => {
+  it("keeps the image host available for small icons with cover art hidden", async () => {
     const user = userEvent.setup();
     vi.mocked(api.presenceGetSettings).mockResolvedValue({
       ...defaultSettings,
@@ -274,7 +542,7 @@ describe("PresencePanel", () => {
     expect(await screen.findByText("ImgBB API Key")).toBeInTheDocument();
     unmount();
 
-    // The upload option only makes sense when the card can show art at all.
+    // The small executable icon can still use this host with the large cover off.
     vi.mocked(api.presenceGetSettings).mockResolvedValue({
       ...defaultSettings,
       enabled: true,
@@ -282,7 +550,39 @@ describe("PresencePanel", () => {
     });
     renderPanel();
     expect(await screen.findByText("Show Cover Art")).toBeInTheDocument();
-    expect(screen.queryByText("Image Host")).not.toBeInTheDocument();
+    expect(screen.getByText("Image Host")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Catbox" }));
+    await user.click(screen.getByRole("button", { name: "Save presence settings" }));
+    expect(api.presenceSaveSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ show_cover: false, rpc_image_host: "catbox" }),
+      undefined,
+    );
+  });
+
+  it("defaults the executable icon on for Windows and can save it off", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({ platform: { os: "windows", kind: "desktop" } as never });
+    vi.mocked(api.presenceGetSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+    renderPanel();
+    await user.click(await screen.findByText("Small circle icon and tooltip"));
+    const label = screen.getByText("Use executable icon when blank");
+    const row = label.closest(".settings__row") as HTMLElement;
+    const toggle = within(row).getByRole("button", {
+      name: "Use executable icon when blank",
+    });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByText(/Choose an Image Host to show the default icon/),
+    ).toBeInTheDocument();
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: "Save presence settings" }));
+    expect(api.presenceSaveSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ use_exe_icon: false }),
+      undefined,
+    );
   });
 
   it("shows the server's reason when the profile link is rejected at save", async () => {
@@ -318,39 +618,39 @@ describe("PresencePanel", () => {
     });
     vi.mocked(api.presenceStatus).mockResolvedValue({ status: "connected" });
     // The preview now names a real game, so the panel asks for the library.
-  vi.mocked(api.listGames).mockResolvedValue([
-    {
-      game: {
-        meta: {
-          id: "g1",
-          updated_at: 0,
-          device_id: "d1",
-          deleted: false,
+    vi.mocked(api.listGames).mockResolvedValue([
+      {
+        game: {
+          meta: {
+            id: "g1",
+            updated_at: 0,
+            device_id: "d1",
+            deleted: false,
+          },
+          title: "Steins;Gate",
+          title_original: null,
+          vndb_id: "v2002",
+          status: "playing",
+          rating: null,
+          notes: null,
+          length_minutes: null,
+          manual_playtime_ms: 0,
+          accent_color: null,
+          cover_url: null,
+          cover_sexual: null,
+          cover_violence: null,
+          custom_cover_path: null,
+          custom_cover_source_vndb: false,
+          started_at: null,
+          finished_at: null,
         },
-        title: "Steins;Gate",
-        title_original: null,
-        vndb_id: "v2002",
-        status: "playing",
-        rating: null,
-        notes: null,
-        length_minutes: null,
-        manual_playtime_ms: 0,
-        accent_color: null,
-        cover_url: null,
-        cover_sexual: null,
-        cover_violence: null,
-        custom_cover_path: null,
-        custom_cover_source_vndb: false,
-        started_at: null,
-        finished_at: null,
+        tracked_ms: 0,
+        afk_ms: 0,
+        total_ms: 0,
       },
-      tracked_ms: 0,
-      afk_ms: 0,
-      total_ms: 0,
-    },
-  ] as never);
+    ] as never);
 
-  vi.mocked(api.presencePreview).mockResolvedValue({
+    vi.mocked(api.presencePreview).mockResolvedValue({
       name: "Steins;Gate",
       details: "5pb. / Nitroplus",
       state: "Reading",
@@ -592,7 +892,9 @@ describe("PresencePanel", () => {
     // Only one Rotate toggle lives on the VNDB list editor (no duplicate row).
     expect(screen.getAllByLabelText("Rotate VNDB facts")).toHaveLength(1);
 
-    await user.click(screen.getByRole("button", { name: "Reset formatting to defaults" }));
+    await user.click(
+      screen.getByRole("button", { name: "Reset formatting to defaults" }),
+    );
 
     expect(detailsList).toHaveValue("");
     expect(stateInput).toHaveValue("");

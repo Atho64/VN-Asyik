@@ -4,6 +4,7 @@ import {
   walkthroughViewSchema,
   walkthroughIndexEntrySchema,
   type WalkthroughView,
+  type WalkthroughRoute,
   type WalkthroughIndexEntry,
 } from "./types";
 import { z } from "zod";
@@ -11,7 +12,10 @@ import { z } from "zod";
 export const walkthroughApi = {
   /** Get stored walkthrough, progress, and available translations for a game. */
   get: (gameId: string, vnId?: string | null): Promise<WalkthroughView | null> =>
-    call("walkthrough_get", walkthroughViewSchema.nullable(), { gameId, vnId: vnId ?? null }),
+    call("walkthrough_get", walkthroughViewSchema.nullable(), {
+      gameId,
+      vnId: vnId ?? null,
+    }),
 
   /** Search candidate entries on Seiya-Saiga's master index. */
   searchCandidate: (
@@ -50,6 +54,24 @@ export const walkthroughApi = {
       gameId,
       provider,
       targetLang,
+      vnId: vnId ?? null,
+    }),
+
+  /** Save a separate local translation without changing the original or progress. */
+  saveManual: (
+    gameId: string,
+    targetLang: "en" | "id",
+    sourceUrl: string,
+    sourceRoutes: WalkthroughRoute[],
+    texts: string[],
+    vnId?: string | null,
+  ): Promise<WalkthroughView> =>
+    call("walkthrough_save_manual", walkthroughViewSchema, {
+      gameId,
+      targetLang,
+      sourceUrl,
+      sourceRoutes,
+      texts,
       vnId: vnId ?? null,
     }),
 

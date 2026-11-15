@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
+import { readFileSync } from "node:fs";
 
 import { AppContext } from "@/app/AppProvider";
 import { useAppStore } from "@/app/store";
@@ -324,6 +325,75 @@ describe("returning to a game", () => {
 });
 
 describe("game detail layout", () => {
+  it("lets every expanded alias occupy a separate grid row", async () => {
+    mocks.getGame.mockResolvedValue(detail({ title_original: "原題" }));
+    useAppStore.setState({
+      cards: [detail({ title_original: "原題" })],
+      vndbDetails: {
+        v1: vndbPayload({
+          aliases: ["A long alternate name that can wrap", "別の名前", "Another alias"],
+        }),
+      },
+    });
+    const sourceStyle = document.createElement("style");
+    const inherited = readFileSync("src/styles/screens.css", "utf8");
+    // Include inherited alias rules from every breakpoint, without unrelated CSS jsdom cannot parse.
+    const aliasRules = [
+      ...inherited.matchAll(/\.detail__(?:alts|alt)\s*\{[^{}]*\}/g),
+    ].map(([rule]) => rule);
+    sourceStyle.textContent = [
+      ...aliasRules,
+      readFileSync("src/styles/game-header.css", "utf8"),
+    ].join("\n");
+    document.head.append(sourceStyle);
+    try {
+      const { container } = renderDetail();
+      await screen.findByRole("heading", { name: "A visual novel" });
+      const titles = container.querySelector<HTMLDetailsElement>(".detail__titles")!;
+      await userEvent.click(titles.querySelector("summary")!);
+      const list = titles.querySelector<HTMLElement>(".detail__alts")!;
+      expect(getComputedStyle(list).display).toBe("grid");
+      const aliases = list.querySelectorAll<HTMLElement>(".detail__alt");
+      expect(aliases.length).toBeGreaterThanOrEqual(4);
+      for (const alias of aliases) {
+        const style = getComputedStyle(alias);
+        expect(["", "auto"]).toContain(style.gridRow);
+        expect(["", "auto"]).toContain(style.gridColumn);
+        expect(style.display).toBe("grid");
+      }
+    } finally {
+      sourceStyle.remove();
+    }
+  });
+
+  it("keeps alternate titles in a closed native disclosure and facts outside the title column", async () => {
+    mocks.getGame.mockResolvedValue(detail({ title_original: "原題" }));
+    useAppStore.setState({
+      cards: [detail({ title_original: "原題" })],
+      vndbDetails: {
+        v1: vndbPayload({ aliases: ["A very long alternative title", "Another alias"] }),
+      },
+    });
+    const { container } = renderDetail();
+    await screen.findByRole("heading", { name: "A visual novel" });
+    const titles = container.querySelector<HTMLDetailsElement>(".detail__titles");
+    expect(titles).not.toBeNull();
+    expect(titles).not.toHaveAttribute("open");
+    const summary = titles?.querySelector("summary");
+    expect(summary).toHaveClass("detail__titles-toggle");
+    expect(summary).toHaveTextContent("Also known as");
+    expect(titles?.querySelectorAll(".detail__alt")).toHaveLength(3);
+    expect(titles).toHaveTextContent("原題");
+    expect(titles).toHaveTextContent("A very long alternative title");
+    expect(container.querySelector(".detail__intro .detail__facts")).toBeNull();
+    expect(container.querySelector(".detail__head > .detail__facts")).not.toBeNull();
+    if (!summary) throw new Error("Missing titles disclosure");
+    await userEvent.click(summary);
+    expect(titles).toHaveAttribute("open");
+    await userEvent.click(summary);
+    expect(titles).not.toHaveAttribute("open");
+  });
+
   it("opens the main column with the executable card", async () => {
     // The executable mapping feeds the Play button in the hero, so its card is
     // the first thing in the reading column. This pins the container order, not
@@ -348,8 +418,12 @@ describe("game detail layout", () => {
     expect(firstCard).not.toBeNull();
     expect(firstCard).toHaveClass("detail__executable");
     // Mapped executables stay visible; the add form is the collapsed disclosure.
-    expect(container.querySelector(".detail__executable .executable-list")).not.toBeNull();
-    expect(container.querySelector(".detail__executable .detail__exe-add")).not.toBeNull();
+    expect(
+      container.querySelector(".detail__executable .executable-list"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(".detail__executable .detail__exe-add"),
+    ).not.toBeNull();
   });
 
   it("keeps Notes and the destructive action in the side rail", async () => {

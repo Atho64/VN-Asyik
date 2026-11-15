@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/app/useI18n";
 import { useAppStore } from "@/app/store";
 import { Button } from "@/components/Button";
 import { Card, CardHeader } from "@/components/Card";
 import { Icon } from "@/components/Icon";
 import { api } from "@/lib/ipc/client";
+import { WalkthroughTranslationEditor } from "./WalkthroughTranslationEditor";
 import type {
   WalkthroughView,
   WalkthroughIndexEntry,
@@ -17,7 +18,7 @@ interface WalkthroughCardProps {
   vnId?: string | null;
 }
 
-type LangMode = "original" | "ai" | "google";
+type LangMode = "original" | "ai" | "google" | "manual";
 
 function formatUrlSlug(url: string): string {
   try {
@@ -40,6 +41,17 @@ function getPlatformBadge(url: string): { label: string; isConsole: boolean } {
 }
 
 export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
+  const { locale } = useI18n();
+  return (
+    <WalkthroughContent
+      key={`${gameId}:${vnId ?? ""}:${locale}`}
+      gameId={gameId}
+      vnId={vnId ?? null}
+    />
+  );
+}
+
+function WalkthroughContent({ gameId, vnId }: WalkthroughCardProps) {
   const { t, locale } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
 
@@ -50,13 +62,19 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
   const [candidates, setCandidates] = useState<WalkthroughIndexEntry[]>([]);
   const [searchingCandidate, setSearchingCandidate] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<WalkthroughIndexEntry[] | null>(null);
+  const [searchResults, setSearchResults] = useState<WalkthroughIndexEntry[] | null>(
+    null,
+  );
   const [isSearching, setIsSearching] = useState(false);
   const [showSwitchSearch, setShowSwitchSearch] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string>("all");
   const [langMode, setLangMode] = useState<LangMode>("original");
   const [customUrl, setCustomUrl] = useState("");
   const [showInput, setShowInput] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [savingEdits, setSavingEdits] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const translationEpoch = useRef(0);
 
   const targetLang = locale === "id" ? "id" : "en";
 
@@ -73,7 +91,9 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         if (res) {
           const aiKey = `ai_${targetLang}`;
           const gKey = `google_${targetLang}`;
-          if (res.translations[aiKey]) {
+          if (res.translations[`manual_${targetLang}`]) {
+            setLangMode("manual");
+          } else if (res.translations[aiKey]) {
             setLangMode("ai");
           } else if (res.translations[gKey]) {
             setLangMode("google");
@@ -106,26 +126,34 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
 
     return () => {
       cancelled = true;
+      translationEpoch.current += 1;
     };
   }, [gameId, vnId, targetLang, pushToast, t]);
 
-  const handleFetch = async (urlToFetch?: string | null) => {
-    setFetching(true);
-    try {
-      const res = await api.walkthroughFetch(gameId, vnId, urlToFetch);
-      setData(res);
-      setCandidates([]);
-      setSearchResults(null);
-      setSearchQuery("");
-      setShowInput(false);
-      setShowSwitchSearch(false);
-      pushToast("success", t("walkthrough.fetch"));
-    } catch (err: unknown) {
-      pushToast("error", String(err));
-    } finally {
-      setFetching(false);
-    }
-  };
+  const handleFetch = useCallback(
+    async (urlToFetch?: string | null) => {
+      translationEpoch.current += 1;
+      setTranslating(false);
+      setEditing(false);
+      setFetching(true);
+      try {
+        const res = await api.walkthroughFetch(gameId, vnId, urlToFetch);
+        setData(res);
+        setLangMode("original");
+        setCandidates([]);
+        setSearchResults(null);
+        setSearchQuery("");
+        setShowInput(false);
+        setShowSwitchSearch(false);
+        pushToast("success", t("walkthrough.fetch"));
+      } catch (err: unknown) {
+        pushToast("error", String(err));
+      } finally {
+        setFetching(false);
+      }
+    },
+    [gameId, vnId, pushToast, t],
+  );
 
   const handleSearch = async (query: string) => {
     const trimmed = query.trim();
@@ -145,19 +173,26 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
   };
 
   const handleTranslate = async (provider: "ai" | "google") => {
+    const epoch = ++translationEpoch.current;
     setTranslating(true);
     try {
       const res = await api.walkthroughTranslate(gameId, provider, targetLang, vnId);
-      setData(res);
+      if (epoch !== translationEpoch.current) return;
+      setData((current) =>
+        current ? { ...res, checkedItems: current.checkedItems } : res,
+      );
       setLangMode(provider);
       pushToast(
         "success",
-        provider === "ai" ? t("walkthrough.translateAi") : t("walkthrough.translateGoogle"),
+        provider === "ai"
+          ? t("walkthrough.translateAi")
+          : t("walkthrough.translateGoogle"),
       );
     } catch (err: unknown) {
+      if (epoch !== translationEpoch.current) return;
       pushToast("error", String(err));
     } finally {
-      setTranslating(false);
+      if (epoch === translationEpoch.current) setTranslating(false);
     }
   };
 
@@ -181,6 +216,34 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
     }
   };
 
+  const handleSaveEdits = async (texts: string[]) => {
+    if (!data) return;
+    const epoch = ++translationEpoch.current;
+    setSavingEdits(true);
+    setEditError(null);
+    try {
+      const res = await api.walkthroughSaveManual(
+        gameId,
+        targetLang,
+        data.sourceUrl,
+        data.routes,
+        texts,
+        vnId,
+      );
+      if (epoch !== translationEpoch.current) return;
+      setData((current) =>
+        current ? { ...res, checkedItems: current.checkedItems } : res,
+      );
+      setLangMode("manual");
+      setEditing(false);
+      pushToast("success", t("walkthrough.editsSaved"));
+    } catch (err: unknown) {
+      if (epoch === translationEpoch.current) setEditError(String(err));
+    } finally {
+      if (epoch === translationEpoch.current) setSavingEdits(false);
+    }
+  };
+
   const handleClearProgress = async () => {
     if (!data || !window.confirm(t("walkthrough.resetConfirm"))) return;
     try {
@@ -199,6 +262,9 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
     } else if (langMode === "google") {
       const gKey = `google_${targetLang}`;
       if (data.translations[gKey]) return data.translations[gKey];
+    } else if (langMode === "manual") {
+      if (data.translations[`manual_${targetLang}`])
+        return data.translations[`manual_${targetLang}`]!;
     }
     return data.routes;
   })();
@@ -281,7 +347,9 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
             style={{
               width: "100%",
               padding: "var(--space-2) var(--space-3) var(--space-2) 32px",
-              background: inSwitchMode ? "var(--color-surface)" : "var(--color-surface-raised)",
+              background: inSwitchMode
+                ? "var(--color-surface)"
+                : "var(--color-surface-raised)",
               border: "1px solid var(--color-border)",
               borderRadius: "var(--radius-md)",
               color: "var(--color-text)",
@@ -320,7 +388,9 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               textAlign: "center",
               color: "var(--color-text-dim)",
               fontSize: "var(--font-size-xs)",
-              background: inSwitchMode ? "var(--color-surface)" : "var(--color-surface-raised)",
+              background: inSwitchMode
+                ? "var(--color-surface)"
+                : "var(--color-surface-raised)",
               border: "1px dashed var(--color-border)",
               borderRadius: "var(--radius-md)",
             }}
@@ -328,11 +398,27 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
             {t("walkthrough.noResults")}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--color-text-dim)" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}
+          >
+            <span
+              style={{
+                fontSize: "var(--font-size-xs)",
+                fontWeight: 600,
+                color: "var(--color-text-dim)",
+              }}
+            >
               {t("walkthrough.searchResults", { count: String(searchResults.length) })}
             </span>
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", maxHeight: "280px", overflowY: "auto" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "var(--space-2)",
+                maxHeight: "280px",
+                overflowY: "auto",
+              }}
+            >
               {searchResults.map((entry) => (
                 <div
                   key={entry.url}
@@ -342,48 +428,69 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                     justifyContent: "space-between",
                     flexWrap: "wrap",
                     padding: "var(--space-2) var(--space-3)",
-                    background: inSwitchMode ? "var(--color-surface)" : "var(--color-surface-raised)",
+                    background: inSwitchMode
+                      ? "var(--color-surface)"
+                      : "var(--color-surface-raised)",
                     border: "1px solid var(--color-border)",
                     borderRadius: "var(--radius-md)",
                     gap: "var(--space-2)",
                   }}
                 >
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-2)",
+                        minWidth: 0,
+                      }}
+                    >
                       <span
                         style={{
                           fontSize: "10px",
                           fontWeight: 600,
                           padding: "1px 6px",
                           borderRadius: "var(--radius-sm)",
-                          background: getPlatformBadge(entry.url).isConsole ? "var(--accent-soft)" : "var(--success-soft)",
-                          color: getPlatformBadge(entry.url).isConsole ? "var(--accent)" : "var(--success)",
+                          background: getPlatformBadge(entry.url).isConsole
+                            ? "var(--accent-soft)"
+                            : "var(--success-soft)",
+                          color: getPlatformBadge(entry.url).isConsole
+                            ? "var(--accent)"
+                            : "var(--success)",
                           letterSpacing: "0.03em",
                           flexShrink: 0,
                         }}
                       >
                         {getPlatformBadge(entry.url).label}
                       </span>
-                      <span style={{ fontWeight: 500, fontSize: "var(--font-size-sm)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <span
+                        style={{
+                          fontWeight: 500,
+                          fontSize: "var(--font-size-sm)",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
                         {entry.title}
                       </span>
                     </div>
                     <div
-                    style={{
-                      fontSize: "var(--font-size-xs)",
-                      color: "var(--color-text-dim)",
-                      fontFamily: "monospace",
-                      paddingLeft: "var(--space-1)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                      style={{
+                        fontSize: "var(--font-size-xs)",
+                        color: "var(--color-text-dim)",
+                        fontFamily: "monospace",
+                        paddingLeft: "var(--space-1)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {formatUrlSlug(entry.url)}
                     </div>
                   </div>
                   <Button
-                                        variant="primary"
+                    variant="primary"
                     onClick={() => void handleFetch(entry.url)}
                     disabled={fetching}
                   >
@@ -398,8 +505,20 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
 
       {!searchResults && candidates.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--color-accent)" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "var(--font-size-xs)",
+                fontWeight: 600,
+                color: "var(--color-accent)",
+              }}
+            >
               {t("walkthrough.candidatesFound", { count: String(candidates.length) })}
             </span>
             <span
@@ -413,7 +532,15 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               {t("walkthrough.matchSource")}
             </span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", maxHeight: "240px", overflowY: "auto" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-2)",
+              maxHeight: "240px",
+              overflowY: "auto",
+            }}
+          >
             {candidates.map((cand) => (
               <div
                 key={cand.url}
@@ -423,29 +550,50 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                   justifyContent: "space-between",
                   flexWrap: "wrap",
                   padding: "var(--space-2) var(--space-3)",
-                  background: inSwitchMode ? "var(--color-surface)" : "var(--color-surface-raised)",
+                  background: inSwitchMode
+                    ? "var(--color-surface)"
+                    : "var(--color-surface-raised)",
                   border: "1px solid var(--color-border)",
                   borderRadius: "var(--radius-md)",
                   gap: "var(--space-2)",
                 }}
               >
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--space-2)",
+                      minWidth: 0,
+                    }}
+                  >
                     <span
                       style={{
                         fontSize: "10px",
                         fontWeight: 600,
                         padding: "1px 6px",
                         borderRadius: "var(--radius-sm)",
-                        background: getPlatformBadge(cand.url).isConsole ? "var(--accent-soft)" : "var(--success-soft)",
-                        color: getPlatformBadge(cand.url).isConsole ? "var(--accent)" : "var(--success)",
+                        background: getPlatformBadge(cand.url).isConsole
+                          ? "var(--accent-soft)"
+                          : "var(--success-soft)",
+                        color: getPlatformBadge(cand.url).isConsole
+                          ? "var(--accent)"
+                          : "var(--success)",
                         letterSpacing: "0.03em",
                         flexShrink: 0,
                       }}
                     >
                       {getPlatformBadge(cand.url).label}
                     </span>
-                    <span style={{ fontWeight: 500, fontSize: "var(--font-size-sm)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <span
+                      style={{
+                        fontWeight: 500,
+                        fontSize: "var(--font-size-sm)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
                       {cand.title}
                     </span>
                   </div>
@@ -464,7 +612,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                   </div>
                 </div>
                 <Button
-                                    variant="primary"
+                  variant="primary"
                   onClick={() => void handleFetch(cand.url)}
                   disabled={fetching}
                 >
@@ -476,26 +624,33 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         </div>
       )}
 
-      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--space-2)" }}>
+      <div
+        style={{
+          borderTop: "1px solid var(--color-border)",
+          paddingTop: "var(--space-2)",
+        }}
+      >
         {!showInput ? (
           <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                flexWrap: "wrap",
-                gap: "var(--space-2)",
-              }}
-            >
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "var(--space-2)",
+            }}
+          >
             <Button
               variant="ghost"
-                            onClick={() => setShowInput(true)}
+              onClick={() => setShowInput(true)}
               style={{ color: "var(--color-text-dim)", fontSize: "var(--font-size-xs)" }}
             >
               <Icon name="plus" size={12} />
               {t("walkthrough.orManualUrl")}
             </Button>
-            <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-dim)" }}>
+            <span
+              style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-dim)" }}
+            >
               {t("walkthrough.autoSearchTip")}
             </span>
           </div>
@@ -522,7 +677,9 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                 flex: 1,
                 minWidth: "10rem",
                 padding: "var(--space-2) var(--space-3)",
-                background: inSwitchMode ? "var(--color-surface)" : "var(--color-surface-raised)",
+                background: inSwitchMode
+                  ? "var(--color-surface)"
+                  : "var(--color-surface-raised)",
                 border: "1px solid var(--color-border)",
                 borderRadius: "var(--radius-md)",
                 color: "var(--color-text)",
@@ -530,7 +687,11 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               }}
               required
             />
-            <Button type="submit" variant="primary" disabled={fetching || !customUrl.trim()}>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={fetching || !customUrl.trim()}
+            >
               {fetching ? t("walkthrough.fetching") : t("walkthrough.fetch")}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setShowInput(false)}>
@@ -571,6 +732,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               <Button
                 size="icon"
                 variant={showSwitchSearch ? "secondary" : "ghost"}
+                disabled={editing || savingEdits}
                 onClick={() => setShowSwitchSearch((prev) => !prev)}
                 title={t("walkthrough.switchGuide")}
                 aria-label={t("walkthrough.switchGuide")}
@@ -581,7 +743,7 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                 size="icon"
                 variant="ghost"
                 onClick={() => void handleFetch(data.sourceUrl)}
-                disabled={fetching}
+                disabled={fetching || editing || savingEdits}
                 title={t("walkthrough.reload")}
                 aria-label={t("walkthrough.reload")}
               >
@@ -592,17 +754,36 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
         }
       />
 
-      <p style={{ color: "var(--color-text-dim)", margin: "0 0 var(--space-3) 0", fontSize: "var(--font-size-xs)", lineHeight: 1.5 }}>
+      <p
+        style={{
+          color: "var(--color-text-dim)",
+          margin: "0 0 var(--space-3) 0",
+          fontSize: "var(--font-size-xs)",
+          lineHeight: 1.5,
+        }}
+      >
         {t("walkthrough.intro")}
       </p>
 
       {loading ? (
-        <div style={{ padding: "var(--space-4)", textAlign: "center", color: "var(--color-text-dim)" }}>
+        <div
+          style={{
+            padding: "var(--space-4)",
+            textAlign: "center",
+            color: "var(--color-text-dim)",
+          }}
+        >
           {t("walkthrough.fetching")}
         </div>
       ) : !data ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-          <p style={{ color: "var(--color-text-dim)", margin: 0, fontSize: "var(--font-size-sm)" }}>
+          <p
+            style={{
+              color: "var(--color-text-dim)",
+              margin: 0,
+              fontSize: "var(--font-size-sm)",
+            }}
+          >
             {t("walkthrough.empty")}
           </p>
 
@@ -651,6 +832,8 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               <button
                 type="button"
                 onClick={() => setLangMode("original")}
+                disabled={editing}
+                aria-pressed={langMode === "original"}
                 style={{
                   minHeight: "var(--touch-target)",
                   padding: "var(--space-1) var(--space-3)",
@@ -659,8 +842,12 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                   fontSize: "var(--font-size-xs)",
                   cursor: "pointer",
                   fontWeight: langMode === "original" ? 600 : 400,
-                  background: langMode === "original" ? "var(--color-surface)" : "transparent",
-                  color: langMode === "original" ? "var(--color-text)" : "var(--color-text-dim)",
+                  background:
+                    langMode === "original" ? "var(--color-surface)" : "transparent",
+                  color:
+                    langMode === "original"
+                      ? "var(--color-text)"
+                      : "var(--color-text-dim)",
                 }}
               >
                 {t("walkthrough.langOriginal")}
@@ -675,7 +862,8 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                     void handleTranslate("ai");
                   }
                 }}
-                disabled={translating}
+                disabled={translating || editing}
+                aria-pressed={langMode === "ai"}
                 style={{
                   minHeight: "var(--touch-target)",
                   padding: "var(--space-1) var(--space-3)",
@@ -685,7 +873,8 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                   cursor: translating ? "not-allowed" : "pointer",
                   fontWeight: langMode === "ai" ? 600 : 400,
                   background: langMode === "ai" ? "var(--color-surface)" : "transparent",
-                  color: langMode === "ai" ? "var(--color-accent)" : "var(--color-text-dim)",
+                  color:
+                    langMode === "ai" ? "var(--color-accent)" : "var(--color-text-dim)",
                 }}
               >
                 {t("walkthrough.langAi")}
@@ -700,7 +889,8 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                     void handleTranslate("google");
                   }
                 }}
-                disabled={translating}
+                disabled={translating || editing}
+                aria-pressed={langMode === "google"}
                 style={{
                   minHeight: "var(--touch-target)",
                   padding: "var(--space-1) var(--space-3)",
@@ -709,15 +899,47 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
                   fontSize: "var(--font-size-xs)",
                   cursor: translating ? "not-allowed" : "pointer",
                   fontWeight: langMode === "google" ? 600 : 400,
-                  background: langMode === "google" ? "var(--color-surface)" : "transparent",
-                  color: langMode === "google" ? "var(--color-text)" : "var(--color-text-dim)",
+                  background:
+                    langMode === "google" ? "var(--color-surface)" : "transparent",
+                  color:
+                    langMode === "google" ? "var(--color-text)" : "var(--color-text-dim)",
                 }}
               >
                 {t("walkthrough.langGoogle")}
               </button>
+              {data.translations[`manual_${targetLang}`] ? (
+                <Button
+                  variant={langMode === "manual" ? "primary" : "ghost"}
+                  disabled={editing}
+                  onClick={() => setLangMode("manual")}
+                  aria-pressed={langMode === "manual"}
+                >
+                  {t("walkthrough.langManual")}
+                </Button>
+              ) : null}
             </div>
 
-            <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+            <div className="walkthrough__translation-actions">
+              {langMode === "ai" || langMode === "google" ? (
+                <Button
+                  variant="secondary"
+                  disabled={translating || fetching || editing}
+                  onClick={() => void handleTranslate(langMode)}
+                >
+                  {langMode === "google"
+                    ? t("walkthrough.refreshGoogle")
+                    : t("walkthrough.refreshAi")}
+                </Button>
+              ) : null}
+              <Button
+                disabled={translating || fetching || editing}
+                onClick={() => {
+                  setEditError(null);
+                  setEditing(true);
+                }}
+              >
+                {t("walkthrough.editTranslation")}
+              </Button>
               {glossaryCount > 0 ? (
                 <span
                   style={{
@@ -736,87 +958,124 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
               ) : null}
 
               {translating ? (
-                <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-accent)" }}>
+                <span
+                  role="status"
+                  style={{
+                    fontSize: "var(--font-size-xs)",
+                    color: "var(--color-accent)",
+                  }}
+                >
                   {t("walkthrough.translating")}
                 </span>
               ) : null}
             </div>
           </div>
 
-          {currentRoutes.length > 1 ? (
-            <div
-              style={{
-                display: "flex",
-                gap: "var(--space-1)",
-                overflowX: "auto",
-                paddingBottom: "var(--space-1)",
-              }}
-            >
-              <Button
-                variant={selectedRouteId === "all" ? "primary" : "ghost"}
-                onClick={() => setSelectedRouteId("all")}
-              >
-                {t("walkthrough.allRoutes")}
-              </Button>
-              {currentRoutes.map((r) => (
-                <Button
-                  key={r.id}
-                  variant={selectedRouteId === r.id ? "primary" : "ghost"}
-                  onClick={() => setSelectedRouteId(r.id)}
-                >
-                  {r.title}
-                </Button>
-              ))}
-            </div>
-          ) : null}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-            {displayedRoutes.map((route) => (
-              <div
-                key={route.id}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "var(--space-2)",
-                  background: "var(--color-surface-raised)",
-                  padding: "var(--space-3)",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
+          {editing ? (
+            <WalkthroughTranslationEditor
+              original={data.routes}
+              initial={currentRoutes}
+              saving={savingEdits}
+              error={editError}
+              onSave={(texts) => void handleSaveEdits(texts)}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <>
+              {currentRoutes.length > 1 ? (
                 <div
                   style={{
                     display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: "var(--space-2)",
-                    borderBottom: "1px solid var(--color-border)",
-                    paddingBottom: "var(--space-2)",
+                    gap: "var(--space-1)",
+                    overflowX: "auto",
+                    paddingBottom: "var(--space-1)",
                   }}
                 >
-                  <span style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>
-                    {route.title}
-                  </span>
-                  <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-dim)" }}>
-                    {route.items.filter((i) => i.kind === "choice").length} {t("walkthrough.kind.choice")}
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
-                  {route.items.map((item) => (
-                    <WalkthroughItemRow
-                      key={item.id}
-                      item={item}
-                      isChecked={data.checkedItems.includes(item.id)}
-                      onToggle={() => void handleToggle(item.id)}
-                      t={t}
-                    />
+                  <Button
+                    variant={selectedRouteId === "all" ? "primary" : "ghost"}
+                    onClick={() => setSelectedRouteId("all")}
+                  >
+                    {t("walkthrough.allRoutes")}
+                  </Button>
+                  {currentRoutes.map((r) => (
+                    <Button
+                      key={r.id}
+                      variant={selectedRouteId === r.id ? "primary" : "ghost"}
+                      onClick={() => setSelectedRouteId(r.id)}
+                    >
+                      {r.title}
+                    </Button>
                   ))}
                 </div>
+              ) : null}
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--space-4)",
+                }}
+              >
+                {displayedRoutes.map((route) => (
+                  <div
+                    key={route.id}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "var(--space-2)",
+                      background: "var(--color-surface-raised)",
+                      padding: "var(--space-3)",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--color-border)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: "var(--space-2)",
+                        borderBottom: "1px solid var(--color-border)",
+                        paddingBottom: "var(--space-2)",
+                      }}
+                    >
+                      <span style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>
+                        {route.title}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "var(--font-size-xs)",
+                          color: "var(--color-text-dim)",
+                        }}
+                      >
+                        {route.items.filter((i) => i.kind === "choice").length}{" "}
+                        {t("walkthrough.kind.choice")}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "var(--space-1)",
+                      }}
+                    >
+                      {route.items.map((item) => (
+                        <WalkthroughItemRow
+                          key={item.id}
+                          item={item}
+                          isChecked={data.checkedItems.includes(item.id)}
+                          onToggle={() => void handleToggle(item.id)}
+                          t={t}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
 
           <div
             style={{
@@ -844,7 +1103,11 @@ export function WalkthroughCard({ gameId, vnId }: WalkthroughCardProps) {
             </a>
 
             {completedChoices > 0 ? (
-              <Button variant="ghost" onClick={() => void handleClearProgress()}>
+              <Button
+                variant="ghost"
+                disabled={editing}
+                onClick={() => void handleClearProgress()}
+              >
                 {t("walkthrough.resetProgress")}
               </Button>
             ) : null}
@@ -931,7 +1194,13 @@ function WalkthroughItemRow({
         >
           {t("walkthrough.kind.save")}
         </span>
-        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-text)" }}>
+        <span
+          style={{
+            fontSize: "var(--font-size-sm)",
+            fontWeight: 600,
+            color: "var(--color-text)",
+          }}
+        >
           {item.text}
         </span>
       </div>
@@ -963,7 +1232,13 @@ function WalkthroughItemRow({
         >
           {t("walkthrough.kind.ending")}
         </span>
-        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-text)" }}>
+        <span
+          style={{
+            fontSize: "var(--font-size-sm)",
+            fontWeight: 600,
+            color: "var(--color-text)",
+          }}
+        >
           {item.text}
         </span>
       </div>

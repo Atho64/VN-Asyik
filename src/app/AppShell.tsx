@@ -6,7 +6,7 @@ import { useI18n } from "@/app/useI18n";
 import { Backdrop, focusArt } from "@/components/Backdrop";
 import { updateAppearance } from "@/lib/theme";
 import { listenScreenshotShortcut } from "@/lib/ipc/screenshots";
-import { Icon, type IconName } from "@/components/Icon";
+import { Icon } from "@/components/Icon";
 import { Toasts } from "@/components/Toasts";
 import { ContextMenuProvider } from "@/app/ContextMenuProvider";
 import { NowPlayingBar } from "@/features/tracking/NowPlayingBar";
@@ -17,23 +17,7 @@ import { Button } from "@/components/Button";
 import { Sheet } from "@/components/Sheet";
 import { api } from "@/lib/ipc/client";
 import { companionWindowApi } from "@/lib/ipc/companionWindow";
-import appIcon from "@/assets/vn-asyik.svg";
-
-interface NavEntry {
-  to: string;
-  labelKey:
-    | "nav.library"
-    | "nav.stats"
-    | "nav.timeline"
-    | "nav.recommend"
-    | "vnchat.title"
-    | "companion.title"
-    | "nav.settings"
-    | "nav.presence"
-    | "nav.guide";
-  icon: IconName;
-  beta?: boolean;
-}
+import { DesktopRail, type NavEntry } from "@/app/DesktopRail";
 
 /**
  * Top-level navigation: Library, Stats, Timeline, Recommend, Chat, Presence,
@@ -63,19 +47,6 @@ export function AppShell() {
   const paletteOpen = useAppStore((state) => state.paletteOpen);
   const appearance = useAppStore((state) => state.appearance);
   const setPaletteOpen = useAppStore((state) => state.setPaletteOpen);
-  const sidebarCompact = useAppStore((state) => state.sidebarCompact);
-  const setSidebarCompact = useAppStore((state) => state.setSidebarCompact);
-  const setUiPrefs = useAppStore((state) => state.setUiPrefs);
-  const toggleSidebar = (): void => {
-    const next = !sidebarCompact;
-    setSidebarCompact(next);
-    if (typeof api.uiPrefsSet === "function") {
-      void api
-        .uiPrefsSet({ sidebar_compact: next })
-        .then((prefs) => setUiPrefs(prefs))
-        .catch(() => undefined);
-    }
-  };
   const [moreOpen, setMoreOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
@@ -212,83 +183,7 @@ export function AppShell() {
         <Backdrop />
       )}
 
-      <nav
-        className={sidebarCompact ? "rail rail--compact" : "rail"}
-        data-compact={sidebarCompact ? "true" : "false"}
-        aria-label={t("app.name")}
-      >
-        <div className="rail__brand">
-          <div className="rail__brand-id">
-            <img className="rail__mark" src={appIcon} alt="" />
-            <span
-              className={sidebarCompact ? "rail__name visually-hidden" : "rail__name"}
-            >
-              {t("app.name")}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="rail__toggle"
-            onClick={toggleSidebar}
-            aria-expanded={!sidebarCompact}
-            aria-label={
-              sidebarCompact ? t("nav.expandSidebar") : t("nav.collapseSidebar")
-            }
-            title={sidebarCompact ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
-          >
-            <Icon name="sidebar" size={16} />
-          </button>
-        </div>
-        <div className="rail__nav">
-          {visibleEntries.map((entry) => {
-            const label = t(entry.labelKey);
-            return (
-              <NavLink
-                key={entry.to}
-                to={entry.to}
-                end
-                title={sidebarCompact ? label : undefined}
-                className={({ isActive }) =>
-                  `rail__item${
-                    isActive || (entry.to === "/settings" && settingsActive)
-                      ? " active"
-                      : ""
-                  }`
-                }
-              >
-                <span className="rail__icon">
-                  <Icon name={entry.icon} />
-                </span>
-                <span
-                  className={
-                    sidebarCompact ? "rail__label visually-hidden" : "rail__label"
-                  }
-                >
-                  {label}
-                </span>
-              </NavLink>
-            );
-          })}
-        </div>
-        <div className="rail__footer">
-          <Button
-            variant="ghost"
-            className={
-              sidebarCompact ? "rail__search rail__search--compact" : "rail__search"
-            }
-            onClick={() => setPaletteOpen(true)}
-            aria-keyshortcuts="Control+K Meta+K"
-            title={sidebarCompact ? t("library.search") : undefined}
-          >
-            <Icon name="search" />
-            <span
-              className={sidebarCompact ? "rail__label visually-hidden" : "rail__label"}
-            >
-              {t("library.search")}
-            </span>
-          </Button>
-        </div>
-      </nav>
+      <DesktopRail entries={visibleEntries} settingsActive={settingsActive} />
 
       <div className="app__content">
         <main ref={mainRef} className="app__main" id="main-content">

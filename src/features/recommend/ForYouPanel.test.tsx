@@ -74,7 +74,9 @@ beforeEach(() => {
 
 function renderPanel() {
   return render(
-    <AppContext.Provider value={{ t: createTranslator("en"), locale: "en", ready: true, bootError: null }}>
+    <AppContext.Provider
+      value={{ t: createTranslator("en"), locale: "en", ready: true, bootError: null }}
+    >
       <ForYouPanel />
     </AppContext.Provider>,
   );
@@ -82,7 +84,11 @@ function renderPanel() {
 
 describe("for you panel", () => {
   it("asks for more games while the library is too small", async () => {
-    vi.mocked(api.forYouProfile).mockResolvedValue({ ...readyProfile, considered: 1, ready: false });
+    vi.mocked(api.forYouProfile).mockResolvedValue({
+      ...readyProfile,
+      considered: 1,
+      ready: false,
+    });
     renderPanel();
     expect(await screen.findByText("Not enough to go on")).toBeInTheDocument();
     expect(api.forYouSearch).not.toHaveBeenCalled();
@@ -92,11 +98,19 @@ describe("for you panel", () => {
   it("shows the seeds and queries VNDB for the combined tab by default", async () => {
     renderPanel();
     expect(await screen.findByText("For you")).toBeInTheDocument();
-    expect(screen.getByText("Based on the 23 VNs in your library, rated games counting most")).toBeInTheDocument();
+    expect(
+      screen.getByText("Based on the 23 VNs in your library, rated games counting most"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Cherry Blossom")).toBeInTheDocument();
     // One query, for the default source, with no filters attached.
-    expect(api.forYouSearch).toHaveBeenCalledTimes(1);
-    expect(api.forYouSearch).toHaveBeenCalledWith({ source: "combined", page: 1, sort: "taste" });
+    await vi.waitFor(() => {
+      expect(api.forYouSearch).toHaveBeenCalledTimes(1);
+      expect(api.forYouSearch).toHaveBeenCalledWith({
+        source: "combined",
+        page: 1,
+        sort: "taste",
+      });
+    });
   });
 
   it("renders the result card with its explanations", async () => {
@@ -145,7 +159,9 @@ describe("for you panel", () => {
   it("opens the entry on VNDB through the external scheme", async () => {
     renderPanel();
     const card = await screen.findByRole("listitem");
-    await userEvent.click(within(card).getByRole("button", { name: "Open Ever17 on VNDB" }));
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Open Ever17 on VNDB" }),
+    );
     expect(api.openExternal).toHaveBeenCalledWith("https://vndb.org/v17");
   });
 
@@ -153,7 +169,9 @@ describe("for you panel", () => {
     vi.mocked(api.forYouSearch).mockResolvedValue(searchPage([], { note: "source" }));
     renderPanel();
     expect(
-      await screen.findByText("No seeds for this tab yet. Refreshing your games' VNDB details fills it in."),
+      await screen.findByText(
+        "No seeds for this tab yet. Refreshing your games' VNDB details fills it in.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("list")).toBeNull();
   });

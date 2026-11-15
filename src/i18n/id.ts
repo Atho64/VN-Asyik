@@ -207,6 +207,18 @@ export const id: Messages = {
   "tracking.pickGame": "Game",
   "tracking.pickChoose": "Pilih game",
   "tracking.pickExe": "Pilih file exe",
+  "tracking.chooseWindow": "Pilih jendela",
+  "tracking.windowHint":
+    "Buka game, lalu pilih jendelanya untuk menautkan executable. Untuk emulator bersama, gunakan Emulator / runner.",
+  "tracking.openWindows": "Jendela game yang terbuka",
+  "tracking.selectWindow": "Pilih jendela game",
+  "tracking.loadingWindows": "Memuat jendela...",
+  "tracking.noWindows":
+    "Tidak ada jendela yang tersedia. Buka game lalu segarkan, atau pilih file executable-nya.",
+  "tracking.windowDenied": "Executable tidak tersedia",
+  "tracking.refreshWindows": "Segarkan jendela",
+  "tracking.linkWindow": "Tautkan jendela",
+  "tracking.linkingWindow": "Menautkan...",
   "tracking.picking": "Memilih",
   "tracking.pickTitle": "Pilih file exe game",
   "tracking.pickNeedsGame": "Pilih game dulu, lalu pilih file exe-nya.",
@@ -907,7 +919,9 @@ export const id: Messages = {
   "stats.heatmap": "Hari membaca, 12 bulan terakhir",
   "stats.heatmapLegend": "Sedikit",
   "stats.heatmapLegendMore": "Banyak",
-  "stats.heatmapLegendDot": "Titik = menyelesaikan VN di hari itu",
+  "stats.heatmapLegendStarted": "Mulai",
+  "stats.heatmapLegendFinished": "Selesai",
+  "stats.heatmapStarted": "mulai membaca VN",
   "stats.heatmapFinished": "menyelesaikan VN",
   "stats.streakCurrent": "Rentetan: {{days}}",
   "stats.streakLongest": "Terpanjang: {{days}}",
@@ -1119,7 +1133,7 @@ export const id: Messages = {
   "settings.presenceImageHostCatbox": "Catbox",
   "settings.presenceImageHostImgbb": "ImgBB",
   "settings.presenceImageHostHint":
-    'Opsional. Memungkinkan kartu menampilkan gambar yang tidak bisa diambil Discord sendiri: sampul eksplisit sebagai salinan yang diburamkan secara lokal, dan sampul kustom kamu. Tidak ada yang diunggah selama masih "Tidak ada".',
+    'Mengunggah sampul kustom, salinan sampul eksplisit yang diburamkan secara lokal, dan ikon executable bawaan agar bisa dimuat Discord. Tidak ada yang diunggah selama masih "Tidak ada".',
   "settings.presenceImageKey": "Kunci API ImgBB",
   "settings.presenceImageKeyPlaceholder": "Tempel kunci API imgbb kamu",
   "settings.presenceImageKeySave": "Simpan Kunci",
@@ -1177,6 +1191,33 @@ export const id: Messages = {
   "settings.presenceTokensHint":
     "Klik token untuk menyisipkannya di akhir kolom yang terakhir kamu fokuskan. Token tak dikenal dibiarkan apa adanya.",
   "settings.presenceShowListButton": "Tampilkan tombol Daftar VNDB saya",
+  "settings.presenceLargeImageOptions": "Gambar besar dan tooltip",
+  "settings.presenceLargeImage": "URL gambar besar atau kunci aset",
+  "settings.presenceLibraryCover": "Gunakan sampul koleksi",
+  "settings.presenceLargeText": "Tooltip gambar besar",
+  "settings.presenceSmallImageOptions": "Ikon lingkaran kecil dan tooltip",
+  "settings.presenceSmallImage": "URL ikon kecil atau kunci aset",
+  "settings.presenceSmallImageHint":
+    "Biarkan kosong untuk menyembunyikan ikon lingkaran kecil.",
+  "settings.presenceSmallText": "Tooltip ikon kecil",
+  "settings.presenceExeIcon": "Pakai ikon executable saat kosong",
+  "settings.presenceExeIconHint":
+    "Biarkan kosong untuk memakai ikon executable yang ditautkan di Windows. URL atau kunci aset kustom menggantikannya. Pilih Host Gambar agar ikon bawaan tampil di Discord; pratinjau tetap lokal.",
+  "settings.presenceImageAssetHint":
+    "Gunakan URL gambar HTTP(S) publik (maksimal 512 karakter), atau kunci aset dari aplikasi Discord milikmu. Gambar ini dikirim ke Discord saat presence aktif. Aturan privasi sampul koleksi tetap berlaku pada gambar otomatis.",
+  "settings.presenceImageTextHint":
+    "Mendukung token template. Teks Discord dibatasi 128 byte UTF-8 setelah token diisi.",
+  "settings.presenceRemoteImagePreview":
+    "Gambar kustom dan yang belum tersimpan ditampilkan sebagai placeholder di sini; Discord memuatnya saat presence aktif.",
+  "settings.presenceButtonMode": "Tombol presence",
+  "settings.presenceButtonModeDefault": "Tautan VNDB",
+  "settings.presenceButtonModeCustom": "Tombol kustom",
+  "settings.presenceShowCustomButtons": "Tampilkan tombol kustom",
+  "settings.presenceCustomButtonsHint":
+    "Discord menampilkan maksimal dua tombol. Kosongkan kedua kolom untuk menyembunyikan satu tombol. Label mendukung token dan dibatasi 32 karakter setelah diisi. URL harus HTTP(S), maksimal 512 karakter, atau {vndb_url} untuk game saat ini.",
+  "settings.presenceButtonNumber": "Tombol {{number}}",
+  "settings.presenceButtonLabel": "Label tombol",
+  "settings.presenceButtonUrl": "URL tombol",
   "settings.presenceMyVndbLink": "Profil VNDB kamu",
   "settings.presenceMyVndbLinkHint":
     "URL profil kamu, misalnya https://vndb.org/u123456. Ditampilkan sebagai tombol kedua.",
@@ -1809,7 +1850,19 @@ export const id: Messages = {
   "walkthrough.langOriginal": "Bahasa Jepang (asli)",
   "walkthrough.langAi": "Terjemahan model",
   "walkthrough.langGoogle": "Google Translate",
-  "walkthrough.glossaryActive": "{{count}} karakter dari kamus VNDB",
+  "walkthrough.glossaryActive": "{{count}} pemetaan nama VNDB",
+  "walkthrough.refreshGoogle": "Segarkan terjemahan Google",
+  "walkthrough.refreshAi": "Segarkan terjemahan model",
+  "walkthrough.langManual": "Terjemahan saya",
+  "walkthrough.editTranslation": "Edit terjemahan",
+  "walkthrough.editHint":
+    "Edit versi yang dipilih di samping teks Jepang. Menyimpan membuat terjemahan lokal milikmu; terjemahan Google dan model tetap tersedia. Semua rute disimpan bersama, dan pilihan yang dicentang tetap tersimpan.",
+  "walkthrough.routeTitle": "Judul rute terjemahan",
+  "walkthrough.editStep": "{{number}}. Terjemahan {{kind}}",
+  "walkthrough.saveEdits": "Simpan terjemahan saya",
+  "walkthrough.cancelEdits": "Batalkan edit",
+  "walkthrough.savingEdits": "Menyimpan terjemahan...",
+  "walkthrough.editsSaved": "Terjemahanmu tersimpan",
   "walkthrough.kind.choice": "Pilihan",
   "walkthrough.kind.save": "Simpan",
   "walkthrough.kind.date": "Tanggal",
@@ -1865,13 +1918,32 @@ export const id: Messages = {
   "screenshot.count_other": "{{count}} screenshot",
   "screenshot.capture": "Screenshot",
   "screenshot.shortcutHint": "Screenshot (Shift+S saat jendela game aktif)",
+  "screenshot.androidHint":
+    "Izinkan berbagi layar dan pilih game bila ditawarkan. Kembali ke game, tekan Tangkap di notifikasi, lalu tutup panelnya dalam 3 detik. Android 14+ menawarkan berbagi satu aplikasi; versi lama berbagi seluruh layar. Berbagi berhenti setelah satu tangkapan atau dua menit.",
+  "screenshot.androidWaiting":
+    "Izinkan berbagi layar, buka game, lalu gunakan Tangkap atau Batal di notifikasi VN Asyik.",
   "screenshot.captured": "Screenshot tersimpan",
   "screenshot.delete": "Hapus",
+  "screenshot.copy": "Salin gambar",
+  "screenshot.copyDesktop": "Salin gambar (khusus desktop)",
+  "screenshot.save": "Simpan gambar…",
+  "screenshot.copied": "Gambar disalin",
+  "screenshot.saved": "Gambar disimpan",
+  "screenshot.copyFailed": "Gagal menyalin gambar. Coba simpan gambarnya.",
+  "screenshot.saveFailed": "Gagal menyimpan gambar. Coba lagi.",
   "screenshot.open": "Buka screenshot dari {{date}}",
   "screenshot.alt": "Screenshot dari {{date}}",
   "screenshot.capturedAt": "Diambil {{date}}",
   "screenshot.source.windows_window": "jendela game",
   "screenshot.source.android_screen": "seluruh layar",
+  "screenshot.source.android_projection": "berbagi layar Android",
+  "screenshot.error.screenshot_cancelled": "Berbagi layar dibatalkan.",
+  "screenshot.error.screenshot_notifications":
+    "Izinkan notifikasi VN Asyik di Pengaturan Android agar tindakan Tangkap dan Batal tersedia.",
+  "screenshot.error.screenshot_busy":
+    "Selesaikan atau batalkan tangkapan layar saat ini dulu.",
+  "screenshot.error.screenshot_target_changed":
+    "Game yang dilacak berubah sebelum tangkapan disimpan. Mulai tangkapan baru untuk game ini.",
   "screenshot.reason.screenshot_no_game":
     "Jalankan game dari aplikasi dulu; screenshot harus dimiliki sebuah game.",
   "screenshot.reason.screenshot_unsupported":

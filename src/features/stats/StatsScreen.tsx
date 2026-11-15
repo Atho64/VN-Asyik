@@ -50,6 +50,7 @@ export function StatsScreen() {
   const [breakdown, setBreakdown] = useState<StatusBreakdown | null>(null);
   const [byDay, setByDay] = useState<DayCell[]>([]);
   const [finishedDays, setFinishedDays] = useState<Set<number>>(new Set());
+  const [startedDays, setStartedDays] = useState<Set<number>>(new Set());
   const [failed, setFailed] = useState(false);
   // Capture once using local calendar day indexes to match backend `playtime_by_day` buckets.
   const [todayIndex] = useState(() =>
@@ -58,12 +59,18 @@ export function StatsScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([api.statusBreakdown(), api.playtimeByDay(), api.finishedByDay()])
-      .then(([statusRows, days, finished]) => {
+    void Promise.all([
+      api.statusBreakdown(),
+      api.playtimeByDay(),
+      api.finishedByDay(),
+      api.startedByDay(),
+    ])
+      .then(([statusRows, days, finished, started]) => {
         if (cancelled) return;
         setBreakdown(statusRows);
         setByDay(days.map(([day, ms]) => ({ day, ms })));
         setFinishedDays(new Set(finished.map(([day]) => day)));
+        setStartedDays(new Set(started.map(([day]) => day)));
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -92,7 +99,8 @@ export function StatsScreen() {
   );
 
   const heatmap = useMemo(() => {
-    if (byDay.length === 0) return null;
+    if (byDay.length === 0 && finishedDays.size === 0 && startedDays.size === 0)
+      return null;
     const byIndex = new Map(byDay.map((entry) => [entry.day, entry.ms]));
     const today = todayIndex;
     const first = today - WEEKS * 7 + 1;
@@ -102,14 +110,12 @@ export function StatsScreen() {
     }
     const max = Math.max(1, ...cells.map((cell) => cell.ms));
     return { cells, max };
-  }, [byDay, todayIndex]);
+  }, [byDay, todayIndex, finishedDays, startedDays]);
 
   // Streaks run over the whole recorded history, not the 53-week window: a
   // long streak from last year is still the longest streak.
   const streak = useMemo(() => {
-    const dayTuples = byDay.map(
-      ({ day, ms }) => [day, ms] as [number, number],
-    );
+    const dayTuples = byDay.map(({ day, ms }) => [day, ms] as [number, number]);
     return {
       current: currentStreak(dayTuples, todayIndex),
       longest: longestStreak(dayTuples),
@@ -244,7 +250,10 @@ export function StatsScreen() {
                       <span className="stats__bar">
                         <span
                           className="stats__bar-fill"
-                          style={{ width: `${Math.round(ratio * 100)}%`, display: "block" }}
+                          style={{
+                            width: `${Math.round(ratio * 100)}%`,
+                            display: "block",
+                          }}
                         />
                       </span>
                       <span className="tnum caption">{count}</span>
@@ -288,20 +297,9 @@ export function StatsScreen() {
             <CardHeader
               title={t("stats.heatmap")}
               aside={
-                // One container, not a fragment: the header is space-between, so
-                // fragment children each claimed a flex slot and the legend floated
-                // to the middle of the card.
-                <span className="heatmap__aside">
-                  {/* The legend names the color scale, which the cells already show;
-                      the streaks are figures, so they stay readable by AT. */}
-                  <span className="caption" aria-hidden="true">
-                    {t("stats.heatmapLegend")} · {t("stats.heatmapLegendMore")} ·{" "}
-                    {t("stats.heatmapLegendDot")}
-                  </span>
-                  <span className="heatmap__streaks caption tnum">
-                    <span>{t("stats.streakCurrent", { days: streak.current })}</span>
-                    <span>{t("stats.streakLongest", { days: streak.longest })}</span>
-                  </span>
+                <span className="heatmap__streaks caption tnum">
+                  <span>{t("stats.streakCurrent", { days: streak.current })}</span>
+                  <span>{t("stats.streakLongest", { days: streak.longest })}</span>
                 </span>
               }
             />
@@ -309,6 +307,7 @@ export function StatsScreen() {
               <div className="heatmap" role="img" aria-label={t("stats.heatmap")}>
                 {heatmap.cells.map((cell) => {
                   const finished = finishedDays.has(cell.day);
+                  const started = startedDays.has(cell.day);
                   const day = new Date(cell.day * MS_PER_DAY).toLocaleDateString(
                     locale === "id" ? "id-ID" : "en-GB",
                     // A day index encodes a calendar date as-if-UTC; rendering
@@ -321,16 +320,45 @@ export function StatsScreen() {
                       className="heatmap__cell"
                       data-level={level(cell.ms, heatmap.max)}
                       data-finished={finished ? "true" : "false"}
+                      data-started={started ? "true" : "false"}
                       title={`${day}: ${formatDurationLong(cell.ms, locale)}${
-                        finished ? ` · ${t("stats.heatmapFinished")}` : ""
-                      }`}
-                    />
+                        started ? ` · ${t("stats.heatmapStarted")}` : ""
+                      }${finished ? ` · ${t("stats.heatmapFinished")}` : ""}`}
+                    >
+                      {started || finished ? (
+                        <span className="heatmap__marks" aria-hidden="true">
+                          {started ? <DayMarker kind="started" /> : null}
+                          {finished ? <DayMarker kind="finished" /> : null}
+                        </span>
+                      ) : null}
+                    </span>
                   );
                 })}
               </div>
             ) : (
               <p className="body">{t("stats.emptyBody")}</p>
             )}
+            {heatmap ? (
+              <div className="heatmap__footer caption">
+                <span className="heatmap__scale" aria-hidden="true">
+                  {t("stats.heatmapLegend")}
+                  <span className="heatmap__swatches">
+                    {[0, 1, 2, 3, 4].map((value) => (
+                      <span key={value} className="heatmap__swatch" data-level={value} />
+                    ))}
+                  </span>
+                  {t("stats.heatmapLegendMore")}
+                </span>
+                <span className="heatmap__legend">
+                  <span>
+                    <DayMarker kind="started" /> {t("stats.heatmapLegendStarted")}
+                  </span>
+                  <span>
+                    <DayMarker kind="finished" /> {t("stats.heatmapLegendFinished")}
+                  </span>
+                </span>
+              </div>
+            ) : null}
           </Card>
           <TimeStats />
         </>
@@ -365,5 +393,19 @@ export function StatsScreen() {
 
       {tab === "taste" ? <TastePanel /> : null}
     </div>
+  );
+}
+
+function DayMarker({ kind }: { kind: "started" | "finished" }) {
+  return (
+    <svg
+      className={`heatmap__marker heatmap__marker--${kind}`}
+      viewBox="0 0 6 6"
+      width="6"
+      height="6"
+      aria-hidden="true"
+    >
+      <circle cx="3" cy="3" r="1.75" />
+    </svg>
   );
 }

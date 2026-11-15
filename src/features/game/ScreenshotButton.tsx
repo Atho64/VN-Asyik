@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
@@ -23,33 +23,56 @@ export function ScreenshotButton({
 }) {
   const { t } = useI18n();
   const pushToast = useAppStore((state) => state.pushToast);
-  const isWindows = useAppStore((state) => state.platform?.os === "windows");
-  const [status, setStatus] = useState<CaptureStatus | null>(null);
+  const os = useAppStore((state) => state.platform?.os);
+  const [availability, setAvailability] = useState<{
+    scope: string | undefined;
+    status: CaptureStatus;
+  } | null>(null);
+  const status =
+    availability && availability.scope === gameId ? availability.status : null;
   const [busy, setBusy] = useState(false);
+  const refreshAvailability = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     let active = true;
-    void api
-      .screenshotStatus()
-      .then((next) => {
-        if (active) setStatus(next);
-      })
-      .catch(() => undefined);
+    let revision = 0;
+    const refresh = (): void => {
+      if (document.visibilityState === "hidden") return;
+      const requested = ++revision;
+      void api
+        .screenshotStatus()
+        .then((next) => {
+          if (active && requested === revision) {
+            setAvailability({ scope: gameId, status: next });
+          }
+        })
+        .catch(() => undefined);
+    };
+    refreshAvailability.current = refresh;
+    refresh();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       active = false;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      refreshAvailability.current = () => undefined;
     };
-  }, []);
+  }, [gameId]);
 
   const capture = async (): Promise<void> => {
     setBusy(true);
     try {
-      await api.screenshotCapture();
+      await api.screenshotCapture(gameId);
       pushToast("success", t("screenshot.captured"));
       onCaptured?.();
     } catch (caught) {
-      pushToast("error", describe(caught, t));
+      if (!(caught instanceof IpcError && caught.code === "screenshot_cancelled")) {
+        pushToast("error", describe(caught, t));
+      }
     } finally {
       setBusy(false);
+      refreshAvailability.current();
     }
   };
 
@@ -59,20 +82,27 @@ export function ScreenshotButton({
   if (gameId && status?.gameId !== gameId) return null;
 
   return (
-    <Button
-      variant={variant}
-      onClick={() => void capture()}
-      disabled={busy || Boolean(status?.reason)}
-      title={
-        status?.reason
-          ? describeReason(status.reason, t)
-          : t(isWindows ? "screenshot.shortcutHint" : "screenshot.capture")
-      }
-      aria-label={t("screenshot.capture")}
-    >
-      <Icon name="camera" size={16} />
-      {t("screenshot.capture")}
-    </Button>
+    <div className="screenshot-capture">
+      <Button
+        variant={variant}
+        onClick={() => void capture()}
+        disabled={!status || busy || Boolean(status.reason)}
+        title={
+          status?.reason
+            ? describeReason(status.reason, t)
+            : t(os === "windows" ? "screenshot.shortcutHint" : "screenshot.capture")
+        }
+        aria-label={t("screenshot.capture")}
+      >
+        <Icon name="camera" size={16} />
+        {t("screenshot.capture")}
+      </Button>
+      {os === "android" && (
+        <p className="caption" role={busy ? "status" : undefined}>
+          {t(busy ? "screenshot.androidWaiting" : "screenshot.androidHint")}
+        </p>
+      )}
+    </div>
   );
 }
 

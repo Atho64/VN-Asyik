@@ -900,6 +900,7 @@ export const manualTimerViewSchema = z.object({
   activeMs: z.number(),
   afkMs: z.number(),
   running: z.boolean(),
+  phase: z.enum(["idle", "tracking", "unfocused", "paused"]),
 });
 export type ManualTimerView = z.infer<typeof manualTimerViewSchema>;
 
@@ -1174,7 +1175,8 @@ export const forYouCardSchema = z.object({
   themes: z.array(z.string()),
   creators: z.array(z.string()),
   voices: z.array(z.string()),
-});export type ForYouCard = z.infer<typeof forYouCardSchema>;
+});
+export type ForYouCard = z.infer<typeof forYouCardSchema>;
 
 /** Which seed category drives the query. */
 export const forYouSourceSchema = z.enum([
@@ -1186,13 +1188,7 @@ export const forYouSourceSchema = z.enum([
 ]);
 export type ForYouSource = z.infer<typeof forYouSourceSchema>;
 
-export const forYouSortSchema = z.enum([
-  "taste",
-  "rating",
-  "votes",
-  "released",
-  "title",
-]);
+export const forYouSortSchema = z.enum(["taste", "rating", "votes", "released", "title"]);
 export type ForYouSort = z.infer<typeof forYouSortSchema>;
 
 /** A For-you search request. All filters optional except the source. */
@@ -1386,6 +1382,13 @@ export const presenceSettingsSchema = z.object({
   vndb_loading_details: z.string(),
   vndb_loading_state: z.string(),
   rpc_image_host: rpcImageHostSchema,
+  large_image: z.string().optional(),
+  large_text: z.string().optional(),
+  small_image: z.string().optional(),
+  small_text: z.string().optional(),
+  use_exe_icon: z.boolean().optional(),
+  use_custom_buttons: z.boolean().optional(),
+  custom_buttons: z.object({ label: z.string(), url: z.string() }).array().optional(),
 });
 export type PresenceSettings = z.infer<typeof presenceSettingsSchema>;
 
@@ -1420,8 +1423,22 @@ export const presenceActivitySchema = z.object({
 });
 export type PresenceActivity = z.infer<typeof presenceActivitySchema>;
 
-export const itemKindSchema = z.enum(["choice", "save", "date", "action", "ending", "note"]);
+export const itemKindSchema = z.enum([
+  "choice",
+  "save",
+  "date",
+  "action",
+  "ending",
+  "note",
+]);
 export type ItemKind = z.infer<typeof itemKindSchema>;
+
+export const executableWindowSchema = z.object({
+  key: z.string(),
+  title: z.string(),
+  exePath: z.string().nullable(),
+});
+export type ExecutableWindow = z.infer<typeof executableWindowSchema>;
 
 export const walkthroughItemSchema = z.object({
   id: z.string(),

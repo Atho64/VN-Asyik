@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppContext } from "@/app/AppProvider";
 import { createTranslator } from "@/i18n";
+import type * as IpcClient from "@/lib/ipc/client";
 import type {
   ChapterCapabilityView,
   ChapterView,
@@ -34,7 +35,8 @@ const mocks = vi.hoisted(() => ({
   deleteEnding: vi.fn(),
 }));
 
-vi.mock("@/lib/ipc/client", () => ({
+vi.mock("@/lib/ipc/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof IpcClient>()),
   IpcError: class extends Error {},
   api: mocks,
 }));
@@ -112,6 +114,7 @@ const idleTimer: ManualTimerView = {
   activeMs: 0,
   afkMs: 0,
   running: false,
+  phase: "idle",
 };
 
 function renderCard() {
@@ -130,6 +133,116 @@ beforeEach(() => {
 });
 
 describe("Routes card", () => {
+  it("keeps polling while the route is unfocused and labels the reason", async () => {
+    vi.useFakeTimers();
+    try {
+      const unfocused = {
+        ...idleTimer,
+        active: true,
+        running: true,
+        phase: "unfocused",
+        routeId: "r1",
+        chapterName: "Shiroha",
+        elapsedMs: 4_000,
+      };
+      mocks.gameRoutes.mockResolvedValue([route()]);
+      mocks.trackingManualStatus.mockResolvedValue(unfocused);
+      renderCard();
+      await act(async () => undefined);
+      expect(screen.getByText("Window not focused")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+      mocks.trackingManualStatus.mockResolvedValue({
+        ...unfocused,
+        phase: "tracking",
+        elapsedMs: 5_000,
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(screen.getByText("Timing Shiroha")).toBeTruthy();
+      expect(screen.getAllByText("5s").length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not overlap slow timer reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const running = {
+        ...idleTimer,
+        active: true,
+        running: true,
+        phase: "tracking",
+        routeId: "r1",
+        chapterName: "Shiroha",
+        elapsedMs: 5_000,
+      };
+      let resolveRead!: (value: typeof running) => void;
+      mocks.gameRoutes.mockResolvedValue([route()]);
+      mocks.trackingManualStatus
+        .mockResolvedValueOnce(running)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveRead = resolve;
+            }),
+        )
+        .mockResolvedValue({ ...running, elapsedMs: 8_000 });
+      renderCard();
+      await act(async () => undefined);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expect(mocks.trackingManualStatus).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        resolveRead({ ...running, elapsedMs: 7_000 });
+      });
+      expect(screen.getAllByText("7s").length).toBeGreaterThan(0);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(screen.getAllByText("8s").length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores a timer read that finishes after Pause", async () => {
+    const running = {
+      ...idleTimer,
+      active: true,
+      running: true,
+      phase: "tracking",
+      routeId: "r1",
+      chapterName: "Shiroha",
+      elapsedMs: 5_000,
+    };
+    const paused = { ...running, running: false, phase: "paused", elapsedMs: 6_000 };
+    let resolveRead!: (value: typeof running) => void;
+    mocks.gameRoutes.mockResolvedValue([route()]);
+    mocks.trackingManualStatus
+      .mockResolvedValueOnce(running)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRead = resolve;
+          }),
+      )
+      .mockImplementation(() => new Promise(() => undefined));
+    mocks.trackingManualPause.mockResolvedValue(paused);
+    renderCard();
+    await waitFor(() => expect(mocks.trackingManualStatus).toHaveBeenCalledTimes(2));
+    await userEvent.click(await screen.findByRole("button", { name: "Pause" }));
+    expect(await screen.findByRole("button", { name: "Resume" })).toBeTruthy();
+    await act(async () => {
+      resolveRead({ ...running, elapsedMs: 7_000 });
+    });
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(screen.queryByText("Timing Shiroha")).toBeNull();
+    expect(screen.getAllByText("6s").length).toBeGreaterThan(0);
+  });
+
   it("puts a route's chapters and endings under one heading", async () => {
     // The whole point of the merge: one story, one section. Before this a chapter
     // list and an ending list were separate columns grouped two different ways.
@@ -151,7 +264,9 @@ describe("Routes card", () => {
   it("adds a chapter from inside a route and links it to that route", async () => {
     // A route with no chapter has nothing to time, so the card looked like a dead
     // end: a disabled Start button and no way to give the route any content.
-    mocks.gameRoutes.mockResolvedValue([route({ id: "r1", chapters: [], chaptersTotal: 0 })]);
+    mocks.gameRoutes.mockResolvedValue([
+      route({ id: "r1", chapters: [], chaptersTotal: 0 }),
+    ]);
     mocks.trackingCreateChapter.mockResolvedValue("c_new");
 
     renderCard();
@@ -302,7 +417,9 @@ describe("Routes card", () => {
   it("times a route with no chapter named", async () => {
     // "Record an hour on the Shiroha route" used to require inventing a chapter to
     // blame it on, which polluted the chapter list with rows that only held time.
-    mocks.gameRoutes.mockResolvedValue([route({ id: "r1", chapters: [], chaptersTotal: 0 })]);
+    mocks.gameRoutes.mockResolvedValue([
+      route({ id: "r1", chapters: [], chaptersTotal: 0 }),
+    ]);
     mocks.trackingManualStartRoute.mockResolvedValue({
       active: true,
       chapterId: null,
@@ -339,7 +456,9 @@ describe("Routes card", () => {
     expect(await screen.findByText("Timing Shiroha")).toBeTruthy();
     // Two stops on purpose: one on the route header, one in the timer strip, so the
     // control is where the user is looking whichever they reach for.
-    expect(screen.getAllByRole("button", { name: "Stop and save" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: "Stop and save" }).length,
+    ).toBeGreaterThan(0);
     // And the route must not offer Start while it is the thing being timed.
     expect(screen.queryByText("Time this route")).toBeNull();
   });

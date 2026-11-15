@@ -12,7 +12,10 @@ import { z } from "zod";
 import {
   walkthroughViewSchema,
   walkthroughIndexEntrySchema,
+  executableWindowSchema,
+  type ExecutableWindow,
   type WalkthroughView,
+  type WalkthroughRoute,
   type WalkthroughIndexEntry,
   uiPrefsSchema,
   windowLaunchViewSchema,
@@ -258,7 +261,10 @@ export interface Api {
   listChapters(gameId: string): Promise<Chapter[]>;
   listSessions(gameId: string): Promise<PlaySession[]>;
   /** A bounded session page plus exact totals over all sessions. */
-  listGameSessions(gameId: string, before?: { startedAt: number; id: string }): Promise<GameSessionsPage>;
+  listGameSessions(
+    gameId: string,
+    before?: { startedAt: number; id: string },
+  ): Promise<GameSessionsPage>;
   /** A bounded page of cross-game Timeline events, newest first. */
   timelinePage(before?: { ts: number; id: string }): Promise<TimelinePage>;
   /** Yearly aggregates for the review card on the Stats page. */
@@ -282,7 +288,10 @@ export interface Api {
    * Distinct from the library export, which carries sync rows so another device
    * can restore them. This is the same journal as prose a person can keep.
    */
-  journalExport(gameId: string, format: "markdown" | "html"): Promise<JournalExportOutcome>;
+  journalExport(
+    gameId: string,
+    format: "markdown" | "html",
+  ): Promise<JournalExportOutcome>;
   listEndings(gameId: string): Promise<Ending[]>;
   gameRoutes(gameId: string): Promise<RouteView[]>;
   createRoute(gameId: string, name: string): Promise<string>;
@@ -299,6 +308,7 @@ export interface Api {
   playtimeByDay(): Promise<Array<[number, number]>>;
   /** Local-day buckets of finished games, for the heatmap's finished marks. */
   finishedByDay(): Promise<Array<[number, number]>>;
+  startedByDay(): Promise<Array<[number, number]>>;
   getPrefs(): Promise<Prefs>;
   setTheme(value: string): Promise<Prefs>;
   setLanguage(value: string): Promise<Prefs>;
@@ -363,6 +373,8 @@ export interface Api {
   trackingSetEnabled(enabled: boolean): Promise<TrackerCapability>;
   trackingSetMode(mode: string): Promise<TrackerCapability>;
   trackingMapExecutable(gameId: string, exePath: string): Promise<GameExecutable>;
+  trackingExecutableWindows(): Promise<ExecutableWindow[]>;
+  trackingMapWindow(gameId: string, windowKey: string): Promise<GameExecutable>;
   trackingMapRunnerTarget(input: MapRunnerTargetInput): Promise<GameExecutable>;
   trackingListExecutables(): Promise<GameExecutable[]>;
   trackingRemoveExecutable(id: string): Promise<void>;
@@ -384,11 +396,13 @@ export interface Api {
     gameTint: boolean;
   }): Promise<AppearanceView>;
   screenshotStatus(): Promise<CaptureStatus>;
-  screenshotCapture(): Promise<ScreenshotCard>;
+  screenshotCapture(gameId?: string): Promise<ScreenshotCard>;
   screenshotList(gameId: string): Promise<ScreenshotCard[]>;
   screenshotListAll(): Promise<ScreenshotFeedCard[]>;
   screenshotImage(id: string): Promise<string>;
   screenshotDelete(id: string): Promise<void>;
+  screenshotCopy(dataUrl: string): Promise<void>;
+  screenshotSave(dataUrl: string, filename: string): Promise<boolean>;
   themeExportFile(theme: ThemeView): Promise<boolean>;
   themeImportFile(): Promise<ThemeView | null>;
   updateCheck(force: boolean): Promise<UpdateView>;
@@ -483,9 +497,16 @@ export interface Api {
   /** Open a URL in the OS default browser. Validated on the Rust side. */
   openExternal(url: string): Promise<void>;
   walkthroughGet(gameId: string, vnId?: string | null): Promise<WalkthroughView | null>;
-  walkthroughSearchCandidate(gameId: string, vnId?: string | null): Promise<WalkthroughIndexEntry[]>;
+  walkthroughSearchCandidate(
+    gameId: string,
+    vnId?: string | null,
+  ): Promise<WalkthroughIndexEntry[]>;
   walkthroughSearch(query: string): Promise<WalkthroughIndexEntry[]>;
-  walkthroughFetch(gameId: string, vnId?: string | null, url?: string | null): Promise<WalkthroughView>;
+  walkthroughFetch(
+    gameId: string,
+    vnId?: string | null,
+    url?: string | null,
+  ): Promise<WalkthroughView>;
   walkthroughTranslate(
     gameId: string,
     provider: "ai" | "google",
@@ -493,6 +514,14 @@ export interface Api {
     vnId?: string | null,
   ): Promise<WalkthroughView>;
   walkthroughToggleItem(gameId: string, itemId: string): Promise<string[]>;
+  walkthroughSaveManual(
+    gameId: string,
+    targetLang: "en" | "id",
+    sourceUrl: string,
+    sourceRoutes: WalkthroughRoute[],
+    texts: string[],
+    vnId?: string | null,
+  ): Promise<WalkthroughView>;
   walkthroughClearProgress(gameId: string): Promise<void>;
   hideWindow(): Promise<void>;
   minimizeWindow(): Promise<void>;
@@ -514,10 +543,7 @@ export interface Api {
 const voidSchema = z.unknown().transform(() => undefined as void);
 
 /** Runs `run` immediately and reschedules after `intervalMs` once settled so slow calls never overlap. */
-export function startPolling(
-  run: () => Promise<void>,
-  intervalMs: number,
-): () => void {
+export function startPolling(run: () => Promise<void>, intervalMs: number): () => void {
   let stopped = false;
   let timer = 0;
   const tick = async (): Promise<void> => {
@@ -563,7 +589,10 @@ export const api: Api = {
   listChapters: (gameId) => call("list_chapters", chapterSchema.array(), { gameId }),
   listSessions: (gameId) => call("list_sessions", playSessionSchema.array(), { gameId }),
   listGameSessions: (gameId, before) =>
-    call("list_game_sessions", gameSessionsPageSchema, { gameId, before: before ?? null }),
+    call("list_game_sessions", gameSessionsPageSchema, {
+      gameId,
+      before: before ?? null,
+    }),
   timelinePage: (before) =>
     call("timeline_page", timelinePageSchema, { before: before ?? null }),
   yearReview: (year) => call("year_review", yearReviewSchema, { year }),
@@ -619,6 +648,7 @@ export const api: Api = {
   /** Local-day buckets of finished games, for the heatmap's finished marks. */
   finishedByDay: () =>
     call("finished_by_day", z.array(z.tuple([z.number(), z.number()]))),
+  startedByDay: () => call("started_by_day", z.array(z.tuple([z.number(), z.number()]))),
   getPrefs: () => call("get_prefs", prefsSchema),
   setTheme: (value) => call("set_theme", prefsSchema, { value }),
   setLanguage: (value) => call("set_language", prefsSchema, { value }),
@@ -673,14 +703,17 @@ export const api: Api = {
     shared("tracking_status", () => call("tracking_status", trackingStatusSchema)),
   trackingSetEnabled: (enabled) =>
     call("tracking_set_enabled", trackerCapabilitySchema, { enabled }),
-  trackingSetMode: (mode) =>
-    call("tracking_set_mode", trackerCapabilitySchema, { mode }),
+  trackingSetMode: (mode) => call("tracking_set_mode", trackerCapabilitySchema, { mode }),
   trackingMapExecutable: (gameId, exePath) =>
     call("tracking_map_executable", gameExecutableSchema, {
       input: { game_id: gameId, exe_path: exePath },
     }),
   trackingMapRunnerTarget: (input) =>
     call("tracking_map_runner_target", gameExecutableSchema, { input }),
+  trackingExecutableWindows: () =>
+    call("tracking_executable_windows", executableWindowSchema.array()),
+  trackingMapWindow: (gameId, windowKey) =>
+    call("tracking_map_window", gameExecutableSchema, { gameId, windowKey }),
   trackingListExecutables: () =>
     call("tracking_list_executables", gameExecutableSchema.array()),
   trackingRemoveExecutable: (id) =>
@@ -705,19 +738,22 @@ export const api: Api = {
   appearanceGet: () => call("appearance_get", appearanceViewSchema),
   appearanceSet: (input) => call("appearance_set", appearanceViewSchema, { input }),
   screenshotStatus: () => call("screenshot_status", captureStatusSchema),
-  screenshotCapture: () => call("screenshot_capture", screenshotCardSchema),
+  screenshotCapture: (gameId) =>
+    call("screenshot_capture", screenshotCardSchema, { gameId: gameId ?? null }),
   screenshotList: (gameId) =>
     call("screenshot_list", z.array(screenshotCardSchema), { gameId }),
   screenshotListAll: () => call("screenshot_list_all", z.array(screenshotFeedCardSchema)),
   screenshotImage: (id) => call("screenshot_image", z.string(), { id }),
   screenshotDelete: (id) => call("screenshot_delete", voidSchema, { id }),
+  screenshotCopy: (dataUrl) => call("screenshot_copy", voidSchema, { dataUrl }),
+  screenshotSave: (dataUrl, filename) =>
+    call("screenshot_save", z.boolean(), { dataUrl, filename }),
   themeExportFile: (theme) => call("theme_export_file", z.boolean(), { theme }),
   themeImportFile: () => call("theme_import_file", themeSchema.nullable()),
   updateCheck: (force) => call("update_check", updateViewSchema, { force }),
   updateInstall: () => call("update_install", z.string()),
   aiLlmProfiles: () => call("ai_llm_profiles", llmProfilesSchema),
-  aiLlmSaveProfile: (input) =>
-    call("ai_llm_save_profile", llmProfilesSchema, { input }),
+  aiLlmSaveProfile: (input) => call("ai_llm_save_profile", llmProfilesSchema, { input }),
   aiLlmActivateProfile: (id) =>
     call("ai_llm_activate_profile", llmProfilesSchema, { id }),
   aiLlmDeleteProfile: (id) => call("ai_llm_delete_profile", llmProfilesSchema, { id }),
@@ -795,15 +831,26 @@ export const api: Api = {
   presenceTokenPreview: () => call("presence_token_preview", z.string().nullable()),
   presenceImageKeySave: (key) => call("presence_image_key_save", voidSchema, { key }),
   presenceImageKeyClear: () => call("presence_image_key_clear", voidSchema),
-  presenceImageKeyPreview: () => call("presence_image_key_preview", z.string().nullable()),
+  presenceImageKeyPreview: () =>
+    call("presence_image_key_preview", z.string().nullable()),
   walkthroughGet: (gameId: string, vnId?: string | null) =>
-    call("walkthrough_get", walkthroughViewSchema.nullable(), { gameId, vnId: vnId ?? null }),
+    call("walkthrough_get", walkthroughViewSchema.nullable(), {
+      gameId,
+      vnId: vnId ?? null,
+    }),
   walkthroughSearchCandidate: (gameId: string, vnId?: string | null) =>
-    call("walkthrough_search_candidate", walkthroughIndexEntrySchema.array(), { gameId, vnId: vnId ?? null }),
+    call("walkthrough_search_candidate", walkthroughIndexEntrySchema.array(), {
+      gameId,
+      vnId: vnId ?? null,
+    }),
   walkthroughSearch: (query: string) =>
     call("walkthrough_search", walkthroughIndexEntrySchema.array(), { query }),
   walkthroughFetch: (gameId: string, vnId?: string | null, url?: string | null) =>
-    call("walkthrough_fetch", walkthroughViewSchema, { gameId, vnId: vnId ?? null, url: url ?? null }),
+    call("walkthrough_fetch", walkthroughViewSchema, {
+      gameId,
+      vnId: vnId ?? null,
+      url: url ?? null,
+    }),
   walkthroughTranslate: (
     gameId: string,
     provider: "ai" | "google",
@@ -818,6 +865,15 @@ export const api: Api = {
     }),
   walkthroughToggleItem: (gameId: string, itemId: string) =>
     call("walkthrough_toggle_item", z.string().array(), { gameId, itemId }),
+  walkthroughSaveManual: (gameId, targetLang, sourceUrl, sourceRoutes, texts, vnId) =>
+    call("walkthrough_save_manual", walkthroughViewSchema, {
+      gameId,
+      targetLang,
+      sourceUrl,
+      sourceRoutes,
+      texts,
+      vnId: vnId ?? null,
+    }),
   walkthroughClearProgress: (gameId: string) =>
     call("walkthrough_clear_progress", voidSchema, { gameId }),
   openExternal: (url) => call("open_external", voidSchema, { url }),
@@ -831,7 +887,8 @@ export const api: Api = {
   uiPrefsGet: () => call("ui_prefs_get", uiPrefsSchema),
   uiPrefsSet: (patch) => call("ui_prefs_set", uiPrefsSchema, { patch }),
   windowLaunchGet: () => call("window_launch_get", windowLaunchViewSchema),
-  windowLaunchSet: (input) => call("window_launch_set", windowLaunchViewSchema, { input }),
+  windowLaunchSet: (input) =>
+    call("window_launch_set", windowLaunchViewSchema, { input }),
   windowLaunchCapture: () => call("window_launch_capture", windowLaunchViewSchema),
   startupPrefsGet: () => call("startup_prefs_get", startupPrefsViewSchema),
   startupPrefsSet: (patch) =>

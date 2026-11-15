@@ -48,10 +48,7 @@ export function ScreenshotLightbox({
       onClose();
       onDeleted?.();
     } catch (caught) {
-      pushToast(
-        "error",
-        caught instanceof IpcError ? caught.message : t("common.error"),
-      );
+      pushToast("error", caught instanceof IpcError ? caught.message : t("common.error"));
     } finally {
       setBusy(false);
     }
@@ -77,6 +74,8 @@ export function ScreenshotLightbox({
           <img
             className="lightbox__img"
             src={image}
+            data-screenshot-filename={`screenshot-${shot?.id}.png`}
+            tabIndex={0}
             alt={t("screenshot.alt", {
               date: shot ? new Date(shot.capturedAt).toLocaleDateString(locale) : "",
             })}

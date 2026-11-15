@@ -59,9 +59,7 @@ export function ScreenshotsPanel() {
 
   return (
     <>
-      <p className="caption">
-        {t("screenshot.libraryCount", { count: shots.length })}
-      </p>
+      <p className="caption">{t("screenshot.libraryCount", { count: shots.length })}</p>
 
       {[...groups.entries()].map(([gameId, group]) => (
         <Card key={gameId}>
@@ -121,5 +119,13 @@ function Thumbnail({ id }: { id: string }) {
   }, [id]);
 
   if (!src) return <span className="shots__placeholder" aria-hidden="true" />;
-  return <img className="shots__img" src={src} alt="" loading="lazy" />;
+  return (
+    <img
+      className="shots__img"
+      src={src}
+      alt=""
+      loading="lazy"
+      data-screenshot-filename={`screenshot-${id}.png`}
+    />
+  );
 }
