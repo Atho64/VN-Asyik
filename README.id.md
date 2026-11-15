@@ -25,6 +25,11 @@ Buka **Panduan** di dalam aplikasi untuk bantuan pengaturan.
 - Jalankan game dan catat waktu baca, dengan waktu istirahat dihitung terpisah.
 - Simpan catatan sesi, pengingat save slot, rute, dan ending agar ingat terakhir sampai mana.
 - Ikuti panduan Seiya-Saiga dengan pilihan rute dan opsi terjemahan.
+  Nama karakter dari data VNDB yang tersimpan diganti sebelum diterjemahkan oleh Google.
+  Pilih terjemahan Google atau model, lalu gunakan tombol segarkan untuk menerjemahkan
+  ulang dari panduan Jepang sambil mempertahankan tanda centang pilihan.
+- Di Windows, **Pilih jendela** saat menambahkan executable menautkan program dari
+  jendela game yang terbuka. Pemilih file juga tetap tersedia.
 - Lihat lini masa, aktivitas harian, dan streak baca. Bagikan rekap tahunan atau seluruh
   riwayat bacamu.
 - Ambil screenshot game di Windows atau Android, lalu lihat hasilnya per game.
@@ -39,6 +44,24 @@ bisa berlanjut. Gunakan `Ctrl+K` untuk perintah cepat, `Ctrl+Shift+B` untuk Big 
 `Shift+S` untuk screenshot saat jendela game aktif di Windows. Game tetap menerima
 kombinasi tombol tersebut.
 
+**Edit terjemahan** menampilkan judul rute dan langkah di samping sumber Jepang,
+lalu menyimpan **Terjemahan saya** secara lokal tanpa mengganti versi Google atau model.
+Nama alternatif game dilipat agar halaman game lebih ringkas. Sidebar desktop bisa
+diciutkan tanpa memuat ulang layar yang sedang dibuka.
+
+Pengaturan Discord mendukung gambar besar dan kecil, tooltip gambar, serta hingga
+dua tombol kustom dengan label dan URL HTTP(S). Aset kustom dari URL memakai penanda
+di pratinjau lokal; Discord yang memuat gambar aslinya.
+Di Windows, ikon kecil yang kosong memakai ikon executable yang ditautkan secara bawaan.
+Pilih Host Gambar agar tampil di Discord, atau matikan **Pakai ikon executable saat kosong**
+untuk menyembunyikannya. Ikon yang diekstrak tetap lokal selama Host Gambar masih Tidak ada.
+
+Klik kanan screenshot untuk **Salin gambar** di desktop atau **Simpan gambar** sebagai PNG.
+Menu juga bisa dibuka dengan `Shift+F10` saat screenshot mendapat fokus keyboard. Hasil
+ekspor tetap buram jika gambar yang ditampilkan buram; buka screenshot terlebih dahulu
+untuk gambar ukuran penuh. Kalender aktivitas menandai sesi baca pertama yang tercatat
+dengan titik kosong dan penyelesaian VN dengan titik penuh.
+
 ## Cara pelacakan bekerja
 
 Di desktop, waktu baca dihitung saat jendela game aktif, di luar jeda panjang tanpa
@@ -46,10 +69,19 @@ aktivitas. Deteksi bab otomatis bekerja jika game menulis progres di judul jende
 seperti beberapa game Siglus. Buka **Pengaturan > Pelacakan** untuk memilih deteksi Siglus
 atau menguji pola khusus. Jika bab tidak terdeteksi, waktu baca game tetap tercatat.
 
+Dalam mode pelacakan sesuai fokus, timer rute dan bab berhenti sementara dengan status
+**Jendela tidak aktif** saat berpindah jendela, lalu berlanjut saat kembali. Status
+**Dijeda** berarti tombol Jeda ditekan.
+
 Android membutuhkan izin **Usage Access** untuk melacak game langsung maupun emulator;
 bab dan rute diisi manual. Pelacakan Linux bekerja lewat X11 dan XWayland, tetapi belum bisa
-melacak jendela Wayland native. Screenshot Android membutuhkan izin pencerminan layar dan
-menangkap seluruh layar; Windows menangkap jendela game.
+melacak jendela Wayland native. Windows menangkap jendela game. Di Android, mulai
+screenshot dari halaman game yang dipilih, izinkan berbagi layar, kembali ke game,
+lalu tekan **Tangkap (3 detik)** di notifikasi dan tutup panelnya dalam tiga detik.
+Android 14+ menawarkan berbagi satu aplikasi; versi lama berbagi seluruh layar.
+Berbagi berhenti setelah satu gambar, Batal, pencabutan izin oleh OS, atau dua menit.
+Notifikasi harus aktif dan konten terlindungi bisa tampil kosong. Jalur Android ini
+sudah diimplementasikan dan diuji kompilasinya; tangkapan di perangkat belum diverifikasi.
 
 Catatan save slot hanya pengingat. VN Asyik tidak memuat save, mengubah berkas game, atau
 membaca memori game.

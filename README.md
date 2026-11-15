@@ -36,6 +36,29 @@ continue. Use `Ctrl+K` for quick commands, `Ctrl+Shift+B` for Big Picture, and
 `Shift+S` for screenshots while the game is focused on Windows. The game still receives
 this key combination.
 
+On Windows, **Choose a window** in the executable form links the program behind an
+open game window. The file chooser remains available. Walkthroughs replace character
+names using the cached VNDB cast before Google translation. Select Google or model
+translation, then use its **Refresh translation** button to regenerate from the
+Japanese guide while keeping your checked choices.
+
+**Edit translation** lets you correct route titles and steps beside the Japanese
+source, then save **My translation** locally without replacing Google or model
+versions. Alternate game titles fold under **Also known as** to keep game details
+compact. The desktop sidebar can collapse while the current screen stays mounted.
+
+Discord settings support large and small image assets, image tooltips, and up to
+two custom buttons with labels and HTTP(S) URLs. Remote custom assets use a labelled
+placeholder in the local preview; Discord resolves the actual image.
+On Windows, a blank small-image field defaults to the linked executable's icon.
+Choose an Image Host to publish it to Discord, or disable **Use executable icon when blank**
+to hide it. Extracted icons stay local while Image Host is None.
+
+Right-click a screenshot to **Copy image** on desktop or **Save image** as a PNG.
+The menu also opens with `Shift+F10` when a screenshot has keyboard focus. Exports
+keep the displayed blur; open a screenshot first for its full-size image. The activity
+calendar marks the first counted reading session with a hollow dot and completion with a filled dot.
+
 ## Tracking notes
 
 Desktop playtime counts while the game is focused, excluding long idle breaks. Automatic
@@ -43,10 +66,18 @@ chapter detection works when a game puts progress in its window title, as some S
 do. **Settings > Tracking** lets you choose Siglus detection or test a custom pattern.
 Without a chapter match, the app still records time for the game.
 
+In focus-aware mode, route and chapter timers freeze with **Window not focused** when you
+switch windows, then continue when you return. **Paused** means you pressed Pause.
+
 Android needs **Usage Access** permission to track native games or emulators; chapters and
 routes are manual. Linux tracking works with X11 and XWayland, but cannot track native
-Wayland windows. Android screenshots need screen-casting permission and capture the whole
-display; Windows captures the game window.
+Wayland windows. Windows screenshots capture the game window. On Android, start a
+screenshot from the selected game's page, approve screen sharing, return to the game,
+then tap **Capture (3s)** in the notification and close the drawer within three seconds.
+Android 14+ offers sharing one app; older versions share the whole display. Sharing
+stops after one image, Cancel, OS revocation, or two minutes. Notifications must be
+enabled, and protected content may appear blank. This Android path is implemented
+and compile-tested; live device capture remains unverified.
 
 Save-slot notes are reminders. VN Asyik does not load saves, modify game files or read game
 memory.

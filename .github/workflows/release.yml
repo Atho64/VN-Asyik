@@ -39,24 +39,26 @@ jobs:
           RELEASE_NOTES: |
             ## What's new
 
-            - Reading-status badges are easier to read over covers. The Script
-              card keeps import controls visible and puts extra help in
-              **Format and settings**.
-            - Fixed **Ctrl+K** for quick commands, including from text fields,
-              and fixed **Add a game** closing with the command palette.
-            - **Shift+S** takes a screenshot while the tracked game is focused
-              on Windows. The game still receives the key combination.
-            - Library filtering retains matching covers and shares image-colour
-              extraction, with a bounded cache and proper bitmap cleanup.
-            - VN Chat has clearer script-summary status, improved Markdown,
-              safer source links and spoiler-aware library search. Provider
-              streaming, retry, cancellation and error handling were corrected.
-            - Fixed companion overlay navigation, memory-edit handling and
-              selected-window vision state. These features remain in Beta.
-            - Refined desktop startup choices, taste recommendations, character
-              details, keyboard access and narrow layouts.
-            - Shortened the English and Indonesian READMEs into a practical
-              download and feature guide.
+            - On Windows, **Choose a window** links the executable behind an open
+              game window. The existing file picker remains available.
+            - Discord Presence supports large and small image assets, tooltips,
+              and two custom buttons. A blank small icon defaults to the linked
+              EXE icon on Windows. Enable an **Image Host** to display it on
+              Discord; its in-app preview stays local. Custom icons override it.
+            - Walkthroughs can refresh Google/model translations from the Japanese
+              source while preserving checked choices. Google name preparation
+              uses the cached VNDB cast. **Edit translation** saves a separate
+              local **My translation** without replacing machine translations.
+            - Fixed overlapping expanded game aliases. Desktop sidebar toggles
+              preserve the mounted screen and serialize preference saves.
+            - Right-click or press **Shift+F10** on a screenshot to **Copy image**
+              on desktop or **Save image** as PNG. Exports preserve displayed blur.
+            - The activity calendar shows reading starts with hollow dots and
+              finishes with filled dots, retaining both on a shared day.
+            - Focus-aware route/chapter timers freeze while the game is unfocused
+              and resume on return; **Paused** means an explicit pause.
+            - Android screenshot sharing now uses one-shot consent and a
+              **Capture (3s)** notification action, ending after one image.
 
             ## Downloads
 
@@ -68,18 +70,20 @@ jobs:
 
             ## Notes
 
-            - New script imports accept VNTP JSON arrays with `name` and
-              `message` fields. Previously imported documents remain stored.
             - Linux is Beta. Tracking supports X11 and XWayland; native Wayland
               windows cannot be tracked.
-            - Android screenshots require the system screen-casting permission, and
-              capture the whole screen rather than one window.
+            - Android screenshot capture requires screen-sharing consent and
+              enabled notifications. Android 14+ can share one app; older Android
+              versions share the whole display. Protected content may be blank.
+              Live device capture remains unverified.
+            - Native clipboard/picker behavior, live Discord image rendering and
+              manual desktop/mobile visual checks remain unverified.
             - Companion remains experimental and further development is paused.
-            - The implementation passed 704 frontend tests, lint, typecheck,
-              frontend build, Rust Clippy/workspace tests and the Android
-              ARM64 compile check. Final desktop UI checks covered light/Nord
-              themes and narrow layouts. Full suites were not repeated during
-              release preparation; no performance benchmark is claimed.
+            - Build, lint, TypeScript, Rust workspace tests, Clippy and Android
+              ARM64 compilation passed during implementation. Later changes were
+              checked with focused regressions. Release preparation reused those
+              results; full suites were not repeated and no performance benchmark
+              is claimed.
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release already exists"
