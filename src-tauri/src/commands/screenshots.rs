@@ -61,11 +61,11 @@ const NO_GAME: &str = "screenshot_no_game";
 /// shape for every capture call.
 #[tauri::command]
 pub async fn screenshot_status(state: State<'_, AppState>) -> CommandResult<CaptureStatus> {
-    let game = state.tracker().companion_target().await;
+    let game = capture_target(&state).await?;
     let supported = cfg!(windows) || cfg!(target_os = "android");
     Ok(CaptureStatus {
         supported,
-        game_id: game.as_ref().map(|(game_id, _)| game_id.clone()),
+        game_id: game.as_ref().map(|target| target.game_id.clone()),
         reason: if !supported {
             Some(UNSUPPORTED.to_owned())
         } else if game.is_none() {
@@ -82,12 +82,25 @@ pub async fn screenshot_status(state: State<'_, AppState>) -> CommandResult<Capt
 /// `screenshot_no_game` when nothing is tracked, and the capture error code when
 /// the frame could not be taken (see `crate::screenshots::ScreenshotError`).
 #[tauri::command]
-pub async fn screenshot_capture(state: State<'_, AppState>) -> CommandResult<ScreenshotCard> {
-    let Some((game_id, pid)) = state.tracker().companion_target().await else {
+pub async fn screenshot_capture(
+    state: State<'_, AppState>,
+    game_id: Option<String>,
+) -> CommandResult<ScreenshotCard> {
+    let Some(target) = capture_target(&state).await? else {
         return Err(CommandError::new(NO_GAME, "no game is being tracked"));
     };
+    verify_target(game_id.as_deref(), &target)?;
 
-    let frame = capture_frame(pid).await?;
+    let frame = capture_frame(target.pid).await?;
+    // A consent dialog/notification can outlive the selection it was opened for.
+    // Never file its image under a new game or a replacement reading session.
+    if capture_target(&state).await?.as_ref() != Some(&target) {
+        return Err(CommandError::new(
+            "screenshot_target_changed",
+            "The tracked game changed",
+        ));
+    }
+    let game_id = target.game_id;
     let jpeg = screenshots::encode_jpeg(&frame).map_err(|err| capture_error(&err))?;
     let id = vn_core::ids::EntityId::new().to_string();
     let store = ScreenshotStore::new(state.data_dir());
@@ -106,10 +119,58 @@ pub async fn screenshot_capture(state: State<'_, AppState>) -> CommandResult<Scr
         source: frame.source.to_owned(),
         caption: String::new(),
     };
-    screenshots::insert(state.db().pool(), &row)
-        .await
-        .map_err(|err| CommandError::new("db", err.to_string()))?;
+    if let Err(err) = screenshots::insert(state.db().pool(), &row).await {
+        store.remove(&row.relative_path).await;
+        return Err(CommandError::new("db", err.to_string()));
+    }
     Ok(row.into())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct CaptureTarget {
+    game_id: String,
+    pid: u32,
+    selection_started_at: Option<i64>,
+}
+
+async fn capture_target(state: &AppState) -> CommandResult<Option<CaptureTarget>> {
+    #[cfg(target_os = "android")]
+    {
+        let selected = crate::tracking::android::status(state.db().pool())
+            .await
+            .map_err(|err| CommandError::new("db", err.to_string()))?;
+        Ok(if selected.active && selected.game_title.is_some() {
+            selected.game_id.map(|game_id| CaptureTarget {
+                game_id,
+                pid: 0,
+                selection_started_at: selected.started_at_ms,
+            })
+        } else {
+            None
+        })
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(state
+            .tracker()
+            .companion_target()
+            .await
+            .map(|(game_id, pid)| CaptureTarget {
+                game_id,
+                pid,
+                selection_started_at: None,
+            }))
+    }
+}
+
+fn verify_target(expected: Option<&str>, target: &CaptureTarget) -> CommandResult<()> {
+    if expected.is_some_and(|game_id| game_id != target.game_id) {
+        return Err(CommandError::new(
+            "screenshot_target_changed",
+            "The tracked game changed",
+        ));
+    }
+    Ok(())
 }
 
 /// Every capture for one game, newest first.
@@ -193,6 +254,46 @@ pub async fn screenshot_image(state: State<'_, AppState>, id: String) -> Command
     Ok(data_url(&bytes))
 }
 
+/// Save the image currently painted by a screenshot surface through the native picker.
+#[tauri::command]
+pub async fn screenshot_save(
+    app: tauri::AppHandle,
+    data_url: String,
+    filename: String,
+) -> CommandResult<bool> {
+    let bytes = tauri::async_runtime::spawn_blocking(move || screenshots::export::png(&data_url))
+        .await
+        .map_err(|err| CommandError::new("image", err.to_string()))??;
+    crate::platform::storage::save_image(app, screenshots::export::filename(&filename), bytes).await
+}
+
+/// Copy the painted screenshot to the desktop clipboard, without granting webview clipboard access.
+#[tauri::command]
+pub async fn screenshot_copy(app: tauri::AppHandle, data_url: String) -> CommandResult<()> {
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_clipboard_manager::ClipboardExt as _;
+        tauri::async_runtime::spawn_blocking(move || {
+            let pixels = screenshots::export::decode(&data_url)?.into_rgba8();
+            let (width, height) = pixels.dimensions();
+            let image = tauri::image::Image::new_owned(pixels.into_raw(), width, height);
+            app.clipboard()
+                .write_image(&image)
+                .map_err(|err| CommandError::new("clipboard", err.to_string()))
+        })
+        .await
+        .map_err(|err| CommandError::new("clipboard", err.to_string()))?
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, data_url);
+        Err(CommandError::new(
+            "unsupported_platform",
+            "Image clipboard copy is available on desktop",
+        ))
+    }
+}
+
 /// Delete one capture.
 ///
 /// The row is tombstoned before the file is removed: a missing file is harmless,
@@ -240,7 +341,26 @@ async fn capture_frame(pid: u32) -> CommandResult<screenshots::Captured> {
         .map_err(|err| CommandError::new("screenshot_failed", err.to_string()))?
         .map_err(|err| capture_error(&err))
     }
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(target_os = "android")]
+    {
+        let _ = pid;
+        let reply = crate::screenshots::android::capture().await?;
+        let data_url = reply.data_url.ok_or_else(|| {
+            CommandError::new("screenshot_failed", "Android capture returned no image")
+        })?;
+        tauri::async_runtime::spawn_blocking(move || {
+            let image = screenshots::export::decode(&data_url)?;
+            Ok(screenshots::Captured {
+                width: image.width(),
+                height: image.height(),
+                rgba: image.into_rgba8().into_raw(),
+                source: "android_projection",
+            })
+        })
+        .await
+        .map_err(|_| CommandError::new("screenshot_failed", "Android capture decoding failed"))?
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "android")))]
     {
         let _ = pid;
         Err(CommandError::new(
@@ -277,6 +397,21 @@ fn now_ms() -> CommandResult<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_game_scoped_capture_refuses_another_game() {
+        let target = CaptureTarget {
+            game_id: "current".to_owned(),
+            pid: 42,
+            selection_started_at: None,
+        };
+        assert!(verify_target(Some("current"), &target).is_ok());
+        assert!(verify_target(None, &target).is_ok());
+        assert_eq!(
+            verify_target(Some("previous"), &target).unwrap_err().code,
+            "screenshot_target_changed"
+        );
+    }
 
     #[test]
     fn a_capture_path_cannot_escape_its_directory() {

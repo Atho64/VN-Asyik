@@ -9,8 +9,8 @@ use super::{CommandError, CommandResult};
 use crate::state::AppState;
 use crate::walkthrough::{
     USER_AGENT, WalkthroughView, build_seiya_client, clear_checked_items, fetch_master_index,
-    fetch_seiya_html, get_walkthrough_view, save_translation, save_walkthrough,
-    toggle_checked_item, translate_batch_ai, translate_batch_google,
+    fetch_seiya_html, get_walkthrough_view, save_manual_translation, save_translation,
+    save_walkthrough, toggle_checked_item, translate_batch_ai, translate_batch_google,
 };
 
 fn error(err: impl std::fmt::Display) -> CommandError {
@@ -207,6 +207,12 @@ pub async fn walkthrough_translate(
     provider: String,
     target_lang: String,
 ) -> CommandResult<WalkthroughView> {
+    if !matches!(provider.as_str(), "google" | "ai") || !matches!(target_lang.as_str(), "en" | "id")
+    {
+        return Err(error(
+            "Unsupported walkthrough translation provider or language",
+        ));
+    }
     let existing = get_walkthrough_view(state.db().pool(), &game_id, vn_id.as_deref())
         .await
         .map_err(error)?
@@ -279,7 +285,7 @@ pub async fn walkthrough_translate(
 
     save_translation(
         state.db().pool(),
-        &game_id,
+        &existing,
         &provider,
         &target_lang,
         &mapped_routes,
@@ -293,6 +299,33 @@ pub async fn walkthrough_translate(
         .ok_or_else(|| error("Failed to load translated walkthrough"))?;
 
     Ok(updated_view)
+}
+
+/// Save a text-only manual translation against the editor's original source.
+#[tauri::command]
+pub async fn walkthrough_save_manual(
+    state: State<'_, AppState>,
+    game_id: String,
+    vn_id: Option<String>,
+    target_lang: String,
+    source_url: String,
+    source_routes: Vec<WalkthroughRoute>,
+    texts: Vec<String>,
+) -> CommandResult<WalkthroughView> {
+    save_manual_translation(
+        state.db().pool(),
+        &game_id,
+        &target_lang,
+        &source_url,
+        &source_routes,
+        &texts,
+    )
+    .await
+    .map_err(error)?;
+    get_walkthrough_view(state.db().pool(), &game_id, vn_id.as_deref())
+        .await
+        .map_err(error)?
+        .ok_or_else(|| error("Failed to load edited walkthrough"))
 }
 
 /// Toggle checked status of an item in a walkthrough.

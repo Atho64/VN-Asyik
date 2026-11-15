@@ -778,3 +778,17 @@ pub async fn finished_by_day(pool: &SqlitePool) -> Result<Vec<(i64, i64)>, DbErr
         .map(|row| (row.get("day"), row.get("finished")))
         .collect())
 }
+
+/// Each live game's first counted session, bucketed by the same local date as playtime.
+pub async fn started_by_day(pool: &SqlitePool) -> Result<Vec<(i64, i64)>, DbError> {
+    Ok(sqlx::query_as(
+        "SELECT CAST(strftime('%s', first_at / 1000, 'unixepoch', 'localtime', \
+                'start of day') AS INTEGER) / 86400 AS day, COUNT(*) \
+         FROM (SELECT MIN(s.started_at) AS first_at \
+               FROM play_sessions s JOIN games g ON g.id = s.game_id AND g.deleted = 0 \
+               WHERE s.deleted = 0 AND s.counted_ms > 0 GROUP BY s.game_id) \
+         GROUP BY day ORDER BY day ASC",
+    )
+    .fetch_all(pool)
+    .await?)
+}

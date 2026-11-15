@@ -273,6 +273,12 @@ pub async fn finished_by_day(state: State<'_, AppState>) -> CommandResult<Vec<(i
     Ok(crate::db::queries::journey::finished_by_day(state.db().pool()).await?)
 }
 
+/// Local-day buckets of each game's first counted reading session.
+#[tauri::command]
+pub async fn started_by_day(state: State<'_, AppState>) -> CommandResult<Vec<(i64, i64)>> {
+    Ok(crate::db::queries::journey::started_by_day(state.db().pool()).await?)
+}
+
 /// Library-wide aggregates for the all-time wrapped card.
 ///
 /// # Errors

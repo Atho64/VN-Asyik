@@ -1,0 +1,7 @@
+<resources>
+    <string name="screenshot_channel">Tangkapan layar</string>
+    <string name="screenshot_title">Tangkapan layar VN Asyik</string>
+    <string name="screenshot_notification_hint">Kembali ke game, tekan Tangkap, lalu tutup panel ini dalam 3 detik. Berbagi berhenti setelah satu tangkapan atau dua menit.</string>
+    <string name="screenshot_capture">Tangkap (3 detik)</string>
+    <string name="screenshot_cancel">Batal</string>
+</resources>

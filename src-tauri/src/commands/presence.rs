@@ -29,6 +29,7 @@ pub async fn presence_save_settings(
 ) -> CommandResult<()> {
     settings.client_id = validate_client_id(&settings.client_id)?;
     settings.my_vndb_link = validate_profile_link(&settings.my_vndb_link)?;
+    validate_customization(&mut settings)?;
     let pool = state.db().pool();
     match game_id.as_deref() {
         None => {
@@ -94,6 +95,64 @@ fn validate_client_id(raw: &str) -> CommandResult<String> {
             "The Discord application ID must be 15 to 25 digits.",
         ))
     }
+}
+
+fn validate_customization(settings: &mut PresenceSettings) -> CommandResult<()> {
+    let invalid = |message| CommandError::new("invalid_presence_customization", message);
+    for asset in [&mut settings.large_image, &mut settings.small_image] {
+        *asset = asset.trim().to_owned();
+        if !asset.is_empty() && !vn_core::presence::valid_image_asset(asset) {
+            return Err(invalid(
+                "Images must be HTTP(S) URLs (up to 512 characters) or application asset keys.",
+            ));
+        }
+        if asset.contains("://") {
+            let parsed =
+                url::Url::parse(asset).map_err(|_| invalid("The image URL is invalid."))?;
+            if parsed.host_str().is_none() {
+                return Err(invalid("The image URL needs a host."));
+            }
+        }
+    }
+    if settings.large_text.len() > 2048 || settings.small_text.len() > 2048 {
+        return Err(invalid(
+            "Image tooltip templates must be at most 2048 UTF-8 bytes.",
+        ));
+    }
+    if settings.custom_buttons.len() > vn_core::presence::MAX_BUTTONS {
+        return Err(invalid("Discord supports at most two buttons."));
+    }
+    if settings.use_custom_buttons {
+        for button in &mut settings.custom_buttons {
+            button.label = button.label.trim().to_owned();
+            button.url = button.url.trim().to_owned();
+            if button.label.is_empty() && button.url.is_empty() {
+                continue;
+            }
+            if button.label.is_empty()
+                || button.label.chars().count() > 128
+                || button.label.chars().any(char::is_control)
+            {
+                return Err(invalid(
+                    "Each button needs a label template of 1 to 128 characters.",
+                ));
+            }
+            if button.url == "{vndb_url}" {
+                continue;
+            }
+            if !vn_core::presence::valid_button_url(&button.url) {
+                return Err(invalid(
+                    "Button URLs must be HTTP(S), up to 512 characters, or {vndb_url}.",
+                ));
+            }
+            let parsed =
+                url::Url::parse(&button.url).map_err(|_| invalid("The button URL is invalid."))?;
+            if parsed.host_str().is_none() {
+                return Err(invalid("The button URL needs a host."));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Validate and normalize an `https://vndb.org/...` profile link for the Discord button (blank hides the button).
@@ -260,6 +319,14 @@ async fn preview_card_activity(
         return Ok(activity);
     };
 
+    if let Some(icon) = presence::executable_icon::for_game(pool, entity_id, None, settings).await {
+        // Preview is local even with hosting off; only the live context uses a public URL.
+        activity.small_image = Some(icon.data_url());
+        let mut icon_context = ctx.clone();
+        icon_context.exe_name = icon.exe_name;
+        activity.small_text = vn_core::presence::small_icon_tooltip(settings, &icon_context);
+    }
+
     if ctx.rpc_image.is_some()
         && activity.large_image == ctx.rpc_image
         && let Some(data_url) = presence::preview_rpc_image_data_url(data_dir, &game).await
@@ -358,6 +425,7 @@ fn sample_preview_context() -> PresenceContext {
         cover_url: None,
         is_cover_explicit: false,
         rpc_image: None,
+        exe_icon: None,
         session_start_epoch: Some(1_700_000_000),
         vndb_linked: true,
         is_unfocused: false,
@@ -373,6 +441,43 @@ mod tests {
     #[test]
     fn a_blank_client_id_means_the_default() {
         assert_eq!(validate_client_id("   ").expect("blank is allowed"), "");
+    }
+
+    #[test]
+    fn customization_validates_assets_buttons_and_limits_before_saving() {
+        let mut settings = PresenceSettings {
+            small_image: " reading ".into(),
+            use_custom_buttons: true,
+            custom_buttons: vec![vn_core::presence::PresenceButton {
+                label: " VNDB ".into(),
+                url: "{vndb_url}".into(),
+            }],
+            ..Default::default()
+        };
+        validate_customization(&mut settings).expect("valid assets and token URL");
+        assert_eq!(settings.small_image, "reading");
+        assert_eq!(settings.custom_buttons[0].label, "VNDB");
+        for bad in [
+            "javascript:alert(1)",
+            "https://example.com/\nother",
+            "https:///",
+            "file:///image.png",
+        ] {
+            let mut invalid = settings.clone();
+            invalid.small_image = bad.into();
+            assert!(validate_customization(&mut invalid).is_err(), "{bad}");
+            invalid.small_image = "reading".into();
+            invalid.custom_buttons[0].url = bad.into();
+            assert!(validate_customization(&mut invalid).is_err(), "{bad}");
+        }
+        settings.custom_buttons = vec![
+            vn_core::presence::PresenceButton {
+                label: "Go".into(),
+                url: "https://example.com".into()
+            };
+            3
+        ];
+        assert!(validate_customization(&mut settings).is_err());
     }
 
     #[test]
@@ -455,6 +560,57 @@ mod tests {
         .await
         .expect("insert game");
         (db, root, id)
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn the_default_executable_icon_preview_stays_local_without_an_image_host() {
+        let db = crate::db::Db::open_memory().await.unwrap();
+        let game_id = "01a151db-7777-7000-8000-000000000099";
+        sqlx::query("INSERT INTO games (id, title, status, updated_at, device_id) VALUES (?, 'Local VN', 'playing', 1, 'dev')")
+            .bind(game_id).execute(db.pool()).await.unwrap();
+        let icon = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("icons/icon.ico");
+        crate::tracking::mapping::add_executable(
+            db.pool(),
+            &vn_core::DeviceId::parse("dev").unwrap(),
+            vn_core::clock::Timestamp::from_millis(1),
+            vn_core::EntityId::parse(game_id).unwrap(),
+            &icon.to_string_lossy(),
+        )
+        .await
+        .unwrap();
+        let settings = PresenceSettings {
+            show_cover: false,
+            ..Default::default()
+        };
+        let activity = preview_card_activity(
+            db.pool(),
+            std::path::Path::new("."),
+            Some(game_id),
+            &settings,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let image = activity.small_image.expect("local executable icon");
+        assert!(image.starts_with("data:image/png;base64,"));
+        assert_eq!(activity.small_text.as_deref(), Some("icon.ico"));
+        assert!(activity.large_image.is_none());
+        let disabled = preview_card_activity(
+            db.pool(),
+            std::path::Path::new("."),
+            Some(game_id),
+            &PresenceSettings {
+                use_exe_icon: false,
+                ..settings
+            },
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(disabled.small_image.is_none());
     }
 
     /// The bug this covers: the preview never asked for an image at all, so a game

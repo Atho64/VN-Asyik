@@ -1301,6 +1301,61 @@ async fn finished_by_day_buckets_the_timeline_finish_rule_locally() {
 }
 
 #[tokio::test]
+async fn started_by_day_counts_only_each_live_games_first_counted_session() {
+    let (db, device) = fixture().await;
+    let first_at = 1_700_049_600_000_i64;
+    let mut first_id = None;
+    for (index, title) in ["First", "Second", "Deleted", "Orphan"].iter().enumerate() {
+        let mut game = Game::new(&device, now(), *title, GameStatus::Playing).unwrap();
+        game.meta.deleted = index == 2;
+        upsert_game(db.pool(), &game).await.unwrap();
+        if index == 0 {
+            first_id = Some(game.meta.id.to_string());
+        }
+        for (suffix, at, counted, deleted) in [
+            ("zero", first_at - 172_800_000, 0_i64, 0_i64),
+            ("tombstone", first_at - 86_400_000, 100, 1),
+            ("first", first_at, 100, 0),
+            ("later", first_at + 86_400_000, 100, 0),
+        ] {
+            sqlx::query("INSERT INTO play_sessions (id, game_id, started_at, ended_at, counted_ms, source, updated_at, device_id, deleted) VALUES (?, ?, ?, ?, ?, 'manual', 1, 'test', ?)")
+                .bind(format!("{index}-{suffix}")).bind(game.meta.id.to_string())
+                .bind(at).bind(at + counted).bind(counted).bind(deleted)
+                .execute(db.pool()).await.unwrap();
+        }
+        if index == 3 {
+            let mut connection = db.pool().acquire().await.unwrap();
+            sqlx::query("PRAGMA foreign_keys = OFF")
+                .execute(&mut *connection)
+                .await
+                .unwrap();
+            sqlx::query("DELETE FROM games WHERE id = ?")
+                .bind(game.meta.id.to_string())
+                .execute(&mut *connection)
+                .await
+                .unwrap();
+            sqlx::query("PRAGMA foreign_keys = ON")
+                .execute(&mut *connection)
+                .await
+                .unwrap();
+        }
+    }
+    let buckets = journey::started_by_day(db.pool()).await.unwrap();
+    assert_eq!(
+        buckets.len(),
+        1,
+        "later sessions and tombstones do not create starts"
+    );
+    assert_eq!(
+        buckets[0].1, 2,
+        "deleted games and real orphans are excluded"
+    );
+    let expected_day: i64 = sqlx::query_scalar("SELECT CAST(strftime('%s', started_at / 1000, 'unixepoch', 'localtime', 'start of day') AS INTEGER) / 86400 FROM play_sessions WHERE game_id = ? AND id = '0-first'")
+        .bind(first_id.unwrap()).fetch_one(db.pool()).await.unwrap();
+    assert_eq!(buckets[0].0, expected_day);
+}
+
+#[tokio::test]
 async fn year_review_reads_routes_streaks_and_continued_games() {
     let (db, device) = fixture().await;
     let game = Game::new(&device, now(), "Long VN", GameStatus::Playing).unwrap();

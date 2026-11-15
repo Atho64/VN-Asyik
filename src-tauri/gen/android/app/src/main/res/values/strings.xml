@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">"VN Asyik"</string>
     <string name="main_activity_title">"VN Asyik"</string>
+    <string name="screenshot_channel">Screenshots</string>
+    <string name="screenshot_title">VN Asyik screenshot</string>
+    <string name="screenshot_notification_hint">Return to your game, tap Capture, then close this drawer within 3 seconds. Sharing stops after one screenshot or two minutes.</string>
+    <string name="screenshot_capture">Capture (3s)</string>
+    <string name="screenshot_cancel">Cancel</string>
 </resources>

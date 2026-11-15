@@ -1,3 +1,4 @@
+pub(crate) mod executable_icon;
 pub mod gateway;
 pub mod ipc;
 #[cfg(target_os = "linux")]
@@ -258,7 +259,10 @@ pub async fn ensure_rpc_image(
 ) -> Option<String> {
     use vn_core::presence::RpcImageHost;
 
-    if !settings.show_cover || settings.rpc_image_host == RpcImageHost::None {
+    if !settings.show_cover
+        || !settings.large_image.trim().is_empty()
+        || settings.rpc_image_host == RpcImageHost::None
+    {
         return None;
     }
     let (source, blurred) = rpc_image_source(data_dir, game)?;

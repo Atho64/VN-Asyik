@@ -49,13 +49,7 @@ pub async fn upload_to_host(
     let client = upload_client()?;
     match host {
         RpcImageHost::Catbox => {
-            let part = reqwest::multipart::Part::bytes(bytes)
-                .file_name(filename.to_owned())
-                .mime_str("image/jpeg")
-                .map_err(|err| UploadError::Request(err.to_string()))?;
-            let form = reqwest::multipart::Form::new()
-                .text("reqtype", "fileupload")
-                .part("fileToUpload", part);
+            let form = image_upload_form(bytes, filename)?;
             let response = client
                 .post("https://catbox.moe/user/api.php")
                 .multipart(form)
@@ -86,6 +80,21 @@ pub async fn upload_to_host(
         // host-less upload would silently publish nothing anyway.
         RpcImageHost::None => Err(UploadError::NoUrl("no image host is configured".into())),
     }
+}
+
+fn image_upload_form(
+    bytes: Vec<u8>,
+    filename: &str,
+) -> Result<reqwest::multipart::Form, UploadError> {
+    let mime = image::guess_format(&bytes)
+        .map_or("application/octet-stream", |format| format.to_mime_type());
+    let part = reqwest::multipart::Part::bytes(bytes)
+        .file_name(filename.to_owned())
+        .mime_str(mime)
+        .map_err(|err| UploadError::Request(err.to_string()))?;
+    Ok(reqwest::multipart::Form::new()
+        .text("reqtype", "fileupload")
+        .part("fileToUpload", part))
 }
 
 /// Turns a response into a URL, sharing the "empty body means refused" rule.
@@ -237,6 +246,50 @@ mod tests {
 
     fn key(tag: &str) -> String {
         format!("catbox:false:{tag}")
+    }
+
+    #[tokio::test]
+    async fn png_icons_have_the_correct_multipart_type_on_the_wire() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(2, 2, image::Rgba([80, 140, 200, 128]))
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        let png = png.into_inner();
+        let form = image_upload_form(png.clone(), "exe-icon.png").unwrap();
+        let ending = format!("--{}--\r\n", form.boundary()).into_bytes();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0; 4096];
+            loop {
+                let count = socket.read(&mut buffer).await.unwrap();
+                assert!(count > 0 && request.len() < 65_536);
+                request.extend_from_slice(&buffer[..count]);
+                if request.windows(ending.len()).any(|part| part == ending) {
+                    break;
+                }
+            }
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .await
+                .unwrap();
+            request
+        });
+        upload_client()
+            .unwrap()
+            .post(format!("http://{address}/"))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap();
+        let request = server.await.unwrap();
+        let text = String::from_utf8_lossy(&request).to_ascii_lowercase();
+        assert!(text.contains("content-type: image/png\r\n"));
+        assert!(text.contains("filename=\"exe-icon.png\""));
+        assert!(request.windows(png.len()).any(|part| part == png));
     }
 
     // The signature mirrors a real network uploader: callers receive a Future.

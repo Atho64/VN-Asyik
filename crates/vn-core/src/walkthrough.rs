@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod translation;
+
 /// Type of step in a walkthrough route.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

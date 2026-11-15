@@ -59,7 +59,7 @@ pub(crate) fn spawn(app: AppHandle) {
             };
             if press.observe(target.as_ref(), s_down, shift_only) {
                 // Awaiting bounds captures to one at a time, including protected-window failures.
-                let outcome = crate::commands::screenshots::screenshot_capture(state).await;
+                let outcome = crate::commands::screenshots::screenshot_capture(state, None).await;
                 let payload = match outcome {
                     Ok(card) => serde_json::json!({ "ok": true, "id": card.id }),
                     Err(error) => serde_json::json!({ "ok": false, "code": error.code }),

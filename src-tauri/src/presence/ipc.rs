@@ -53,6 +53,12 @@ pub(crate) fn activity_payload(activity: &PresenceActivity) -> serde_json::Value
     if let Some(ref text) = activity.large_text {
         assets.insert("large_text".to_owned(), text.clone().into());
     }
+    if let Some(ref image) = activity.small_image {
+        assets.insert("small_image".to_owned(), image.clone().into());
+    }
+    if let Some(ref text) = activity.small_text {
+        assets.insert("small_text".to_owned(), text.clone().into());
+    }
     if !assets.is_empty() {
         body.insert("assets".to_owned(), assets.into());
     }
@@ -155,6 +161,13 @@ impl IpcSink {
 /// Translate our activity into the crate's builder and send it.
 #[cfg(windows)]
 fn send_activity(client: &mut DiscordIpcClient, activity: &PresenceActivity) -> Result<(), String> {
+    client
+        .set_activity(discord_activity(activity))
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn discord_activity(activity: &PresenceActivity) -> Activity<'_> {
     let mut drp_activity = Activity::new();
     // Set first: this is the card's title. Without it Discord titles the card with
     // the Discord application name instead of the novel being read.
@@ -181,6 +194,14 @@ fn send_activity(client: &mut DiscordIpcClient, activity: &PresenceActivity) -> 
         assets = assets.large_text(large_txt.as_str());
         has_assets = true;
     }
+    if let Some(ref small_img) = activity.small_image {
+        assets = assets.small_image(small_img.as_str());
+        has_assets = true;
+    }
+    if let Some(ref small_txt) = activity.small_text {
+        assets = assets.small_text(small_txt.as_str());
+        has_assets = true;
+    }
     if has_assets {
         drp_activity = drp_activity.assets(assets);
     }
@@ -193,7 +214,7 @@ fn send_activity(client: &mut DiscordIpcClient, activity: &PresenceActivity) -> 
         drp_activity = drp_activity.buttons(buttons);
     }
 
-    client.set_activity(drp_activity).map_err(|e| e.to_string())
+    drp_activity
 }
 
 #[cfg(windows)]
@@ -353,5 +374,32 @@ mod protocol_tests {
         // Absent fields are omitted rather than sent as null, which Discord
         // renders as an empty line.
         assert!(payload.get("state").is_none());
+    }
+
+    #[test]
+    fn the_small_icon_and_tooltip_are_sent_with_large_art() {
+        let mut activity = activity();
+        activity.small_image = Some("reading".into());
+        activity.small_text = Some("Common route".into());
+        let payload = activity_payload(&activity);
+        assert_eq!(
+            payload["assets"]["large_image"],
+            "https://t.vndb.org/cv/01/1.jpg"
+        );
+        assert_eq!(payload["assets"]["small_image"], "reading");
+        assert_eq!(payload["assets"]["small_text"], "Common route");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_windows_builder_carries_both_assets_and_their_tooltips() {
+        let mut activity = activity();
+        activity.small_image = Some("reading".into());
+        activity.small_text = Some("Common route".into());
+        let payload =
+            serde_json::to_value(discord_activity(&activity)).expect("serialized builder");
+        assert_eq!(payload["assets"]["large_text"], "Saku Saku");
+        assert_eq!(payload["assets"]["small_image"], "reading");
+        assert_eq!(payload["assets"]["small_text"], "Common route");
     }
 }

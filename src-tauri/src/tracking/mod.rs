@@ -365,19 +365,33 @@ impl TrackingService {
     /// Current status for the UI.
     pub async fn status(&self, pool: &SqlitePool) -> TrackingStatus {
         let snapshot = self.snapshot.read().await.clone();
+        let manual = self
+            .manual_state()
+            .await
+            .filter(|run| snapshot.game_id == Some(run.game_id));
         // A failing probe must not make the status call itself fail: the UI still
         // needs to show the phase and any run in progress.
         let candidates = self.candidates(pool).await.unwrap_or_default();
         TrackingStatus {
             available: self.available,
             unavailable_reason: self.unavailable_reason.clone(),
-            phase: phase_name(snapshot.phase).to_owned(),
+            phase: phase_name(
+                manual
+                    .as_ref()
+                    .map_or(snapshot.phase, manual::ManualRun::phase),
+            )
+            .to_owned(),
             game_id: snapshot.game_id.map(|id| id.to_string()),
             exe_path: snapshot.exe_path.clone(),
             pid: snapshot.pid,
-            active_ms: snapshot.active_ms,
-            afk_ms: snapshot.afk_ms,
-            chapter_id: snapshot.chapter_id.map(|id| id.to_string()),
+            active_ms: manual
+                .as_ref()
+                .map_or(snapshot.active_ms, |run| run.active_ms),
+            afk_ms: manual.as_ref().map_or(snapshot.afk_ms, |run| run.afk_ms),
+            chapter_id: manual
+                .as_ref()
+                .map_or(snapshot.chapter_id, |run| run.chapter_id)
+                .map(|id| id.to_string()),
             candidates,
         }
     }
@@ -512,7 +526,7 @@ impl TrackingService {
 
         // The manual timer consumes the same samples as detection, so a hand-
         // timed chapter and a detected session split an idle stretch identically.
-        self.tick_manual(&tracker, now).await;
+        self.tick_manual(pool, &tracker, now).await;
         // A timer for a game that just closed ends with it. Leaving it running
         // would bill wall-clock minutes to a chapter nobody is reading, and the
         // user asked for a run that stops when the window does.
@@ -700,6 +714,24 @@ impl TrackingService {
     /// Manual timers own accrual during overlap; wall-clock (`Always`) ignores window focus.
     async fn focus_event(&self, tracker: &Tracker, target: &TrackTarget) -> Option<Event> {
         let mode = self.mode().await;
+        let manual_owns = {
+            let manual = self.manual.read().await;
+            manual
+                .as_ref()
+                .is_some_and(|run| run.game_id == target.game_id)
+        };
+        if manual_owns {
+            if tracker.phase() != Phase::Paused {
+                *self.manual_paused.write().await = true;
+                return Some(Event::HandoffToManual);
+            }
+            return None;
+        }
+        if *self.manual_paused.read().await {
+            *self.manual_paused.write().await = false;
+            return Some(Event::Resume);
+        }
+
         if mode == TrackingMode::Auto {
             let is_focused = self.probe.focused_pid().unwrap_or(None) == Some(target.pid);
             if !is_focused {
@@ -707,27 +739,7 @@ impl TrackingService {
             }
         }
 
-        let manual_owns = {
-            let manual = self.manual.read().await;
-            manual
-                .as_ref()
-                .is_some_and(|run| run.game_id == target.game_id)
-        };
-        let resume_from_manual = !manual_owns && *self.manual_paused.read().await;
-        if resume_from_manual {
-            *self.manual_paused.write().await = false;
-        }
-        if manual_owns && matches!(tracker.phase(), Phase::Tracking) {
-            *self.manual_paused.write().await = true;
-        }
-
         Some(match tracker.phase() {
-            // The timer writes this stretch, and the gap since the last poll belongs
-            // to it, so the detected segment is closed where it stands.
-            Phase::Tracking if manual_owns => Event::HandoffToManual,
-            // The timer that paused us has ended. A user-initiated pause is not this:
-            // its phase was already Paused before any timer existed.
-            Phase::Paused if resume_from_manual => Event::Resume,
             Phase::Tracking => Event::Tick {
                 idle_for_ms: if mode == TrackingMode::Always {
                     // Every second counts, so nothing is reported as idle.
@@ -742,8 +754,17 @@ impl TrackingService {
         })
     }
 
+    /// Sample immediately after Start/Resume so their replies use current focus.
+    pub async fn sample_manual(&self, pool: &SqlitePool, now: Timestamp) {
+        let tracker = self.tracker.lock().await;
+        self.tick_manual(pool, &tracker, now).await;
+    }
+
     /// Feed one sample into the manual timer, using the same rule as playtime.
-    async fn tick_manual(&self, tracker: &Tracker, now: Timestamp) {
+    async fn tick_manual(&self, pool: &SqlitePool, tracker: &Tracker, now: Timestamp) {
+        let Some(manual_game) = self.manual.read().await.as_ref().map(|run| run.game_id) else {
+            return;
+        };
         let mode = self.mode().await;
         let afk = tracker.afk_config();
         let target = tracker.target().cloned();
@@ -752,6 +773,18 @@ impl TrackingService {
             .probe
             .presence()
             .map_or(0, |presence| presence.idle_for_ms);
+        // Before automatic tracking has opened a run, a mapped game's process
+        // still gives the manual timer a window to watch.
+        let mapped_pid = if target.is_none() && mode == TrackingMode::Auto {
+            self.candidates(pool)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .find(|candidate| candidate.game_id == manual_game.to_string())
+                .map(|candidate| candidate.pid)
+        } else {
+            None
+        };
 
         let mut slot = self.manual.write().await;
         let Some(run) = slot.as_mut() else {
@@ -781,6 +814,8 @@ impl TrackingService {
                     threshold_ms: afk.threshold_ms,
                 }
             }
+        } else if mapped_pid.is_some() && mapped_pid != focused {
+            manual::ManualSample::Skip
         } else {
             // A game nothing can detect: there is no window to watch, so the OS
             // idle reading is the only honest sample.
@@ -896,8 +931,46 @@ impl TrackingService {
         now: Timestamp,
     ) -> Result<Vec<Segment>, TrackingError> {
         let mut tracker = self.tracker.lock().await;
+        let manual_game = self
+            .manual_state()
+            .await
+            .filter(|run| {
+                tracker
+                    .target()
+                    .is_some_and(|target| target.game_id == run.game_id)
+            })
+            .map(|run| run.game_id);
+        let manual_control = manual_game.is_some() && matches!(event, Event::Pause | Event::Resume);
+        if let Some(game_id) = manual_game {
+            match event {
+                Event::Pause => {
+                    let mut slot = self.manual.write().await;
+                    if let Some(run) = slot.as_mut().filter(|run| run.is_running()) {
+                        let _ = run.pause(now);
+                    }
+                }
+                Event::Resume => {
+                    {
+                        let mut slot = self.manual.write().await;
+                        if let Some(run) = slot.as_mut().filter(|run| !run.is_running()) {
+                            let _ = run.resume(now);
+                        }
+                    }
+                    self.tick_manual(pool, &tracker, now).await;
+                }
+                Event::Stop | Event::Shutdown | Event::ProcessExited => {
+                    self.finish_manual_for(pool, device, game_id, now, tracker.afk_config())
+                        .await?;
+                }
+                _ => {}
+            }
+        }
         let releases = matches!(event, Event::Stop | Event::Shutdown | Event::ProcessExited);
-        let segments = tracker.apply(event, now);
+        let segments = if manual_control {
+            Vec::new()
+        } else {
+            tracker.apply(event, now)
+        };
         for segment in &segments {
             mapping::promote_pending_session(pool, segment, device, now).await?;
         }
@@ -905,6 +978,7 @@ impl TrackingService {
             // A binding that outlived its run would attribute a later process to a
             // game the user already stopped.
             *self.launched.write().await = None;
+            *self.manual_paused.write().await = false;
         }
         let mut snapshot = self.snapshot.write().await;
         snapshot.phase = tracker.phase();

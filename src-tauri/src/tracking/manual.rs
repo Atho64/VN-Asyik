@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use vn_core::clock::Timestamp;
 use vn_core::ids::EntityId;
+use vn_core::tracker::Phase;
 
 /// Active manual timer targeting a single chapter or route (enforced by constructors).
 ///
@@ -25,6 +26,8 @@ pub struct ManualRun {
     pub afk_ms: i64,
     /// When the current accrual window opened, or `None` while paused.
     last_tick_at: Option<Timestamp>,
+    /// Whether the last sample allowed accrual; an armed timer can be unfocused.
+    counting: bool,
     /// The idle reading of the last sample, so pausing and stopping can close the
     /// open window with the classification it actually had instead of guessing.
     last_idle_for_ms: i64,
@@ -44,8 +47,8 @@ pub enum ManualSample {
         /// Grace threshold for the idle reading.
         threshold_ms: i64,
     },
-    /// The game window was not in front. The timer keeps its total and the gap is
-    /// not counted, exactly as automatic playtime pauses when the game loses focus.
+    /// The game window was not in front. Close the last focused window, then
+    /// freeze until a Count sample observes focus again.
     Skip,
 }
 
@@ -90,15 +93,28 @@ impl ManualRun {
             active_ms: 0,
             afk_ms: 0,
             last_tick_at: Some(now),
+            counting: true,
             last_idle_for_ms: 0,
             last_threshold_ms: 0,
         }
     }
 
-    /// Whether time is currently accumulating.
+    /// Whether the timer is armed, including while its window is unfocused.
     #[must_use]
     pub fn is_running(&self) -> bool {
         self.last_tick_at.is_some()
+    }
+
+    /// User-visible state, keeping an intentional pause separate from focus loss.
+    #[must_use]
+    pub fn phase(&self) -> Phase {
+        if !self.is_running() {
+            Phase::Paused
+        } else if self.counting {
+            Phase::Tracking
+        } else {
+            Phase::Unfocused
+        }
     }
 
     /// Total counted time, the number the clock shows.
@@ -116,8 +132,8 @@ impl ManualRun {
     #[must_use]
     pub fn projected_total(&self, now: Timestamp) -> i64 {
         match self.last_tick_at {
-            Some(from) => self.total_ms() + (now.as_millis() - from.as_millis()).max(0),
-            None => self.total_ms(),
+            Some(from) if self.counting => self.total_ms() + now.saturating_diff_ms(from).max(0),
+            _ => self.total_ms(),
         }
     }
 
@@ -130,26 +146,44 @@ impl ManualRun {
         let Some(from) = self.last_tick_at else {
             return;
         };
-        let gap = (now.as_millis() - from.as_millis()).max(0);
+        let gap = now.saturating_diff_ms(from).max(0);
         match sample {
-            ManualSample::Skip => {}
+            ManualSample::Skip => {
+                // Like FocusLost in the tracker, close the previously focused
+                // window before freezing. Dropping it rolls back the shown clock.
+                self.close_window(gap);
+                self.counting = false;
+            }
             ManualSample::Count {
                 idle_for_ms,
                 all_active,
                 threshold_ms,
             } => {
-                let away = if all_active {
-                    0
-                } else {
-                    vn_core::tracker::away_ms_in_gap(gap, idle_for_ms, threshold_ms)
-                };
-                self.afk_ms += away;
-                self.active_ms += gap - away;
-                self.last_idle_for_ms = idle_for_ms;
+                if self.counting {
+                    let away = if all_active {
+                        0
+                    } else {
+                        vn_core::tracker::away_ms_in_gap(gap, idle_for_ms, threshold_ms)
+                    };
+                    self.afk_ms += away;
+                    self.active_ms += gap - away;
+                }
+                self.counting = true;
+                self.last_idle_for_ms = if all_active { 0 } else { idle_for_ms };
                 self.last_threshold_ms = threshold_ms;
             }
         }
-        self.last_tick_at = Some(now);
+        self.last_tick_at = Some(from.max(now));
+    }
+
+    fn close_window(&mut self, gap: i64) {
+        if !self.counting {
+            return;
+        }
+        let away =
+            vn_core::tracker::away_ms_in_gap(gap, self.last_idle_for_ms, self.last_threshold_ms);
+        self.afk_ms += away;
+        self.active_ms += gap - away;
     }
 
     /// Stop accumulating without ending the run.
@@ -160,16 +194,9 @@ impl ManualRun {
         if self.last_tick_at.is_none() {
             return Err(ManualError::AlreadyPaused);
         }
-        // Close the open window with the last classification seen, rather than
-        // dropping or inventing it.
-        self.tick(
-            now,
-            ManualSample::Count {
-                idle_for_ms: self.last_idle_for_ms,
-                all_active: false,
-                threshold_ms: self.last_threshold_ms,
-            },
-        );
+        if let Some(from) = self.last_tick_at {
+            self.close_window(now.saturating_diff_ms(from).max(0));
+        }
         self.last_tick_at = None;
         Ok(())
     }
@@ -192,14 +219,9 @@ impl ManualRun {
     /// sample, and `exclude_afk = false` folds away time into play exactly as it
     /// does for a detected session.
     pub fn finish(&mut self, now: Timestamp, afk: vn_core::afk::AfkConfig) -> (i64, i64) {
-        self.tick(
-            now,
-            ManualSample::Count {
-                idle_for_ms: self.last_idle_for_ms,
-                all_active: false,
-                threshold_ms: self.last_threshold_ms,
-            },
-        );
+        if let Some(from) = self.last_tick_at {
+            self.close_window(now.saturating_diff_ms(from).max(0));
+        }
         self.last_tick_at = None;
         let totals = vn_core::afk::finish(
             vn_core::afk::ActivityTotals {
@@ -293,15 +315,45 @@ mod tests {
     }
 
     #[test]
-    fn a_skipped_sample_counts_nothing() {
-        // The game window was not in front, which is where automatic playtime
-        // pauses instead of billing the gap.
+    fn an_unfocused_sample_freezes_until_focus_returns() {
         let (chapter, game) = ids();
         let mut run = ManualRun::start(chapter, game, t(0));
+        run.tick(t(0), ManualSample::Skip);
         run.tick(t(30_000), ManualSample::Skip);
         assert_eq!(run.total_ms(), 0);
         run.tick(t(35_000), present());
+        assert_eq!(run.total_ms(), 0, "the unfocused gap is not playtime");
+        run.tick(t(40_000), present());
         assert_eq!(run.total_ms(), 5_000);
+    }
+
+    #[test]
+    fn a_route_clock_never_rolls_back_at_a_focus_sample() {
+        let (route, game) = ids();
+        let mut run = ManualRun::start_route(route, game, t(0));
+        run.tick(t(2_000), present());
+        assert_eq!(run.projected_total(t(3_000)), 3_000);
+        run.tick(t(4_000), ManualSample::Skip);
+        assert_eq!(run.phase(), Phase::Unfocused);
+        assert_eq!(run.projected_total(t(5_000)), 4_000);
+        run.tick(t(6_000), ManualSample::Skip);
+        assert_eq!(run.projected_total(t(7_000)), 4_000);
+        run.tick(t(8_000), present());
+        assert_eq!(run.projected_total(t(9_000)), 5_000);
+        run.tick(t(10_000), present());
+        assert_eq!(run.total_ms(), 6_000);
+    }
+
+    #[test]
+    fn pause_and_stop_never_credit_an_unfocused_tail() {
+        let (route, game) = ids();
+        let mut run = ManualRun::start_route(route, game, t(0));
+        run.tick(t(2_000), ManualSample::Skip);
+        let mut stopped = run.clone();
+        run.pause(t(60_000)).expect("pause");
+        assert_eq!(run.phase(), Phase::Paused);
+        assert_eq!(run.total_ms(), 2_000);
+        assert_eq!(stopped.finish(t(60_000), AfkConfig::default()), (2_000, 0));
     }
 
     #[test]

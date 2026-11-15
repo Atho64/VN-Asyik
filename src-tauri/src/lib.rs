@@ -23,6 +23,17 @@ pub mod window_launch;
 
 use tauri::{Emitter, Manager};
 
+fn android_screenshot_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    #[cfg(target_os = "android")]
+    {
+        screenshots::android::init()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        tauri::plugin::Builder::<tauri::Wry, ()>::new("android-screenshots").build()
+    }
+}
+
 /// The Android usage-stats plugin, or an inert plugin elsewhere.
 ///
 /// Tauri plugins are typed by runtime and cannot be conditionally absent from a
@@ -57,6 +68,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::journey::timeline_page,
         commands::journey::year_review,
         commands::journey::finished_by_day,
+        commands::journey::started_by_day,
         commands::journey::library_wrapped,
         commands::journey::save_share_card,
         commands::journey::share_share_card,
@@ -141,6 +153,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::tracking::tracking_set_enabled,
         commands::tracking::tracking_set_mode,
         commands::tracking::tracking_map_executable,
+        commands::tracking::tracking_executable_windows,
+        commands::tracking::tracking_map_window,
         commands::tracking::tracking_map_runner_target,
         commands::tracking::tracking_list_executables,
         commands::tracking::tracking_list_chapters,
@@ -168,6 +182,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::screenshots::screenshot_list_all,
         commands::screenshots::screenshot_image,
         commands::screenshots::screenshot_delete,
+        commands::screenshots::screenshot_copy,
+        commands::screenshots::screenshot_save,
         commands::update::update_check,
         commands::update::update_install,
         commands::ai::ai_llm_profiles,
@@ -268,6 +284,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::walkthrough::walkthrough_search,
         commands::walkthrough::walkthrough_fetch,
         commands::walkthrough::walkthrough_translate,
+        commands::walkthrough::walkthrough_save_manual,
         commands::walkthrough::walkthrough_toggle_item,
         commands::walkthrough::walkthrough_clear_progress,
         commands::ui::ui_prefs_get,
@@ -301,6 +318,7 @@ fn screenshot_shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
             tauri::async_runtime::spawn(async move {
                 let outcome = commands::screenshots::screenshot_capture(
                     app.state::<crate::state::AppState>(),
+                    None,
                 )
                 .await;
                 let payload = match outcome {
@@ -322,12 +340,15 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_clipboard_manager::init());
     #[cfg(not(any(windows, target_os = "android")))]
     let builder = builder.plugin(screenshot_shortcut_plugin());
     builder
         .plugin(android_usage_plugin())
         .plugin(platform::storage::init())
         .plugin(platform::android_presence::init())
+        .plugin(android_screenshot_plugin())
         .setup(|app| {
             let handle = app.handle().clone();
             let state = tauri::async_runtime::block_on(state::AppState::boot(&handle))?;

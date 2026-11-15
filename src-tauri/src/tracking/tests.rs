@@ -690,6 +690,12 @@ async fn a_running_manual_timer_stops_detection_from_accruing_the_same_minutes()
         .await
         .expect("start timer");
     poll_range(&service, &db, &device, 4, 5).await;
+    let manual = service.manual_stop().await.expect("stop timer");
+    assert_eq!(
+        manual.total_ms(),
+        10_000,
+        "the manual timer owns this stretch"
+    );
     service
         .send(db.pool(), &device, Event::Stop, t(18_000))
         .await
@@ -717,7 +723,12 @@ async fn detection_resumes_once_the_manual_timer_ends() {
         .await
         .expect("start timer");
     poll_range(&service, &db, &device, 0, 3).await;
-    assert_eq!(service.status(db.pool()).await.phase, "paused");
+    assert_eq!(service.status(db.pool()).await.phase, "tracking");
+    assert_eq!(
+        service.tracker.lock().await.phase(),
+        Phase::Paused,
+        "the automatic writer stays paused during manual ownership"
+    );
 
     service.manual_stop().await.expect("stop timer");
     poll_range(&service, &db, &device, 4, 2).await;
@@ -923,7 +934,6 @@ async fn a_manual_timer_does_not_count_while_another_window_is_in_front() {
         .await
         .expect("start timer");
     poll_range(&service, &db, &device, 0, 2).await;
-    let before = service.manual_state().await.expect("timer").total_ms();
 
     // The terminal takes the foreground, which is where automatic playtime pauses.
     probe.set(
@@ -931,9 +941,147 @@ async fn a_manual_timer_does_not_count_while_another_window_is_in_front() {
         Some(1),
         0,
     );
-    poll_range(&service, &db, &device, 3, 3).await;
+    service
+        .poll(db.pool(), &device, t(6_000))
+        .await
+        .expect("focus lost");
+    // As with automatic FocusLost, the final focused interval closes at the
+    // observation. Only subsequent intervals belong to the unfocused stretch.
+    let before = service.manual_state().await.expect("timer").total_ms();
+    poll_range(&service, &db, &device, 4, 2).await;
     let after = service.manual_state().await.expect("timer").total_ms();
     assert_eq!(after, before, "an unfocused game buys no manual minutes");
+}
+
+#[tokio::test]
+async fn a_route_timer_reports_focus_and_obeys_the_tracking_controls() {
+    let (db, device, game, probe, service) = fixture().await;
+    let route = vn_core::model::Route::new(&device, t(0), game, "Route").expect("route");
+    queries::upsert_route(db.pool(), &route)
+        .await
+        .expect("insert route");
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service.poll(db.pool(), &device, t(0)).await.expect("poll");
+    service
+        .manual_start_route(route.meta.id, game, t(0))
+        .await
+        .expect("timer");
+    service
+        .poll(db.pool(), &device, t(2_000))
+        .await
+        .expect("poll");
+    assert_eq!(service.status(db.pool()).await.phase, "tracking");
+
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", false)],
+        Some(1),
+        0,
+    );
+    service
+        .poll(db.pool(), &device, t(4_000))
+        .await
+        .expect("focus lost");
+    let unfocused = service.status(db.pool()).await;
+    assert_eq!(unfocused.phase, "unfocused");
+    assert_eq!(unfocused.active_ms, 4_000);
+    service
+        .poll(db.pool(), &device, t(60_000))
+        .await
+        .expect("unfocused");
+    let run = service.manual_state().await.expect("timer");
+    assert_eq!(run.projected_total(t(61_000)), 4_000);
+
+    service
+        .send(db.pool(), &device, Event::Pause, t(61_000))
+        .await
+        .expect("pause");
+    assert_eq!(service.status(db.pool()).await.phase, "paused");
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .poll(db.pool(), &device, t(62_000))
+        .await
+        .expect("paused");
+    assert_eq!(
+        service.status(db.pool()).await.phase,
+        "paused",
+        "focus cannot cancel a user pause"
+    );
+    service
+        .send(db.pool(), &device, Event::Resume, t(63_000))
+        .await
+        .expect("resume");
+    assert_eq!(service.status(db.pool()).await.phase, "tracking");
+    service
+        .poll(db.pool(), &device, t(65_000))
+        .await
+        .expect("resumed");
+    service
+        .send(db.pool(), &device, Event::Stop, t(66_000))
+        .await
+        .expect("stop");
+    assert!(service.manual_state().await.is_none());
+    assert_eq!(
+        queries::tracked_playtime_ms(db.pool(), game)
+            .await
+            .expect("total"),
+        7_000,
+        "four seconds before focus loss plus three after Resume, recorded once"
+    );
+}
+
+#[tokio::test]
+async fn a_route_started_before_detection_uses_the_mapped_windows_focus() {
+    let (db, device, game, probe, service) = fixture().await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", false)],
+        Some(1),
+        0,
+    );
+    service
+        .manual_start_route(EntityId::new(), game, t(0))
+        .await
+        .expect("timer");
+    service.sample_manual(db.pool(), t(0)).await;
+    let run = service.manual_state().await.expect("timer");
+    assert_eq!(run.phase(), Phase::Unfocused);
+    assert_eq!(run.projected_total(t(1_000)), 0);
+    service
+        .poll(db.pool(), &device, t(2_000))
+        .await
+        .expect("poll");
+    assert_eq!(
+        service
+            .manual_state()
+            .await
+            .expect("timer")
+            .projected_total(t(3_000)),
+        0
+    );
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .poll(db.pool(), &device, t(4_000))
+        .await
+        .expect("focus gained");
+    service
+        .poll(db.pool(), &device, t(6_000))
+        .await
+        .expect("count");
+    assert_eq!(
+        service.manual_state().await.expect("timer").total_ms(),
+        2_000
+    );
 }
 
 #[tokio::test]

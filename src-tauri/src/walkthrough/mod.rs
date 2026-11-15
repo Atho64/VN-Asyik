@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::Write;
 use std::net::SocketAddr;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -7,6 +6,9 @@ use tokio::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use vn_core::walkthrough::translation::{
+    apply_translated_texts, character_glossary, model_translation_prompt, replace_names,
+};
 use vn_core::walkthrough::{
     Walkthrough, WalkthroughIndexEntry, WalkthroughRoute, decode_html_bytes, parse_index_links,
 };
@@ -172,9 +174,8 @@ pub async fn load_character_glossary(
     pool: &SqlitePool,
     vn_id: Option<&str>,
 ) -> HashMap<String, String> {
-    let mut glossary = HashMap::new();
     let Some(vn_id) = vn_id else {
-        return glossary;
+        return HashMap::new();
     };
 
     let row: Option<(String,)> =
@@ -185,31 +186,15 @@ pub async fn load_character_glossary(
             .unwrap_or(None);
 
     let Some((json_str,)) = row else {
-        return glossary;
+        return HashMap::new();
     };
 
-    if let Ok(chars) = serde_json::from_str::<Vec<CharItem>>(&json_str) {
-        for c in chars {
-            if let (Some(name), Some(orig)) = (c.name, c.original) {
-                let clean_name = name.trim().to_string();
-                let clean_orig = orig.trim().to_string();
-                if !clean_name.is_empty() && !clean_orig.is_empty() {
-                    glossary.insert(clean_orig.clone(), clean_name.clone());
-                    // Also support single given name if space separated (e.g. "神戸 小鳥" -> "小鳥", "Kotori")
-                    let orig_last = clean_orig.split([' ', '　']).next_back();
-                    let name_first = clean_name.split(' ').next();
-                    if let (Some(l), Some(f)) = (orig_last, name_first)
-                        && l.len() >= 2
-                        && !glossary.contains_key(l)
-                    {
-                        glossary.insert(l.to_string(), f.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    glossary
+    let chars = serde_json::from_str::<Vec<CharItem>>(&json_str).unwrap_or_default();
+    character_glossary(
+        chars
+            .into_iter()
+            .filter_map(|c| Some((c.original?, c.name?))),
+    )
 }
 
 pub async fn get_walkthrough_view(
@@ -274,6 +259,13 @@ pub async fn save_walkthrough(
         vn_core::clock::Timestamp::now().map_err(|e| WalkthroughError::Parse(e.to_string()))?;
     let now_ms = now.as_millis();
 
+    let mut transaction = pool.begin().await?;
+    sqlx::query(
+        "DELETE FROM walkthrough_translations WHERE game_id = ? AND EXISTS \
+         (SELECT 1 FROM game_walkthroughs WHERE game_id = ? AND (source_url != ? OR routes_json != ?))"
+    )
+    .bind(game_id).bind(game_id).bind(&walkthrough.source_url).bind(&routes_json)
+    .execute(&mut *transaction).await?;
     sqlx::query(
         "INSERT INTO game_walkthroughs (game_id, source_url, title, notes, routes_json, checked_items_json, created_at, updated_at) \
          VALUES (?, ?, ?, ?, ?, '[]', ?, ?) \
@@ -291,15 +283,16 @@ pub async fn save_walkthrough(
     .bind(&routes_json)
     .bind(now_ms)
     .bind(now_ms)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
+    transaction.commit().await?;
 
     Ok(())
 }
 
 pub async fn save_translation(
     pool: &SqlitePool,
-    game_id: &str,
+    original: &WalkthroughView,
     provider: &str,
     target_lang: &str,
     routes: &[WalkthroughRoute],
@@ -310,22 +303,59 @@ pub async fn save_translation(
         vn_core::clock::Timestamp::now().map_err(|e| WalkthroughError::Parse(e.to_string()))?;
     let now_ms = now.as_millis();
 
-    sqlx::query(
+    let original_json = serde_json::to_string(&original.routes)
+        .map_err(|e| WalkthroughError::Parse(e.to_string()))?;
+    let result = sqlx::query(
         "INSERT INTO walkthrough_translations (game_id, provider, target_lang, routes_json, updated_at) \
-         VALUES (?, ?, ?, ?, ?) \
+         SELECT game_id, ?, ?, ?, ? FROM game_walkthroughs \
+         WHERE game_id = ? AND source_url = ? AND routes_json = ? \
          ON CONFLICT(game_id, provider, target_lang) DO UPDATE SET \
             routes_json = excluded.routes_json, \
             updated_at = excluded.updated_at"
     )
-    .bind(game_id)
     .bind(provider)
     .bind(target_lang)
     .bind(&routes_json)
     .bind(now_ms)
+    .bind(&original.game_id)
+    .bind(&original.source_url)
+    .bind(original_json)
     .execute(pool)
     .await?;
 
+    if result.rows_affected() == 0 {
+        return Err(WalkthroughError::Translation(
+            "The source guide changed during translation; refresh its translation again".into(),
+        ));
+    }
+
     Ok(())
+}
+
+pub async fn save_manual_translation(
+    pool: &SqlitePool,
+    game_id: &str,
+    target_lang: &str,
+    source_url: &str,
+    source_routes: &[WalkthroughRoute],
+    texts: &[String],
+) -> Result<(), WalkthroughError> {
+    if !matches!(target_lang, "en" | "id") {
+        return Err(WalkthroughError::Translation(
+            "Unsupported translation language".into(),
+        ));
+    }
+    let original = get_walkthrough_view(pool, game_id, None)
+        .await?
+        .ok_or(WalkthroughError::NotFound)?;
+    if original.source_url != source_url || original.routes != source_routes {
+        return Err(WalkthroughError::Translation(
+            "The source guide changed; reopen the translation editor".into(),
+        ));
+    }
+    let routes = apply_translated_texts(&original.routes, texts)
+        .map_err(|message| WalkthroughError::Translation(message.into()))?;
+    save_translation(pool, &original, "manual", target_lang, &routes).await
 }
 
 pub async fn toggle_checked_item(
@@ -380,16 +410,10 @@ pub async fn translate_batch_google(
         return Ok(Vec::new());
     }
 
-    let mut prepared = Vec::with_capacity(texts.len());
-    for t in texts {
-        let mut s = t.clone();
-        for (jp, en) in glossary {
-            if s.contains(jp) {
-                s = s.replace(jp, en);
-            }
-        }
-        prepared.push(s);
-    }
+    let prepared: Vec<_> = texts
+        .iter()
+        .map(|text| replace_names(text, glossary))
+        .collect();
 
     // Google Translate batches newline-joined lines in a single request.
     let joined = prepared.join("\n");
@@ -409,6 +433,13 @@ pub async fn translate_batch_google(
 
     let val: serde_json::Value = resp.json().await.map_err(WalkthroughError::Http)?;
 
+    parse_google_translation(&val, texts.len())
+}
+
+fn parse_google_translation(
+    val: &serde_json::Value,
+    expected: usize,
+) -> Result<Vec<String>, WalkthroughError> {
     // Google Translate response format: [[["translated_segment", "src_segment", ...], ...], ...]
     let mut translated_full = String::new();
     if let Some(sentences) = val.get(0).and_then(|v| v.as_array()) {
@@ -419,17 +450,15 @@ pub async fn translate_batch_google(
         }
     }
 
-    let mut result_lines: Vec<String> = translated_full
+    let result_lines: Vec<String> = translated_full
         .lines()
         .map(|s| s.trim().to_string())
         .collect();
 
-    if result_lines.len() < texts.len() {
-        while result_lines.len() < texts.len() {
-            result_lines.push(texts[result_lines.len()].clone());
-        }
-    } else if result_lines.len() > texts.len() {
-        result_lines.truncate(texts.len());
+    if result_lines.len() != expected || result_lines.iter().any(String::is_empty) {
+        return Err(WalkthroughError::Translation(
+            "Google returned incomplete or misaligned steps; no translation was saved".into(),
+        ));
     }
 
     Ok(result_lines)
@@ -448,28 +477,7 @@ pub async fn translate_batch_ai(
         return Ok(Vec::new());
     }
 
-    let lang_name = match target_lang {
-        "id" => "Indonesian",
-        _ => "English",
-    };
-
-    let mut glossary_block = String::new();
-    if !glossary.is_empty() {
-        glossary_block.push_str("\nCharacter Name Glossary from VNDB (Adhere strictly):\n");
-        for (jp, en) in glossary {
-            let _ = writeln!(glossary_block, "- {jp} => {en}");
-        }
-    }
-
-    let system_prompt = format!(
-        "You are an expert visual novel translator. Translate the given walkthrough steps and choices from Japanese to {lang_name}.\n\
-         Rules:\n\
-         1. Keep choices clear, concise, and easy to read for a visual novel player.\n\
-         2. Preserve dates (e.g. 10/21, October 21) and save point markers (e.g. Save 01, From Save 04).\n\
-         3. Keep endings clean (e.g. Kotori END, Bad End).\n\
-         {glossary_block}\n\
-         IMPORTANT: The input is a JSON array of strings. You MUST reply with ONLY a valid JSON array of translated strings in the EXACT same order and length. Do not include markdown codeblocks or explanation."
-    );
+    let system_prompt = model_translation_prompt(target_lang, glossary, texts.len());
 
     let user_prompt = serde_json::to_string(texts).unwrap_or_default();
 
@@ -477,6 +485,10 @@ pub async fn translate_batch_ai(
         .await
         .map_err(|e| WalkthroughError::Translation(e.to_string()))?;
 
+    parse_ai_translation(&raw_reply, texts.len())
+}
+
+fn parse_ai_translation(raw_reply: &str, expected: usize) -> Result<Vec<String>, WalkthroughError> {
     let cleaned = raw_reply.trim();
     let json_str = if cleaned.starts_with("```") {
         let lines: Vec<&str> = cleaned.lines().collect();
@@ -494,33 +506,257 @@ pub async fn translate_batch_ai(
 
     if let Some(translated_array) = serde_json::from_str::<Vec<String>>(&json_str)
         .ok()
-        .filter(|arr| arr.len() == texts.len())
+        .filter(|arr| arr.len() == expected && arr.iter().all(|text| !text.trim().is_empty()))
     {
         return Ok(translated_array);
     }
 
-    // Fallback when the model returns a bulleted list instead of a JSON array.
-    let mut lines = Vec::new();
-    for line in json_str.lines() {
-        let t = line
-            .trim()
-            .trim_start_matches(|c| {
-                c == '-' || c == '*' || c == '"' || c == '[' || c == ']' || c == ','
-            })
-            .trim_end_matches([',', '"', ']'])
-            .trim();
-        if !t.is_empty() {
-            lines.push(t.to_string());
-        }
-    }
-
-    if lines.len() == texts.len() {
-        return Ok(lines);
-    }
-
-    Ok(texts.to_vec())
+    Err(WalkthroughError::Translation(
+        "The model did not return a complete ordered translation; no translation was saved".into(),
+    ))
 }
 
 fn urlencoding(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{Db, queries};
+    use vn_core::walkthrough::{ItemKind, WalkthroughItem};
+    use vn_core::{
+        clock::Timestamp,
+        model::{Game, GameStatus},
+    };
+
+    #[test]
+    fn google_segments_preserve_order_and_reject_incomplete_or_extra_lines() {
+        let valid = serde_json::json!([[
+            ["Kotori route\n", "小鳥ルート"],
+            ["From Save 01", "セーブ01から"]
+        ]]);
+        assert_eq!(
+            parse_google_translation(&valid, 2).unwrap(),
+            ["Kotori route", "From Save 01"]
+        );
+        for malformed in [
+            serde_json::json!([]),
+            serde_json::json!([[["Only one line"]]]),
+            serde_json::json!([[["One\nTwo\nThree"]]]),
+            serde_json::json!([[["One\n\n"]]]),
+        ] {
+            assert!(parse_google_translation(&malformed, 2).is_err());
+        }
+    }
+
+    #[test]
+    fn model_translation_requires_complete_ordered_json_and_accepts_fences() {
+        assert_eq!(
+            parse_ai_translation("```json\n[\"Kotori\",\"Save 01\"]\n```", 2).unwrap(),
+            ["Kotori", "Save 01"]
+        );
+        for malformed in [
+            "Sorry, translation is unavailable",
+            "[\"Kotori\"]",
+            "[\"Kotori\",\"\"]",
+            "- Kotori\n- Save 01",
+        ] {
+            assert!(parse_ai_translation(malformed, 2).is_err());
+        }
+    }
+
+    async fn fixture() -> (Db, String, WalkthroughView) {
+        let db = Db::open_memory().await.unwrap();
+        let device = queries::ensure_device_id(db.pool()).await.unwrap();
+        let game = Game::new(
+            &device,
+            Timestamp::from_millis(1_700_000_000_000),
+            "Rewrite+",
+            GameStatus::Playing,
+        )
+        .unwrap();
+        queries::upsert_game(db.pool(), &game).await.unwrap();
+        let id = game.meta.id.to_string();
+        let source = Walkthrough {
+            title: "Rewrite+".into(),
+            source_url: "https://seiya-saiga.com/game/rewrite.html".into(),
+            notes: None,
+            routes: vec![WalkthroughRoute {
+                id: "route_0".into(),
+                title: "小鳥".into(),
+                items: vec![WalkthroughItem {
+                    id: "c_1".into(),
+                    kind: ItemKind::Choice,
+                    text: "小鳥を選ぶ".into(),
+                    note: None,
+                }],
+            }],
+        };
+        save_walkthrough(db.pool(), &id, &source).await.unwrap();
+        let view = get_walkthrough_view(db.pool(), &id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        (db, id, view)
+    }
+
+    #[tokio::test]
+    async fn manual_edits_are_local_separate_and_preserve_checked_choices() {
+        let (db, id, original) = fixture().await;
+        save_translation(db.pool(), &original, "ai", "en", &original.routes)
+            .await
+            .unwrap();
+        toggle_checked_item(db.pool(), &id, "c_1").await.unwrap();
+        save_manual_translation(
+            db.pool(),
+            &id,
+            "en",
+            &original.source_url,
+            &original.routes,
+            &["Kotori route".into(), "Choose Kotori manually".into()],
+        )
+        .await
+        .unwrap();
+        let loaded = get_walkthrough_view(db.pool(), &id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.routes, original.routes);
+        assert_eq!(loaded.checked_items, ["c_1"]);
+        assert_eq!(loaded.translations["ai_en"], original.routes);
+        assert_eq!(
+            loaded.translations["manual_en"][0].items[0].text,
+            "Choose Kotori manually"
+        );
+        assert_eq!(loaded.translations["manual_en"][0].items[0].id, "c_1");
+
+        for (source, texts) in [
+            (
+                "https://seiya-saiga.com/other.html",
+                vec!["Kotori".into(), "Wrong guide".into()],
+            ),
+            (original.source_url.as_str(), vec!["Kotori".into()]),
+        ] {
+            assert!(
+                save_manual_translation(db.pool(), &id, "en", source, &original.routes, &texts)
+                    .await
+                    .is_err()
+            );
+        }
+        let mut stale_routes = original.routes.clone();
+        stale_routes[0].items[0].text = "old choice".into();
+        assert!(
+            save_manual_translation(
+                db.pool(),
+                &id,
+                "en",
+                &original.source_url,
+                &stale_routes,
+                &["Kotori".into(), "Old choice".into()]
+            )
+            .await
+            .is_err()
+        );
+        let loaded = get_walkthrough_view(db.pool(), &id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            loaded.translations["manual_en"][0].items[0].text,
+            "Choose Kotori manually"
+        );
+    }
+
+    #[tokio::test]
+    async fn refreshing_translation_replaces_only_its_cache_and_preserves_original_and_progress() {
+        let (db, id, original) = fixture().await;
+        save_translation(db.pool(), &original, "ai", "en", &original.routes)
+            .await
+            .unwrap();
+        save_translation(db.pool(), &original, "google", "id", &original.routes)
+            .await
+            .unwrap();
+        toggle_checked_item(db.pool(), &id, "c_1").await.unwrap();
+        let mut translated = original.routes.clone();
+        translated[0].title = "Kotori route".into();
+        save_translation(db.pool(), &original, "google", "en", &translated)
+            .await
+            .unwrap();
+        translated[0].title = "Refreshed Kotori route".into();
+        save_translation(db.pool(), &original, "google", "en", &translated)
+            .await
+            .unwrap();
+        let loaded = get_walkthrough_view(db.pool(), &id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.routes, original.routes);
+        assert_eq!(loaded.checked_items, ["c_1"]);
+        assert_eq!(
+            loaded.translations["google_en"][0].title,
+            "Refreshed Kotori route"
+        );
+        assert_eq!(loaded.translations["google_en"][0].items[0].id, "c_1");
+        assert_eq!(loaded.translations["ai_en"], original.routes);
+        assert_eq!(loaded.translations["google_id"], original.routes);
+    }
+
+    #[tokio::test]
+    async fn changed_source_invalidates_cache_and_rejects_a_late_translation() {
+        let (db, id, original) = fixture().await;
+        save_translation(db.pool(), &original, "ai", "en", &original.routes)
+            .await
+            .unwrap();
+        let replacement = Walkthrough {
+            title: "Other guide".into(),
+            source_url: "https://seiya-saiga.com/game/other.html".into(),
+            notes: None,
+            routes: original.routes.clone(),
+        };
+        save_walkthrough(db.pool(), &id, &replacement)
+            .await
+            .unwrap();
+        assert!(
+            save_translation(db.pool(), &original, "ai", "en", &original.routes)
+                .await
+                .is_err()
+        );
+        let loaded = get_walkthrough_view(db.pool(), &id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.source_url, replacement.source_url);
+        assert!(loaded.translations.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unchanged_source_keeps_translation_but_changed_steps_reject_stale_results() {
+        let (db, id, original) = fixture().await;
+        save_translation(db.pool(), &original, "ai", "en", &original.routes)
+            .await
+            .unwrap();
+        let mut source = Walkthrough {
+            title: original.title.clone(),
+            source_url: original.source_url.clone(),
+            notes: None,
+            routes: original.routes.clone(),
+        };
+        save_walkthrough(db.pool(), &id, &source).await.unwrap();
+        assert!(
+            !get_walkthrough_view(db.pool(), &id, None)
+                .await
+                .unwrap()
+                .unwrap()
+                .translations
+                .is_empty()
+        );
+        source.routes[0].items[0].text = "違う選択肢".into();
+        save_walkthrough(db.pool(), &id, &source).await.unwrap();
+        assert!(
+            save_translation(db.pool(), &original, "google", "en", &original.routes)
+                .await
+                .is_err()
+        );
+    }
 }

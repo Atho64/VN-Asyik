@@ -4,19 +4,22 @@
 // Single module allowed `unsafe` for direct Win32 FFI wrappers; every block has a SAFETY note.
 #![allow(unsafe_code)]
 
-use windows::Win32::Foundation::{CloseHandle, HWND};
+use windows::Win32::Foundation::{CloseHandle, FILETIME, HWND, LPARAM};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    GetProcessTimes, OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+    EnumWindows, GetDesktopWindow, GetForegroundWindow, GetShellWindow, GetWindowTextLengthW,
+    GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
 };
+use windows::core::BOOL;
 
-use super::{FocusedWindow, Presence, ProbeError, RunningProcess, SystemProbe};
+use super::{ExecutableWindow, FocusedWindow, Presence, ProbeError, RunningProcess, SystemProbe};
 
 /// Probe backed by the Win32 API.
 #[derive(Debug, Clone, Copy, Default)]
@@ -34,6 +37,52 @@ impl WindowsProbe {
 }
 
 impl SystemProbe for WindowsProbe {
+    fn executable_windows(&self) -> Result<Vec<ExecutableWindow>, ProbeError> {
+        unsafe extern "system" fn collect(hwnd: HWND, data: LPARAM) -> BOOL {
+            // SAFETY: EnumWindows invokes this callback synchronously with the live Vec.
+            let windows = unsafe { &mut *(data.0 as *mut Vec<ExecutableWindow>) };
+            // SAFETY: these APIs only inspect OS metadata; the buffers are local.
+            unsafe {
+                if windows.len() >= 100
+                    || hwnd == GetDesktopWindow()
+                    || hwnd == GetShellWindow()
+                    || !IsWindowVisible(hwnd).as_bool()
+                {
+                    return BOOL(1);
+                }
+                let mut pid = 0;
+                if GetWindowThreadProcessId(hwnd, Some(&raw mut pid)) == 0
+                    || pid == 0
+                    || pid == std::process::id()
+                {
+                    return BOOL(1);
+                }
+                let mut caption = [0u16; 1024];
+                let written = usize::try_from(GetWindowTextW(hwnd, &mut caption)).unwrap_or(0);
+                let title = String::from_utf16_lossy(&caption[..written])
+                    .trim()
+                    .to_owned();
+                if title.is_empty() {
+                    return BOOL(1);
+                }
+                let metadata = process_window_metadata(pid);
+                let created = metadata.as_ref().map_or(0, |(created, _)| *created);
+                windows.push(ExecutableWindow {
+                    key: format!("{:x}-{pid}-{created}", hwnd.0 as usize),
+                    title,
+                    exe_path: metadata.and_then(|(_, path)| path),
+                });
+            }
+            BOOL(1)
+        }
+        let mut windows = Vec::new();
+        // SAFETY: windows stays alive until enumeration and its callbacks return.
+        unsafe { EnumWindows(Some(collect), LPARAM((&raw mut windows) as isize)) }
+            .map_err(|err| ProbeError::Failed(err.to_string()))?;
+        windows.sort_by(|a: &ExecutableWindow, b| a.title.cmp(&b.title).then(a.key.cmp(&b.key)));
+        Ok(windows)
+    }
+
     fn list_processes(&self) -> Result<Vec<RunningProcess>, ProbeError> {
         let focused = self.focused_pid().unwrap_or(None);
         let mut out = Vec::new();
@@ -148,6 +197,45 @@ impl SystemProbe for WindowsProbe {
                 Err(_) => Ok(false),
             }
         }
+    }
+}
+
+fn process_window_metadata(pid: u32) -> Option<(u64, Option<String>)> {
+    // SAFETY: the owned process handle is closed, and all FILETIME outputs are local.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let (mut created, mut exit, mut kernel, mut user) = (
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+        );
+        let result = GetProcessTimes(
+            handle,
+            &raw mut created,
+            &raw mut exit,
+            &raw mut kernel,
+            &raw mut user,
+        );
+        // Read both identity and path through the same handle, even if the PID
+        // is recycled while the picker is being assembled.
+        let mut buffer = vec![0u16; 32_768];
+        let mut len = u32::try_from(buffer.len()).unwrap_or(0);
+        let path_result = QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_FORMAT(0),
+            windows::core::PWSTR(buffer.as_mut_ptr()),
+            &raw mut len,
+        );
+        let path = path_result
+            .ok()
+            .map(|()| String::from_utf16_lossy(&buffer[..len as usize]));
+        let _ = CloseHandle(handle);
+        result.ok()?;
+        Some((
+            (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime),
+            path,
+        ))
     }
 }
 

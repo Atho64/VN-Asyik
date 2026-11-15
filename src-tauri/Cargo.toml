@@ -74,6 +74,9 @@ webview2-com = "0.39"
 # 2026-11-14).
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2"
+# Official Tauri image clipboard API; maintained 2.5.0 checked 2026-11-15.
+# Rust-side only, with no clipboard permission granted to the webview.
+tauri-plugin-clipboard-manager = "2.5.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # X11 process tracking: the active window, its `_NET_WM_PID`, its title and the

@@ -55,6 +55,8 @@ windows = { version = "0.62", features = [
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
+  # Read embedded executable icons with the Windows shell; no program launch.
+  "Win32_UI_Shell",
   # Selected-window OS capture; Microsoft windows-rs 0.62.2 maintenance checked
   # 2026-11-06. No process-memory access or monitor capture.
   "Graphics_Capture",

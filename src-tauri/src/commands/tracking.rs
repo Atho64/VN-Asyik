@@ -231,6 +231,31 @@ pub async fn tracking_set_enabled(
     })
 }
 
+/// List metadata for the executable window picker (Windows only).
+#[tauri::command]
+pub async fn tracking_executable_windows()
+-> CommandResult<Vec<crate::platform::probe::ExecutableWindow>> {
+    let probe = crate::platform::probe::probe()
+        .map_err(|err| CommandError::new("unsupported", err.to_string()))?;
+    probe
+        .executable_windows()
+        .map_err(|err| CommandError::new("probe", err.to_string()))
+}
+
+/// Link a freshly resolved window executable through the ordinary mapping path.
+#[tauri::command]
+pub async fn tracking_map_window(
+    state: State<'_, AppState>,
+    game_id: String,
+    window_key: String,
+) -> CommandResult<mapping::GameExecutable> {
+    let probe = crate::platform::probe::probe()
+        .map_err(|err| CommandError::new("unsupported", err.to_string()))?;
+    let exe_path = crate::platform::probe::window_executable(probe.as_ref(), &window_key)
+        .map_err(|err| CommandError::new("window_unavailable", err.to_string()))?;
+    tracking_map_executable(state, MapExecutableInput { game_id, exe_path }).await
+}
+
 /// Payload for mapping an executable to a game.
 #[derive(Debug, Deserialize)]
 pub struct MapExecutableInput {
@@ -347,8 +372,10 @@ pub struct ManualTimerView {
     pub active_ms: i64,
     /// Time filed as away, which a detected session reports separately too.
     pub afk_ms: i64,
-    /// Whether time is currently accumulating.
+    /// Whether the timer is armed, including while its window is unfocused.
     pub running: bool,
+    /// Tracking, unfocused, intentionally paused, or idle.
+    pub phase: String,
 }
 
 /// Current state of the manual timer.
@@ -364,8 +391,11 @@ pub async fn tracking_manual_status(state: State<'_, AppState>) -> CommandResult
             afk_ms: 0,
             chapter_name: None,
             running: false,
+            phase: phase_name(Phase::Idle).to_owned(),
         });
     };
+
+    let elapsed_ms = run.projected_total(now()?);
 
     // One lookup, whichever kind of target is running. A route-timed run has no
     // chapter, and asking the chapters table for a route id would return nothing and
@@ -393,10 +423,11 @@ pub async fn tracking_manual_status(state: State<'_, AppState>) -> CommandResult
         chapter_name: name,
         // Projected: the clock keeps moving between polls, while the recorded
         // total only grows when a sample is classified.
-        elapsed_ms: run.projected_total(now()?),
+        elapsed_ms,
         active_ms: run.active_ms,
         afk_ms: run.afk_ms,
         running: run.is_running(),
+        phase: phase_name(run.phase()).to_owned(),
     })
 }
 
@@ -415,6 +446,10 @@ pub async fn tracking_manual_start(
         .manual_start(chapter, game, timestamp)
         .await
         .map_err(|err| CommandError::new("manual", err.to_string()))?;
+    state
+        .tracker()
+        .sample_manual(state.db().pool(), timestamp)
+        .await;
     sync_presence_loop(&state, timestamp).await;
     tracking_manual_status(state).await
 }
@@ -438,6 +473,10 @@ pub async fn tracking_manual_start_route(
         .manual_start_route(route, game, timestamp)
         .await
         .map_err(|err| CommandError::new("manual", err.to_string()))?;
+    state
+        .tracker()
+        .sample_manual(state.db().pool(), timestamp)
+        .await;
     sync_presence_loop(&state, timestamp).await;
     tracking_manual_status(state).await
 }
@@ -464,6 +503,10 @@ pub async fn tracking_manual_resume(state: State<'_, AppState>) -> CommandResult
         .manual_resume(timestamp)
         .await
         .map_err(|err| CommandError::new("manual", err.to_string()))?;
+    state
+        .tracker()
+        .sample_manual(state.db().pool(), timestamp)
+        .await;
     sync_presence_loop(&state, timestamp).await;
     tracking_manual_status(state).await
 }
@@ -995,8 +1038,10 @@ fn start_epoch(now: Timestamp, active_ms: i64) -> i64 {
 fn target_from_manual(
     manual: &crate::tracking::manual::ManualRun,
     now: Timestamp,
+    show_when_unfocused: bool,
 ) -> Option<ActivePresenceTarget> {
-    manual.is_running().then(|| {
+    let phase = manual.phase();
+    (phase == Phase::Tracking || (phase == Phase::Unfocused && show_when_unfocused)).then(|| {
         let elapsed = manual.projected_total(now);
         ActivePresenceTarget {
             game_id: manual.game_id,
@@ -1004,7 +1049,7 @@ fn target_from_manual(
             exe_name: None,
             active_ms: elapsed,
             start_epoch: Some(start_epoch(now, elapsed)),
-            phase: Phase::Tracking,
+            phase,
         }
     })
 }
@@ -1060,7 +1105,7 @@ async fn sync_presence_loop(state: &AppState, now: Timestamp) {
     let manual = state.tracker().manual_state().await;
     let target = manual
         .as_ref()
-        .and_then(|run| target_from_manual(run, now))
+        .and_then(|run| target_from_manual(run, now, presence_settings.show_when_unfocused))
         .or_else(|| target_from_status(&status, now, presence_settings.show_when_unfocused));
 
     #[cfg(target_os = "android")]
@@ -1119,10 +1164,29 @@ async fn sync_presence_loop(state: &AppState, now: Timestamp) {
     {
         base.rpc_image = Some(url);
     }
+    if presence_settings.rpc_image_host != vn_core::presence::RpcImageHost::None {
+        let tracked_executable = status
+            .game_id
+            .as_deref()
+            .and_then(|id| EntityId::parse(id).ok())
+            .filter(|id| *id == target.game_id)
+            .and(status.exe_path.as_deref());
+        if let Some(icon) = crate::presence::executable_icon::for_game(
+            pool,
+            target.game_id,
+            tracked_executable,
+            &presence_settings,
+        )
+        .await
+        {
+            base.exe_icon = icon.hosted_url(&presence_settings).await;
+            base.exe_name = icon.exe_name;
+        }
+    }
     state
         .presence()
         .update_context(vn_core::presence::PresenceContext {
-            exe_name: target.exe_name.unwrap_or_default(),
+            exe_name: target.exe_name.unwrap_or_else(|| base.exe_name.clone()),
             elapsed_time: vn_core::time_fmt::format_duration(target.active_ms),
             date,
             time,
@@ -1241,7 +1305,7 @@ mod presence_target_tests {
         let run = ManualRun::start(EntityId::new(), EntityId::new(), at(100));
         // 60 s into the stretch. The counted total itself is still 0 here; the
         // projection is what the clock shows between samples.
-        let target = target_from_manual(&run, at(160)).expect("running timer");
+        let target = target_from_manual(&run, at(160), true).expect("running timer");
         assert_eq!(run.total_ms(), 0);
         assert_eq!(target.active_ms, 60_000);
         assert_eq!(target.start_epoch, Some(100));
@@ -1252,15 +1316,32 @@ mod presence_target_tests {
         let mut run = ManualRun::start(EntityId::new(), EntityId::new(), at(100));
         run.pause(at(160)).expect("pause");
         assert!(
-            target_from_manual(&run, at(500)).is_none(),
+            target_from_manual(&run, at(500), true).is_none(),
             "paused shows nothing"
         );
 
         run.resume(at(500)).expect("resume");
-        let target = target_from_manual(&run, at(530)).expect("running again");
+        let target = target_from_manual(&run, at(530), true).expect("running again");
         // 60 s before the pause + 30 s after, not 430 s since `started_at`.
         assert_eq!(target.active_ms, 90_000);
         assert_eq!(target.start_epoch, Some(530 - 90));
+    }
+
+    #[test]
+    fn an_unfocused_manual_timer_freezes_presence_and_respects_the_setting() {
+        let mut run = ManualRun::start_route(EntityId::new(), EntityId::new(), at(100));
+        run.tick(at(104), crate::tracking::manual::ManualSample::Skip);
+        assert!(target_from_manual(&run, at(160), false).is_none());
+        let target = target_from_manual(&run, at(160), true).expect("unfocused target");
+        assert_eq!(target.phase, Phase::Unfocused);
+        assert_eq!(target.active_ms, 4_000);
+        run.tick(at(162), crate::tracking::manual::ManualSample::Skip);
+        assert_eq!(
+            target_from_manual(&run, at(163), true)
+                .expect("target")
+                .active_ms,
+            4_000
+        );
     }
 }
 

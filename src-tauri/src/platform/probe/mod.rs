@@ -42,6 +42,17 @@ pub struct FocusedWindow {
     pub title: String,
 }
 
+/// A visible top-level window offered for executable mapping.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutableWindow {
+    /// Ephemeral handle/process identity, rechecked when the user links it.
+    pub key: String,
+    pub title: String,
+    /// Unavailable when Windows denies process metadata access.
+    pub exe_path: Option<String>,
+}
+
 /// Failures from the platform layer.
 #[derive(Debug, thiserror::Error)]
 pub enum ProbeError {
@@ -64,9 +75,13 @@ pub enum ProbeError {
 
 /// The OS surface the tracker needs.
 ///
-/// Deliberately four methods: anything more would be a capability the platform
-/// cannot honestly provide on every target.
+/// Optional surfaces return unsupported where the OS integration is absent.
 pub trait SystemProbe: Send + Sync + std::fmt::Debug {
+    /// Visible windows whose executable can be chosen by the reader.
+    fn executable_windows(&self) -> Result<Vec<ExecutableWindow>, ProbeError> {
+        Err(ProbeError::Unsupported)
+    }
+
     /// Every running process with a readable name, marking the focused one.
     ///
     /// # Errors
@@ -97,6 +112,25 @@ pub trait SystemProbe: Send + Sync + std::fmt::Debug {
 
     /// Whether a process with this id is still alive.
     fn is_running(&self, pid: u32) -> Result<bool, ProbeError>;
+}
+
+/// Resolve fresh OS metadata rather than accepting a path from a stale picker.
+pub fn window_executable(probe: &dyn SystemProbe, key: &str) -> Result<String, ProbeError> {
+    let window = probe
+        .executable_windows()?
+        .into_iter()
+        .find(|window| window.key == key)
+        .ok_or_else(|| {
+            ProbeError::Failed("that window closed or changed; refresh the list".into())
+        })?;
+    window
+        .exe_path
+        .filter(|path| !path.trim().is_empty())
+        .ok_or_else(|| {
+            ProbeError::Denied(
+                "cannot read that window's executable; choose its file instead".into(),
+            )
+        })
 }
 
 /// Probe used on platforms without tracking support.
@@ -169,6 +203,62 @@ pub fn exe_name_of(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug)]
+    struct WindowProbe(Vec<ExecutableWindow>);
+
+    impl SystemProbe for WindowProbe {
+        fn executable_windows(&self) -> Result<Vec<ExecutableWindow>, ProbeError> {
+            Ok(self.0.clone())
+        }
+        fn list_processes(&self) -> Result<Vec<RunningProcess>, ProbeError> {
+            UnsupportedProbe.list_processes()
+        }
+        fn focused_pid(&self) -> Result<Option<u32>, ProbeError> {
+            UnsupportedProbe.focused_pid()
+        }
+        fn focused_window(&self) -> Result<Option<FocusedWindow>, ProbeError> {
+            UnsupportedProbe.focused_window()
+        }
+        fn presence(&self) -> Result<Presence, ProbeError> {
+            UnsupportedProbe.presence()
+        }
+        fn is_running(&self, pid: u32) -> Result<bool, ProbeError> {
+            UnsupportedProbe.is_running(pid)
+        }
+    }
+
+    #[test]
+    fn window_selection_resolves_fresh_metadata_and_rejects_replaced_processes() {
+        let probe = WindowProbe(vec![ExecutableWindow {
+            key: "handle-pid-created2".into(),
+            title: "Game".into(),
+            exe_path: Some("C:/game/new.exe".into()),
+        }]);
+        assert_eq!(
+            window_executable(&probe, "handle-pid-created2").unwrap(),
+            "C:/game/new.exe"
+        );
+        assert!(window_executable(&probe, "handle-pid-created1").is_err());
+        assert!(window_executable(&WindowProbe(vec![]), "handle-pid-created2").is_err());
+    }
+
+    #[test]
+    fn window_selection_cannot_map_unreadable_paths_or_unsupported_platforms() {
+        let probe = WindowProbe(vec![ExecutableWindow {
+            key: "protected".into(),
+            title: "Game".into(),
+            exe_path: None,
+        }]);
+        assert!(matches!(
+            window_executable(&probe, "protected"),
+            Err(ProbeError::Denied(_))
+        ));
+        assert!(matches!(
+            window_executable(&UnsupportedProbe, "any"),
+            Err(ProbeError::Unsupported)
+        ));
+    }
 
     #[test]
     fn paths_normalise_separators_and_case() {

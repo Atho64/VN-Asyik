@@ -168,6 +168,17 @@ pub struct PresenceSettings {
     pub vndb_loading_state: String,
     /// Upload host for blurred/local covers (`None` keeps all images off-network).
     pub rpc_image_host: RpcImageHost,
+    /// An explicitly chosen public URL or application asset key; empty uses the library cover.
+    pub large_image: String,
+    /// Empty keeps the game title as the large-image tooltip.
+    pub large_text: String,
+    pub small_image: String,
+    pub small_text: String,
+    /// Use the linked executable's hosted icon when no custom small image is set.
+    pub use_exe_icon: bool,
+    /// False preserves the original VNDB/profile buttons on older settings rows.
+    pub use_custom_buttons: bool,
+    pub custom_buttons: Vec<PresenceButton>,
 }
 
 /// Floor for the details cycle. Discord throttles presence updates to roughly one
@@ -211,6 +222,13 @@ impl Default for PresenceSettings {
             vndb_loading_details: "Reading".to_string(),
             vndb_loading_state: "Loading VNDB data...".to_string(),
             rpc_image_host: RpcImageHost::None,
+            large_image: String::new(),
+            large_text: String::new(),
+            small_image: String::new(),
+            small_text: String::new(),
+            use_exe_icon: true,
+            use_custom_buttons: false,
+            custom_buttons: Vec::new(),
         }
     }
 }
@@ -256,6 +274,8 @@ pub struct PresenceContext {
     /// Concealment-approved cover URL (blurred upload or hosted custom cover);
     /// takes precedence over [`Self::cover_url`], which only holds public URLs.
     pub rpc_image: Option<String>,
+    /// Public URL of the executable icon, prepared by the platform layer.
+    pub exe_icon: Option<String>,
     /// True when linked to VNDB; unlinked games fall back to local library facts
     /// instead of showing a permanent "Loading VNDB data..." placeholder.
     pub vndb_linked: bool,
@@ -822,11 +842,10 @@ fn render_lines(
 /// than trusting the webview that rendered the settings form.
 fn push_button(buttons: &mut Vec<PresenceButton>, label: &str, url: &str) {
     let url = url.trim();
-    let ok_scheme = url.starts_with("https://") || url.starts_with("http://");
-    let has_space = url.chars().any(|c| c.is_whitespace() || c.is_control());
-    if ok_scheme && !has_space && buttons.len() < MAX_BUTTONS {
+    let label = label.trim().chars().take(32).collect::<String>();
+    if valid_button_url(url) && !label.is_empty() && buttons.len() < MAX_BUTTONS {
         buttons.push(PresenceButton {
-            label: label.to_string(),
+            label,
             url: url.to_string(),
         });
     }
@@ -834,6 +853,37 @@ fn push_button(buttons: &mut Vec<PresenceButton>, label: &str, url: &str) {
 
 /// Discord renders at most two buttons on an activity.
 pub const MAX_BUTTONS: usize = 2;
+
+/// Reject non-web schemes and interior whitespace even in hand-edited settings.
+#[must_use]
+pub fn valid_button_url(raw: &str) -> bool {
+    let url = raw.trim();
+    let Some(rest) = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    !rest
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .is_empty()
+        && url.chars().count() <= 512
+        && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+/// Application asset names or public web images, never local paths/data URLs.
+#[must_use]
+pub fn valid_image_asset(raw: &str) -> bool {
+    let asset = raw.trim();
+    valid_button_url(asset)
+        || (!asset.is_empty()
+            && asset.len() <= 256
+            && asset
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-')))
+}
 
 /// Builds a `PresenceActivity` from settings and current session context.
 pub fn build_activity(settings: &PresenceSettings, ctx: &PresenceContext) -> PresenceActivity {
@@ -850,7 +900,9 @@ pub fn build_activity(settings: &PresenceSettings, ctx: &PresenceContext) -> Pre
     // Artwork policy: send public HTTPS URLs only when safe; raw local files or
     // explicit art are never sent unless pre-processed upstream into `rpc_image`.
     let large_image = if settings.show_cover {
-        if let Some(ref rpc_img) = ctx.rpc_image {
+        if !settings.large_image.trim().is_empty() {
+            valid_image_asset(&settings.large_image).then(|| settings.large_image.trim().to_owned())
+        } else if let Some(ref rpc_img) = ctx.rpc_image {
             Some(rpc_img.clone()).filter(|u| u.starts_with("https://") || u.starts_with("http://"))
         } else if !ctx.is_cover_explicit {
             ctx.cover_url
@@ -868,7 +920,12 @@ pub fn build_activity(settings: &PresenceSettings, ctx: &PresenceContext) -> Pre
     };
 
     let large_text = if large_image.is_some() {
-        sanitize_discord_string(&ctx.vn_name)
+        let template = if settings.large_text.is_empty() {
+            "{vn_name}"
+        } else {
+            &settings.large_text
+        };
+        sanitize_discord_string(&render_template(template, &tokens))
     } else {
         None
     };
@@ -882,14 +939,38 @@ pub fn build_activity(settings: &PresenceSettings, ctx: &PresenceContext) -> Pre
     // Two slots, in `EwE`'s order: the novel's VNDB page, then the user's own
     // list. Discord renders at most two, so a third would be dropped silently.
     let mut buttons = Vec::new();
-    if settings.show_buttons
-        && let Some(ref url) = ctx.vndb_url
-    {
-        push_button(&mut buttons, "View on VNDB", url);
+    if settings.use_custom_buttons {
+        if settings.show_buttons {
+            for button in settings.custom_buttons.iter().take(MAX_BUTTONS) {
+                push_button(
+                    &mut buttons,
+                    &render_template(&button.label, &tokens),
+                    &render_template(&button.url, &tokens),
+                );
+            }
+        }
+    } else {
+        if settings.show_buttons
+            && let Some(ref url) = ctx.vndb_url
+        {
+            push_button(&mut buttons, "View on VNDB", url);
+        }
+        if settings.show_list_button {
+            push_button(&mut buttons, "My VNDB List", &settings.my_vndb_link);
+        }
     }
-    if settings.show_list_button {
-        push_button(&mut buttons, "My VNDB List", &settings.my_vndb_link);
-    }
+
+    let small_image = if settings.small_image.trim().is_empty() && settings.use_exe_icon {
+        ctx.exe_icon
+            .as_ref()
+            .filter(|asset| valid_button_url(asset))
+            .cloned()
+    } else {
+        valid_image_asset(&settings.small_image).then(|| settings.small_image.trim().to_owned())
+    };
+    let small_text = small_image
+        .as_ref()
+        .and_then(|_| small_icon_tooltip(settings, ctx));
 
     PresenceActivity {
         name,
@@ -897,11 +978,25 @@ pub fn build_activity(settings: &PresenceSettings, ctx: &PresenceContext) -> Pre
         state,
         large_image,
         large_text,
-        small_image: None,
-        small_text: None,
+        small_image,
+        small_text,
         start_timestamp,
         buttons,
     }
+}
+
+/// Tooltip shared by the live small asset and its local preview.
+pub fn small_icon_tooltip(settings: &PresenceSettings, ctx: &PresenceContext) -> Option<String> {
+    let template = if settings.small_text.is_empty() && settings.small_image.trim().is_empty() {
+        if ctx.exe_name.is_empty() {
+            "{vn_name}"
+        } else {
+            "{exe_name}"
+        }
+    } else {
+        &settings.small_text
+    };
+    sanitize_discord_string(&render_template(template, &build_tokens(ctx)))
 }
 
 /// Activity key used for deduplicating identical updates to avoid spamming Discord.
@@ -1383,6 +1478,205 @@ mod tests {
         assert_eq!(loaded.client_id, "123456789012345678");
         assert_eq!(loaded.custom_details, "{vn_name}");
         assert!(loaded.show_timestamps);
+        assert!(!loaded.use_custom_buttons);
+        assert!(loaded.custom_buttons.is_empty());
+        assert!(loaded.small_image.is_empty());
+        assert!(loaded.large_image.is_empty());
+    }
+
+    #[test]
+    fn custom_assets_tooltips_and_buttons_render_from_the_current_game() {
+        let settings = PresenceSettings {
+            large_image: "cover_asset".into(),
+            large_text: "{vn_name} | {route}".into(),
+            small_image: "https://example.com/icon.png".into(),
+            small_text: "{game_state}".into(),
+            use_custom_buttons: true,
+            custom_buttons: vec![
+                PresenceButton {
+                    label: "Open {vn_name}".into(),
+                    url: "{vndb_url}".into(),
+                },
+                PresenceButton {
+                    label: "Walkthrough".into(),
+                    url: "https://example.com/guide".into(),
+                },
+                PresenceButton {
+                    label: "Extra".into(),
+                    url: "https://example.com/extra".into(),
+                },
+            ],
+            ..Default::default()
+        };
+        let ctx = PresenceContext {
+            vn_name: "Test VN".into(),
+            route: Some("Common".into()),
+            vndb_url: Some("https://vndb.org/v1".into()),
+            is_unfocused: true,
+            is_cover_explicit: true,
+            ..Default::default()
+        };
+        let activity = build_activity(&settings, &ctx);
+        assert_eq!(activity.large_image.as_deref(), Some("cover_asset"));
+        assert_eq!(activity.large_text.as_deref(), Some("Test VN | Common"));
+        assert_eq!(
+            activity.small_image.as_deref(),
+            Some("https://example.com/icon.png")
+        );
+        assert_eq!(activity.small_text.as_deref(), Some("Idle"));
+        assert_eq!(activity.buttons.len(), 2);
+        assert_eq!(activity.buttons[0].label, "Open Test VN");
+        assert_eq!(activity.buttons[0].url, "https://vndb.org/v1");
+        assert_eq!(activity.buttons[1].label, "Walkthrough");
+        let hidden = build_activity(
+            &PresenceSettings {
+                show_cover: false,
+                show_buttons: false,
+                ..settings
+            },
+            &ctx,
+        );
+        assert!(hidden.large_image.is_none());
+        assert!(hidden.buttons.is_empty());
+        assert!(
+            hidden.small_image.is_some(),
+            "the independently configured small icon remains"
+        );
+    }
+
+    #[test]
+    fn a_blank_small_asset_defaults_to_the_executable_icon() {
+        let settings: PresenceSettings = serde_json::from_str("{}").unwrap();
+        assert!(settings.use_exe_icon);
+        let ctx = PresenceContext {
+            vn_name: "Test VN".into(),
+            exe_name: "game.exe".into(),
+            exe_icon: Some("https://example.com/exe.png".into()),
+            ..Default::default()
+        };
+        let activity = build_activity(&settings, &ctx);
+        assert_eq!(activity.small_image, ctx.exe_icon);
+        assert_eq!(activity.small_text.as_deref(), Some("game.exe"));
+        let hidden_cover = build_activity(
+            &PresenceSettings {
+                show_cover: false,
+                ..settings.clone()
+            },
+            &ctx,
+        );
+        assert_eq!(hidden_cover.small_image, ctx.exe_icon);
+        let hidden_icon = build_activity(
+            &PresenceSettings {
+                use_exe_icon: false,
+                ..settings.clone()
+            },
+            &ctx,
+        );
+        assert!(hidden_icon.small_image.is_none());
+        assert!(hidden_icon.small_text.is_none());
+        let custom = build_activity(
+            &PresenceSettings {
+                small_image: "custom_icon".into(),
+                small_text: "{vn_name}".into(),
+                ..settings
+            },
+            &ctx,
+        );
+        assert_eq!(custom.small_image.as_deref(), Some("custom_icon"));
+        assert_eq!(custom.small_text.as_deref(), Some("Test VN"));
+    }
+
+    #[test]
+    fn executable_icons_never_send_local_paths_or_fall_back_after_an_invalid_override() {
+        for asset in [
+            "file:///C:/game.exe",
+            "data:image/png;base64,aA==",
+            "https://example.com/\nicon.png",
+            "icon_asset",
+        ] {
+            let ctx = PresenceContext {
+                exe_icon: Some(asset.into()),
+                ..Default::default()
+            };
+            assert!(
+                build_activity(&PresenceSettings::default(), &ctx)
+                    .small_image
+                    .is_none(),
+                "{asset}"
+            );
+        }
+        let ctx = PresenceContext {
+            exe_icon: Some("https://example.com/icon.png".into()),
+            ..Default::default()
+        };
+        let settings = PresenceSettings {
+            small_image: "../bad.png".into(),
+            ..Default::default()
+        };
+        assert!(build_activity(&settings, &ctx).small_image.is_none());
+        assert!(
+            build_activity(&PresenceSettings::default(), &PresenceContext::default())
+                .small_image
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn invalid_stored_assets_and_buttons_never_reach_discord() {
+        for bad in [
+            "file:///secret.png",
+            "data:image/png;base64,aA==",
+            "https://example.com/\nother",
+            "https:///missing-host",
+            "../cover.png",
+        ] {
+            let settings = PresenceSettings {
+                large_image: bad.into(),
+                small_image: bad.into(),
+                use_custom_buttons: true,
+                custom_buttons: vec![PresenceButton {
+                    label: "Open".into(),
+                    url: bad.into(),
+                }],
+                ..Default::default()
+            };
+            let activity = build_activity(&settings, &PresenceContext::default());
+            assert!(activity.large_image.is_none(), "{bad}");
+            assert!(activity.small_image.is_none(), "{bad}");
+            assert!(activity.buttons.is_empty(), "{bad}");
+        }
+        let settings = PresenceSettings {
+            use_custom_buttons: true,
+            custom_buttons: vec![PresenceButton {
+                label: "界".repeat(40),
+                url: "https://example.com".into(),
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            build_activity(&settings, &PresenceContext::default()).buttons[0]
+                .label
+                .chars()
+                .count(),
+            32
+        );
+    }
+
+    #[test]
+    fn custom_asset_overrides_keep_other_fields_inheriting_global_settings() {
+        let global = PresenceSettings::default();
+        let scoped = PresenceSettings {
+            small_image: "reading".into(),
+            ..global.clone()
+        };
+        let overrides = diff_settings(&global, &scoped);
+        let changed_global = PresenceSettings {
+            large_text: "{route}".into(),
+            ..global
+        };
+        let effective = overrides.apply(&changed_global);
+        assert_eq!(effective.small_image, "reading");
+        assert_eq!(effective.large_text, "{route}");
     }
 
     #[test]
