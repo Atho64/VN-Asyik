@@ -39,51 +39,48 @@ jobs:
           RELEASE_NOTES: |
             ## What's new
 
-            - On Windows, **Choose a window** links the executable behind an open
-              game window. The existing file picker remains available.
-            - Discord Presence supports large and small image assets, tooltips,
-              and two custom buttons. A blank small icon defaults to the linked
-              EXE icon on Windows. Enable an **Image Host** to display it on
-              Discord; its in-app preview stays local. Custom icons override it.
-            - Walkthroughs can refresh Google/model translations from the Japanese
-              source while preserving checked choices. Google name preparation
-              uses the cached VNDB cast. **Edit translation** saves a separate
-              local **My translation** without replacing machine translations.
-            - Fixed overlapping expanded game aliases. Desktop sidebar toggles
-              preserve the mounted screen and serialize preference saves.
-            - Right-click or press **Shift+F10** on a screenshot to **Copy image**
-              on desktop or **Save image** as PNG. Exports preserve displayed blur.
-            - The activity calendar shows reading starts with hollow dots and
-              finishes with filled dots, retaining both on a shared day.
-            - Focus-aware route/chapter timers freeze while the game is unfocused
-              and resume on return; **Paused** means an explicit pause.
-            - Android screenshot sharing now uses one-shot consent and a
-              **Capture (3s)** notification action, ending after one image.
+            - **Achievements.** 65 milestones earned automatically from your reading
+              history: playtime, daily and streak records, finishes, routes, endings,
+              journal notes and screenshots. Locked achievements show live progress;
+              unlocked ones keep their date. History is scanned on first run, and
+              unlocks sync across your devices.
+            - **Reading goals.** Custom targets for playtime or finished VNs over a
+              day, week, month or year, or a one-time all-time target, plus manual
+              targets with your own unit.
+            - **Notes and auto-resume.** A cross-game notes panel alongside the
+              per-session journal, and the route/chapter timer can auto-resume your
+              last route when you relaunch a game.
+            - **AI features removed.** The experimental companion, VN chat, Ask AI
+              and Luna hooking stack was archived and removed. Discover
+              recommendations and walkthrough translation remain, using VNDB data
+              and Google Translate without an AI model.
+            - Fixes: marking an ending achieved keeps its route link; goal cards use
+              the themed surface; achievement progress reads in hours, days or counts
+              instead of raw milliseconds.
 
             ## Downloads
 
             - **Windows:** use the `.exe` or `.msi` installer. These builds are unsigned;
               Windows SmartScreen may display a warning.
-            - **Android:** use `app-universal-release.apk`. The official build uses the
-              existing release signing key and package `com.atho.vnasyik`.
+            - **Android:** use `app-universal-release.apk`, signed with the release key,
+              package `com.atho.vnasyik`.
             - **Linux (Beta):** use the `.AppImage`. Make it executable and run it.
 
             ## Notes
 
             - Linux is Beta. Tracking supports X11 and XWayland; native Wayland
               windows cannot be tracked.
-            - Android screenshot capture requires screen-sharing consent and
-              enabled notifications. Android 14+ can share one app; older Android
-              versions share the whole display. Protected content may be blank.
+            - Android screenshot capture requires screen-sharing consent and enabled
+              notifications, and ends after one image. Android 14+ can share one app;
+              older versions share the whole display. Protected content may be blank.
               Live device capture remains unverified.
-            - Native clipboard/picker behavior, live Discord image rendering and
-              manual desktop/mobile visual checks remain unverified.
-            - Companion remains experimental and further development is paused.
-            - Build, lint, TypeScript, Rust workspace tests, Clippy and Android
-              ARM64 compilation passed during implementation. Later changes were
-              checked with focused regressions. Release preparation reused those
-              results; full suites were not repeated and no performance benchmark
-              is claimed.
+            - Achievements and goals are computed locally, with no telemetry or
+              analytics. Cumulative achievement thresholds date to when the scan first
+              observed them, not an invented historical moment.
+            - Build, lint, TypeScript, Rust workspace tests (1069 passed), Clippy and
+              Android ARM64 compilation passed during implementation; frontend tests
+              (688 passed) passed. Release preparation reused those results. No
+              performance benchmark is claimed.
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release already exists"

@@ -26,12 +26,14 @@ Buka **Panduan** di dalam aplikasi untuk bantuan pengaturan.
 - Simpan catatan sesi, pengingat save slot, rute, dan ending agar ingat terakhir sampai mana.
 - Ikuti panduan Seiya-Saiga dengan pilihan rute dan opsi terjemahan.
   Nama karakter dari data VNDB yang tersimpan diganti sebelum diterjemahkan oleh Google.
-  Pilih terjemahan Google atau model, lalu gunakan tombol segarkan untuk menerjemahkan
-  ulang dari panduan Jepang sambil mempertahankan tanda centang pilihan.
+  Gunakan tombol **Segarkan terjemahan Google** untuk menerjemahkan ulang dari panduan
+  Jepang sambil mempertahankan tanda centang pilihan.
 - Di Windows, **Pilih jendela** saat menambahkan executable menautkan program dari
   jendela game yang terbuka. Pemilih file juga tetap tersedia.
 - Lihat lini masa, aktivitas harian, dan streak baca. Bagikan rekap tahunan atau seluruh
   riwayat bacamu.
+- Dapatkan pencapaian otomatis dari riwayat bacamu: 65 milestone seputar waktu baca, streak, tamat, rute, ending, catatan, dan screenshot, dengan progres untuk yang masih terkunci.
+- Buat target baca custom (waktu baca atau VN tamat) per hari, minggu, bulan, tahun, atau target sekali sepanjang waktu, plus target manual dan catatan lintas game.
 - Ambil screenshot game di Windows atau Android, lalu lihat hasilnya per game.
 - Pilih tampilan kisi, daftar, atau rak, atau gunakan Big Picture dengan keyboard atau stik.
 - Pilih tema, atur warna, dan sembunyikan atau buramkan gambar eksplisit.
@@ -45,7 +47,7 @@ bisa berlanjut. Gunakan `Ctrl+K` untuk perintah cepat, `Ctrl+Shift+B` untuk Big 
 kombinasi tombol tersebut.
 
 **Edit terjemahan** menampilkan judul rute dan langkah di samping sumber Jepang,
-lalu menyimpan **Terjemahan saya** secara lokal tanpa mengganti versi Google atau model.
+lalu menyimpan **Terjemahan saya** secara lokal tanpa mengganti terjemahan Google.
 Nama alternatif game dilipat agar halaman game lebih ringkas. Sidebar desktop bisa
 diciutkan tanpa memuat ulang layar yang sedang dibuka.
 
@@ -86,29 +88,14 @@ sudah diimplementasikan dan diuji kompilasinya; tangkapan di perangkat belum div
 Catatan save slot hanya pengingat. VN Asyik tidak memuat save, mengubah berkas game, atau
 membaca memori game.
 
-## Fitur Beta
+## Jelajahi
 
-Aktifkan **Pengaturan > Umum > Fitur Beta** untuk membuka Rekomendasi, Chat VN, dan Teman
-baca. Fitur ini tersembunyi secara bawaan.
+Buka **Jelajahi** untuk menelusuri rekomendasi VNDB yang dicocokkan dengan game yang kamu
+mainkan dan beri nilai, berdasarkan tag, studio, penulis, ilustrator, dan pengisi suaranya.
+Data diambil langsung dari VNDB tanpa model AI atau kunci API.
 
-- **Untukmu** menyarankan VN berdasarkan game yang kamu mainkan dan beri nilai, melalui tag
-  dan kreatornya. Data diambil dari VNDB tanpa model AI atau kunci API. **Tanya** mencari
-  lewat Tavily dan bisa memakai penyedia chat untuk menjawab dengan sumber.
-- Chat VN bisa membahas koleksimu, teks langsung dari LunaTranslator, atau skrip hasil
-  impor. Ringkasan cerita lengkap membutuhkan pilihan **Izinkan semua spoiler** di chat.
-- Teman baca menyediakan obrolan dengan kepribadian pilihanmu, ingatan opsional, dan overlay
-  desktop. Di Windows, kamu juga bisa mengizinkannya melihat satu jendela game dan bereaksi
-  terhadap adegan. Suara belum tersedia. Pengembangan lanjutan teman baca sedang dijeda.
-
-Untuk chat, atur penyedia, model, dan kunci API jika diperlukan di Pengaturan. Kunci disimpan
-oleh sistem operasi. Konteks yang kamu bagikan dikirim ke penyedia tersebut, dan panggilan
-bisa dikenai biaya. Teks langsung, penggunaan ingatan, dan reaksi otomatis perlu diaktifkan
-masing-masing. Riwayat teman baca, ingatan, dan skrip impor tidak ikut sinkronisasi atau
-cadangan pustaka. Android tidak memiliki overlay mengambang dan bisa menghentikan teman
-baca di latar belakang.
-
-Tidak ada telemetri atau analitik. Fitur online terhubung ke layanan yang kamu pilih untuk
-dipakai, seperti VNDB, Discord, panduan Seiya-Saiga, dan penyedia chat.
+Tidak ada telemetri atau analitik. Fitur online hanya terhubung ke layanan yang kamu pilih
+untuk dipakai, seperti VNDB, Discord, dan panduan Seiya-Saiga.
 
 ## Pengembangan
 
@@ -156,9 +143,6 @@ cargo test --test tracking_live -- --ignored --nocapture
 - [Kizzy](https://github.com/dead8309/Kizzy) (GPL-3.0): inspirasi presence Discord di Android.
 - [KireiBox](https://github.com/Yukin0a/KireiBox) (GPL-3.0): inspirasi peluncuran engine Android
   yang dipasang terpisah.
-- [LunaTranslator](https://github.com/HIllya51/LunaTranslator) (GPL-3.0): integrasi teks
-  langsung lewat API jaringan yang terdokumentasi; tidak ada kode yang disalin.
-- LunaBox (AGPL-3.0): hanya inspirasi fitur; tidak ada kode yang disalin.
 
 ## Lisensi
 

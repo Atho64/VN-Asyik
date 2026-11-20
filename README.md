@@ -24,6 +24,8 @@ Open **Guide** inside the app for setup help.
 - Keep session notes, save-slot reminders, routes and endings so you know where you left off.
 - Follow Seiya-Saiga walkthroughs with route choices and translation options.
 - View your reading timeline, daily activity and streaks. Share yearly or all-time recap cards.
+- Earn achievements automatically from your reading history: 65 milestones across playtime, streaks, finishes, routes, endings, notes and screenshots, with live progress for the ones still locked.
+- Set custom reading goals (playtime or finished VNs) per day, week, month or year, or as a one-time all-time target, plus manual targets and cross-game notes.
 - Save screenshots of your game on Windows or Android, grouped by game.
 - Browse in grid, list or shelf view, or use Big Picture with a keyboard or controller.
 - Choose a theme, adjust colours and control whether explicit artwork is hidden or blurred.
@@ -38,13 +40,12 @@ this key combination.
 
 On Windows, **Choose a window** in the executable form links the program behind an
 open game window. The file chooser remains available. Walkthroughs replace character
-names using the cached VNDB cast before Google translation. Select Google or model
-translation, then use its **Refresh translation** button to regenerate from the
-Japanese guide while keeping your checked choices.
+names using the cached VNDB cast before Google translation. Use **Refresh Google
+translation** to regenerate from the Japanese guide while keeping your checked choices.
 
 **Edit translation** lets you correct route titles and steps beside the Japanese
-source, then save **My translation** locally without replacing Google or model
-versions. Alternate game titles fold under **Also known as** to keep game details
+source, then save **My translation** locally without replacing the Google translation.
+Alternate game titles fold under **Also known as** to keep game details
 compact. The desktop sidebar can collapse while the current screen stays mounted.
 
 Discord settings support large and small image assets, image tooltips, and up to
@@ -82,28 +83,14 @@ and compile-tested; live device capture remains unverified.
 Save-slot notes are reminders. VN Asyik does not load saves, modify game files or read game
 memory.
 
-## Beta features
+## Discover
 
-Enable **Settings > General > Beta features** for Recommendations, VN Chat and Companion.
-They are hidden by default.
+Open **Discover** to browse VNDB recommendations matched against games you have played and
+rated, using their tags, studios, writers, artists and voice actors. It fetches directly
+from VNDB without an AI model or API key.
 
-- **For you** recommends VNs based on games you have played and rated, using their tags and
-  creators. It fetches from VNDB without an AI model or API key. **Ask** searches with Tavily
-  and can use your chat provider to answer with sources.
-- VN Chat can discuss your library, live text from LunaTranslator, or imported scripts.
-  Full-story script summaries require **Allow all spoilers** in the chat's spoiler settings.
-- Companion adds a reading conversation with a chosen personality, optional saved memories
-  and a desktop overlay. On Windows, you can also let it view one selected game window and
-  react to scenes. Voice is not available. Further companion development is currently paused.
-
-For chat, set up a provider, model and any required API key in Settings. Keys stay in the
-system credential store. The context you share goes to that provider, and calls may cost
-money. Live text, saved memory use and automatic reactions each need your opt-in.
-Companion history, memories and imported scripts stay out of sync and library backups.
-Android has no floating overlay and may stop the companion in the background.
-
-There is no telemetry or analytics. Online features connect to the services you choose to
-use, such as VNDB, Discord, Seiya-Saiga walkthroughs and your chat provider.
+There is no telemetry or analytics. Online features connect only to the services you choose
+to use, such as VNDB, Discord and Seiya-Saiga walkthroughs.
 
 ## Development
 
@@ -151,9 +138,6 @@ cargo test --test tracking_live -- --ignored --nocapture
 - [Kizzy](https://github.com/dead8309/Kizzy) (GPL-3.0): inspiration for Android Discord presence.
 - [KireiBox](https://github.com/Yukin0a/KireiBox) (GPL-3.0): inspiration for launching
   separately installed Android engines.
-- [LunaTranslator](https://github.com/HIllya51/LunaTranslator) (GPL-3.0): live-text integration
-  through its documented network API; no code copied.
-- LunaBox (AGPL-3.0): feature inspiration only; no code copied.
 
 ## License
 
