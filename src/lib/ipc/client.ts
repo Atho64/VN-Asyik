@@ -47,10 +47,7 @@ import {
   conflictViewSchema,
   tasteViewSchema,
   appearanceViewSchema,
-  llmProfilesSchema,
   updateViewSchema,
-  recommendSettingsSchema,
-  recommendOutcomeSchema,
   forYouProfileSchema,
   forYouPageSchema,
   type ForYouProfile,
@@ -79,6 +76,8 @@ import {
   executableCandidateSchema,
   gameExecutableSchema,
   trackerCapabilitySchema,
+  autoRouteStatusSchema,
+  type AutoRouteStatus,
   trackingStatusSchema,
   ulistLabelInfoSchema,
   vndbAccountSchema,
@@ -104,11 +103,7 @@ import {
   type ConflictView,
   type TasteView,
   type AppearanceView,
-  type LlmProfileInput,
   type UpdateView,
-  type LlmProfiles,
-  type RecommendSettings,
-  type RecommendOutcome,
   type LaunchCapability,
   type LaunchOutcome,
   type TitleConfig,
@@ -314,7 +309,6 @@ export interface Api {
   setLanguage(value: string): Promise<Prefs>;
   setNsfwMode(value: string): Promise<Prefs>;
   setReduceEffects(value: boolean): Promise<Prefs>;
-  setBetaFeatures(value: boolean): Promise<Prefs>;
   getAfkConfig(): Promise<AfkConfig>;
   setAfkConfig(thresholdMs: number, excludeAfk: boolean): Promise<AfkConfig>;
   vndbSearch(query: string, page?: number): Promise<SearchResponse>;
@@ -372,6 +366,9 @@ export interface Api {
   trackingStatus(): Promise<TrackingStatus>;
   trackingSetEnabled(enabled: boolean): Promise<TrackerCapability>;
   trackingSetMode(mode: string): Promise<TrackerCapability>;
+  trackingSetAutoResumeRoute(enabled: boolean): Promise<TrackerCapability>;
+  trackingAutoRouteStatus(gameId: string): Promise<AutoRouteStatus>;
+  trackingClearAutoRoute(gameId: string): Promise<AutoRouteStatus>;
   trackingMapExecutable(gameId: string, exePath: string): Promise<GameExecutable>;
   trackingExecutableWindows(): Promise<ExecutableWindow[]>;
   trackingMapWindow(gameId: string, windowKey: string): Promise<GameExecutable>;
@@ -384,7 +381,7 @@ export interface Api {
   syncStatus(): Promise<SyncStatus>;
   syncRun(folder: string): Promise<SyncOutcome>;
   syncConflicts(limit: number): Promise<ConflictView[]>;
-  aiTasteProfile(): Promise<TasteView>;
+  tasteProfile(): Promise<TasteView>;
   appearanceGet(): Promise<AppearanceView>;
   appearanceSet(input: {
     accent: string | null;
@@ -407,15 +404,6 @@ export interface Api {
   themeImportFile(): Promise<ThemeView | null>;
   updateCheck(force: boolean): Promise<UpdateView>;
   updateInstall(): Promise<string>;
-  aiLlmProfiles(): Promise<LlmProfiles>;
-  aiLlmSaveProfile(input: LlmProfileInput): Promise<LlmProfiles>;
-  aiLlmActivateProfile(id: string): Promise<LlmProfiles>;
-  aiLlmDeleteProfile(id: string): Promise<LlmProfiles>;
-  aiLlmClearKey(id: string): Promise<LlmProfiles>;
-  aiRecommendSettings(): Promise<RecommendSettings>;
-  aiSaveTavilyKey(key: string): Promise<RecommendSettings>;
-  aiClearTavilyKey(): Promise<RecommendSettings>;
-  aiRecommend(request: string, depth: string): Promise<RecommendOutcome>;
   launchCapability(): Promise<LaunchCapability>;
   launchSaveSettings(input: {
     launcherDir?: string | null;
@@ -509,7 +497,7 @@ export interface Api {
   ): Promise<WalkthroughView>;
   walkthroughTranslate(
     gameId: string,
-    provider: "ai" | "google",
+    provider: "google",
     targetLang: "en" | "id",
     vnId?: string | null,
   ): Promise<WalkthroughView>;
@@ -653,7 +641,6 @@ export const api: Api = {
   setTheme: (value) => call("set_theme", prefsSchema, { value }),
   setLanguage: (value) => call("set_language", prefsSchema, { value }),
   setNsfwMode: (value) => call("set_nsfw_mode", prefsSchema, { value }),
-  setBetaFeatures: (value) => call("set_beta_features", prefsSchema, { value }),
   setReduceEffects: (value) => call("set_reduce_effects", prefsSchema, { value }),
   getAfkConfig: () => call("get_afk_config", afkConfigSchema),
   setAfkConfig: (thresholdMs, excludeAfk) =>
@@ -704,6 +691,12 @@ export const api: Api = {
   trackingSetEnabled: (enabled) =>
     call("tracking_set_enabled", trackerCapabilitySchema, { enabled }),
   trackingSetMode: (mode) => call("tracking_set_mode", trackerCapabilitySchema, { mode }),
+  trackingSetAutoResumeRoute: (enabled) =>
+    call("tracking_set_auto_resume_route", trackerCapabilitySchema, { enabled }),
+  trackingAutoRouteStatus: (gameId) =>
+    call("tracking_auto_route_status", autoRouteStatusSchema, { gameId }),
+  trackingClearAutoRoute: (gameId) =>
+    call("tracking_clear_auto_route", autoRouteStatusSchema, { gameId }),
   trackingMapExecutable: (gameId, exePath) =>
     call("tracking_map_executable", gameExecutableSchema, {
       input: { game_id: gameId, exe_path: exePath },
@@ -734,7 +727,7 @@ export const api: Api = {
   trackingAndroidSession: () =>
     call("tracking_android_session", androidSessionViewSchema),
   trackingAndroidStop: () => call("tracking_android_stop", androidSessionViewSchema),
-  aiTasteProfile: () => call("ai_taste_profile", tasteViewSchema),
+  tasteProfile: () => call("taste_profile", tasteViewSchema),
   appearanceGet: () => call("appearance_get", appearanceViewSchema),
   appearanceSet: (input) => call("appearance_set", appearanceViewSchema, { input }),
   screenshotStatus: () => call("screenshot_status", captureStatusSchema),
@@ -752,17 +745,6 @@ export const api: Api = {
   themeImportFile: () => call("theme_import_file", themeSchema.nullable()),
   updateCheck: (force) => call("update_check", updateViewSchema, { force }),
   updateInstall: () => call("update_install", z.string()),
-  aiLlmProfiles: () => call("ai_llm_profiles", llmProfilesSchema),
-  aiLlmSaveProfile: (input) => call("ai_llm_save_profile", llmProfilesSchema, { input }),
-  aiLlmActivateProfile: (id) =>
-    call("ai_llm_activate_profile", llmProfilesSchema, { id }),
-  aiLlmDeleteProfile: (id) => call("ai_llm_delete_profile", llmProfilesSchema, { id }),
-  aiLlmClearKey: (id) => call("ai_llm_clear_key", llmProfilesSchema, { id }),
-  aiRecommendSettings: () => call("ai_recommend_settings", recommendSettingsSchema),
-  aiSaveTavilyKey: (key) => call("ai_save_tavily_key", recommendSettingsSchema, { key }),
-  aiClearTavilyKey: () => call("ai_clear_tavily_key", recommendSettingsSchema),
-  aiRecommend: (request, depth) =>
-    call("ai_recommend", recommendOutcomeSchema, { request, depth }),
   launchCapability: () => call("launch_capability", launchCapabilitySchema),
   launchSaveSettings: (input) =>
     call("launch_save_settings", launchCapabilitySchema, { input }),
@@ -853,7 +835,7 @@ export const api: Api = {
     }),
   walkthroughTranslate: (
     gameId: string,
-    provider: "ai" | "google",
+    provider: "google",
     targetLang: "en" | "id",
     vnId?: string | null,
   ) =>

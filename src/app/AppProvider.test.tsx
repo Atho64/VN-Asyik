@@ -38,7 +38,6 @@ vi.mock("@/lib/ipc/client", () => ({
       language: "en",
       nsfw: "blur",
       reduce_effects: false,
-      beta_features: false,
     }),
     uiPrefsGet: vi.fn().mockResolvedValue({
       sidebar_compact: false,
@@ -101,7 +100,6 @@ beforeEach(() => {
       language: "en",
       nsfw: "blur",
       reduce_effects: false,
-      beta_features: false,
     },
   });
 });

@@ -12,8 +12,6 @@ interface PaletteAction {
   id: string;
   label: string;
   hint?: string;
-  /** Beta-gated surfaces disappear together with the rest of the companion UI. */
-  beta?: boolean;
   run: () => void;
 }
 
@@ -21,14 +19,11 @@ interface PaletteAction {
  * Command palette. Desktop shortcut Ctrl/Cmd+K.
  *
  * Two groups only, and both are real: screens that exist and games that exist.
- * Typing a game title navigates; there is no fuzzy "AI command" pretending to do
- * things that are not built.
  */
 export function CommandPalette({ onAddGame }: { onAddGame: () => void }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const setOpen = useAppStore((state) => state.setPaletteOpen);
-  const beta = useAppStore((state) => state.prefs.beta_features);
   const cards = useAppStore((state) => state.cards);
   const isAndroid = useAppStore((state) => state.platform?.os === "android");
   const [query, setQuery] = useState("");
@@ -41,28 +36,18 @@ export function CommandPalette({ onAddGame }: { onAddGame: () => void }) {
   const actions = useMemo<PaletteAction[]>(() => {
     const entries: PaletteAction[] = [
       {
-        id: "nav-companion",
-        label: t("companion.title"),
-        beta: true,
-        run: () => {
-          void navigate("/companion");
-          close();
-        },
-      },
-      {
-        id: "nav-chat",
-        label: t("vnchat.title"),
-        beta: true,
-        run: () => {
-          void navigate("/chat");
-          close();
-        },
-      },
-      {
         id: "nav-library",
         label: t("palette.goLibrary"),
         run: () => {
           void navigate("/");
+          close();
+        },
+      },
+      {
+        id: "nav-recommend",
+        label: t("nav.recommend"),
+        run: () => {
+          void navigate("/recommend");
           close();
         },
       },
@@ -158,11 +143,10 @@ export function CommandPalette({ onAddGame }: { onAddGame: () => void }) {
       },
     ];
 
-    const visible = entries.filter((entry) => beta || !entry.beta);
     const needle = query.trim();
-    if (needle.length === 0) return visible;
+    if (needle.length === 0) return entries;
 
-    const matchedActions = visible.filter((entry) =>
+    const matchedActions = entries.filter((entry) =>
       entry.label.toLowerCase().includes(needle.toLowerCase()),
     );
     // Ranked, not filtered: typing "clannad" should offer CLANNAD before a
@@ -183,7 +167,7 @@ export function CommandPalette({ onAddGame }: { onAddGame: () => void }) {
       }));
 
     return [...matchedActions, ...matchedGames];
-  }, [beta, cards, close, isAndroid, navigate, onAddGame, query, t]);
+  }, [cards, close, isAndroid, navigate, onAddGame, query, t]);
 
   useModalFocusTrap(panelRef, true, close, inputRef);
 

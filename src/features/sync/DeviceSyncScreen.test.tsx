@@ -74,7 +74,6 @@ const restoredPrefs = {
   language: "id",
   nsfw: "hide",
   reduce_effects: true,
-  beta_features: false,
 } as const;
 
 beforeEach(() => {
@@ -106,7 +105,6 @@ beforeEach(() => {
       language: "en",
       nsfw: "blur",
       reduce_effects: false,
-      beta_features: false,
     },
     toasts: [],
     libraryLoaded: false,

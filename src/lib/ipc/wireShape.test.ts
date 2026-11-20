@@ -9,8 +9,10 @@ import {
   presenceActivitySchema,
   presenceSettingsSchema,
   presenceStatusSchema,
+  achievementViewSchema,
+  achievementsEvaluateSchema,
+  achievementsUnlockedSchema,
 } from "./types";
-import { scriptDocumentSchema } from "./script";
 
 describe("localArtSchema", () => {
   it("accepts the snake_case shape both art commands return", () => {
@@ -101,8 +103,75 @@ describe("presenceSettingsSchema", () => {
       vndb_loading_details: "Reading",
       vndb_loading_state: "Loading VNDB data...",
       rpc_image_host: "none",
+      title_language: "romaji",
     });
     expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.title_language).toBe("romaji");
+    }
+  });
+
+  it("rejects unknown title_language values", () => {
+    const parsed = presenceSettingsSchema.safeParse({
+      enabled: true,
+      client_id: "",
+      details_mode: "vndb",
+      manual_details: "",
+      manual_state: "",
+      custom_details: "{vn_name}",
+      custom_state: "{chapter}",
+      show_cover: true,
+      show_buttons: true,
+      show_list_button: false,
+      show_timestamps: true,
+      show_when_unfocused: true,
+      activity_name: null,
+      cycle_vndb_details: false,
+      cycle_seconds: 5,
+      custom_details_items: [],
+      custom_state_items: [],
+      custom_details_rotate: false,
+      custom_state_rotate: false,
+      custom_details_cycle_seconds: 5,
+      custom_state_cycle_seconds: 5,
+      vndb_details_items: [],
+      vndb_state_template: "",
+      vndb_swap_details_state: false,
+      custom_details_transform: {
+        prefix: "",
+        suffix: "",
+        remove: [],
+        replace: [],
+        trim: false,
+      },
+      custom_state_transform: {
+        prefix: "",
+        suffix: "",
+        remove: [],
+        replace: [],
+        trim: false,
+      },
+      vndb_details_transform: {
+        prefix: "",
+        suffix: "",
+        remove: [],
+        replace: [],
+        trim: false,
+      },
+      vndb_state_transform: {
+        prefix: "",
+        suffix: "",
+        remove: [],
+        replace: [],
+        trim: false,
+      },
+      my_vndb_link: "",
+      vndb_loading_details: "Reading",
+      vndb_loading_state: "Loading VNDB data...",
+      rpc_image_host: "none",
+      title_language: "klingon",
+    });
+    expect(parsed.success).toBe(false);
   });
 
   it("rejects camelCase payload", () => {
@@ -146,21 +215,58 @@ describe("presenceActivitySchema", () => {
   });
 });
 
-describe("scriptDocumentSchema", () => {
-  it("keeps camelCase chunkCount from ScriptDocumentInfo", () => {
-    const parsed = scriptDocumentSchema.parse({
-      id: "doc-1",
-      gameId: "game-1",
-      engine: "kirikiri",
-      sourceKind: "plain_text",
-      sourcePath: "script.txt",
-      sourceSha256: "ab".repeat(32),
-      lineCount: 120,
-      byteSize: 4096,
-      chunkCount: 3,
-      createdAt: 1700000000000,
-      compaction: null,
+describe("achievementViewSchema", () => {
+  const view = {
+    slug: "playtime-10h",
+    tier: "bronze",
+    group: "A",
+    unlocked: false,
+    progress: 36_000_000,
+    target: 36_000_000,
+    unlockedAt: null,
+  };
+
+  it("accepts the camelCase shape `AchievementView` serializes", () => {
+    expect(achievementViewSchema.safeParse(view).success).toBe(true);
+    expect(
+      achievementViewSchema.safeParse({ ...view, unlocked: true, unlockedAt: 1700 }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a snake_case unlock date instead of silently dropping it", () => {
+    const parsed = achievementViewSchema.safeParse({
+      ...view,
+      unlocked_at: 1700,
+      unlockedAt: undefined,
     });
-    expect(parsed.chunkCount).toBe(3);
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects tier and group values outside the catalog enums", () => {
+    expect(achievementViewSchema.safeParse({ ...view, tier: "gold " }).success).toBe(false);
+    expect(achievementViewSchema.safeParse({ ...view, tier: "platinum" }).success).toBe(false);
+    expect(achievementViewSchema.safeParse({ ...view, group: "G" }).success).toBe(false);
+  });
+});
+
+describe("achievementsEvaluateSchema", () => {
+  it("accepts the bare slug array the command returns", () => {
+    expect(achievementsEvaluateSchema.safeParse(["first-session"]).success).toBe(true);
+    expect(achievementsEvaluateSchema.safeParse([]).success).toBe(true);
+  });
+
+  it("rejects the event's object shape: the command and the event differ", () => {
+    expect(achievementsEvaluateSchema.safeParse({ slugs: ["first-session"] }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe("achievementsUnlockedSchema", () => {
+  it("accepts the emitted event payload and rejects a bare array", () => {
+    expect(achievementsUnlockedSchema.safeParse({ slugs: ["first-session"] }).success).toBe(
+      true,
+    );
+    expect(achievementsUnlockedSchema.safeParse(["first-session"]).success).toBe(false);
   });
 });

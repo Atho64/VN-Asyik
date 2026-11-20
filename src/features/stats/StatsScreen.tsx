@@ -5,6 +5,7 @@ import { useI18n } from "@/app/useI18n";
 import { AllTimeWrapped } from "@/features/stats/AllTimeWrapped";
 import { OnThisDay } from "@/features/stats/OnThisDay";
 import { TastePanel } from "@/features/stats/TastePanel";
+import { AchievementStatsCard } from "@/features/achievements/AchievementStatsCard";
 import { TimeStats } from "@/features/stats/TimeStats";
 import { YearReview } from "@/features/stats/YearReview";
 import { Card, CardHeader } from "@/components/Card";
@@ -288,6 +289,7 @@ export function StatsScreen() {
               ))}
             </div>
           </Card>
+          <AchievementStatsCard />
         </>
       ) : null}
 

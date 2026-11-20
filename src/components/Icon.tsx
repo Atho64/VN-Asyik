@@ -35,7 +35,8 @@ export type IconName =
   | "trash"
   | "sync"
   | "external"
-  | "sidebar";
+  | "sidebar"
+  | "achievements";
 
 interface IconProps {
   name: IconName;
@@ -187,6 +188,14 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
       <path d="M9.5 4.5v15" />
+    </>
+  ),
+  // A medal on a ribbon with a check: an earned milestone, not a generic sparkle.
+  achievements: (
+    <>
+      <path d="M8 3h8M8 3l2.3 6M16 3l-2.3 6" />
+      <circle cx="12" cy="15" r="5.5" />
+      <path d="M9.7 15l1.7 1.7 3-3.4" />
     </>
   ),
 };

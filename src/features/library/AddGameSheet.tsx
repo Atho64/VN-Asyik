@@ -10,6 +10,10 @@ import { api, IpcError } from "@/lib/ipc/client";
 import { isExplicitHit, searchHits } from "@/lib/vndbSearch";
 import type { GameStatus, SearchHit } from "@/lib/ipc/types";
 import { statusOrder } from "@/lib/library";
+import {
+  achievementsNoteDiscoverImport,
+  requestAchievementsRefresh,
+} from "@/lib/ipc/achievements";
 
 interface AddGameSheetProps {
   open: boolean;
@@ -96,6 +100,12 @@ export function AddGameSheet({ open, onClose }: AddGameSheetProps) {
       if (outcome.cover_error) {
         pushToast("error", t("add.coverFailed"));
       }
+      // F4: a game imported from the VNDB search surface is a discovery. The
+      // marker command evaluates and emits backend-side; the refresh request
+      // coalesces with any other edit so the catalog re-checks once.
+      void achievementsNoteDiscoverImport()
+        .then(() => requestAchievementsRefresh())
+        .catch(() => undefined);
       onClose();
     } catch (caught) {
       pushToast(

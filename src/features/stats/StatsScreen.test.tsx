@@ -43,6 +43,10 @@ vi.mock("@/features/stats/TastePanel", () => ({
   TastePanel: () => <div data-testid="taste-panel" />,
 }));
 
+vi.mock("@/features/achievements/AchievementStatsCard", () => ({
+  AchievementStatsCard: () => <div data-testid="achievement-stats" />,
+}));
+
 const { StatsScreen } = await import("./StatsScreen");
 
 const t = createTranslator("en");

@@ -2,7 +2,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 
-import { BetaRoute } from "@/app/BetaRoute";
 import { AppProvider } from "@/app/AppProvider";
 import { AppShellWithMenu } from "@/app/AppShell";
 import { LibraryScreen } from "@/features/library/LibraryScreen";
@@ -11,20 +10,6 @@ import "@/styles/index.css";
 
 /** Split non-home routes lazily while keeping `LibraryScreen` eager so first paint has no blank frame. */
 const router = createBrowserRouter([
-  {
-    path: "/companion-overlay",
-    errorElement: <RouteError />,
-    lazy: async () => {
-      const { CompanionOverlay } = await import("@/features/companion/CompanionOverlay");
-      return {
-        Component: () => (
-          <BetaRoute overlay>
-            <CompanionOverlay />
-          </BetaRoute>
-        ),
-      };
-    },
-  },
   {
     path: "/",
     element: <AppShellWithMenu />,
@@ -90,7 +75,9 @@ const router = createBrowserRouter([
         lazy: async () => {
           const { default: SettingsScreen } =
             await import("@/features/settings/SettingsScreen");
-          return { Component: () => <SettingsScreen key="tracking" initialTab="tracking" /> };
+          return {
+            Component: () => <SettingsScreen key="tracking" initialTab="tracking" />,
+          };
         },
       },
       {
@@ -98,13 +85,15 @@ const router = createBrowserRouter([
         lazy: async () => {
           const { RecommendScreen } =
             await import("@/features/recommend/RecommendScreen");
-          return {
-            Component: () => (
-              <BetaRoute>
-                <RecommendScreen />
-              </BetaRoute>
-            ),
-          };
+          return { Component: RecommendScreen };
+        },
+      },
+      {
+        path: "achievements",
+        lazy: async () => {
+          const { AchievementsScreen } =
+            await import("@/features/achievements/AchievementsScreen");
+          return { Component: AchievementsScreen };
         },
       },
       {
@@ -122,33 +111,6 @@ const router = createBrowserRouter([
           return { Component: PresenceScreen };
         },
       },
-      {
-        path: "chat",
-        lazy: async () => {
-          const { ChatScreen } = await import("@/features/chat/ChatScreen");
-          return {
-            Component: () => (
-              <BetaRoute>
-                <ChatScreen />
-              </BetaRoute>
-            ),
-          };
-        },
-      },
-      {
-        path: "companion",
-        lazy: async () => {
-          const { CompanionScreen } =
-            await import("@/features/companion/CompanionScreen");
-          return {
-            Component: () => (
-              <BetaRoute>
-                <CompanionScreen />
-              </BetaRoute>
-            ),
-          };
-        },
-      },
     ],
   },
 ]);
@@ -160,7 +122,7 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <AppProvider companionWindow={window.location.pathname === "/companion-overlay"}>
+    <AppProvider>
       <RouterProvider router={router} />
     </AppProvider>
   </StrictMode>,

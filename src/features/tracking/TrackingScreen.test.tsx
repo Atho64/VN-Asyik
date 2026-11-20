@@ -17,7 +17,9 @@ const mocks = vi.hoisted(() => ({
   openUsageSettings: vi.fn().mockResolvedValue(undefined),
   androidSession: vi.fn(),
   androidStop: vi.fn(),
+  setAutoResumeRoute: vi.fn(),
   available: false,
+  autoResumeRoute: true,
   usage: {
     applicable: false,
     granted: false,
@@ -33,8 +35,11 @@ vi.mock("@/lib/ipc/client", () => ({
       available: mocks.available,
       reason: mocks.available ? null : "unsupported on Android",
       enabled: true,
+      mode: "auto",
+      auto_resume_route: mocks.autoResumeRoute,
       poll_interval_ms: 2000,
     })),
+    trackingSetAutoResumeRoute: mocks.setAutoResumeRoute,
     trackingListExecutables: vi.fn().mockResolvedValue([]),
     trackingListScanFolders: vi.fn().mockResolvedValue([]),
     trackingUsageAccess: vi.fn(async () => mocks.usage),
@@ -99,8 +104,17 @@ const SESSION = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.autoResumeRoute = true;
   mocks.androidSession.mockResolvedValue(SESSION);
   mocks.androidStop.mockResolvedValue({ ...SESSION, active: false });
+  mocks.setAutoResumeRoute.mockImplementation(async (enabled: boolean) => ({
+    available: mocks.available,
+    reason: mocks.available ? null : "unsupported on Android",
+    enabled: true,
+    mode: "auto",
+    auto_resume_route: enabled,
+    poll_interval_ms: 2000,
+  }));
 });
 
 afterEach(() => vi.useRealTimers());
@@ -202,5 +216,32 @@ describe("Linux Beta tracking notice", () => {
     } finally {
       useAppStore.setState({ platform: prev });
     }
+  });
+});
+
+describe("Auto-resume last route timer toggle", () => {
+  it("toggles auto-resume on desktop tracking settings", async () => {
+    renderScreen({ applicable: false, granted: false, settingsAction: null, reason: null }, true);
+    const chip = await screen.findByRole("button", {
+      name: "Auto-resume last route timer",
+    });
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(chip);
+    expect(mocks.setAutoResumeRoute).toHaveBeenCalledWith(false);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Auto-resume last route timer" }),
+      ).toHaveAttribute("aria-pressed", "false");
+    });
+  });
+
+  it("exposes the auto-resume toggle on Android even when desktop process polling is unavailable", async () => {
+    renderScreen({ ...NOT_GRANTED, granted: true }, false);
+    const chip = await screen.findByRole("button", {
+      name: "Auto-resume last route timer",
+    });
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(chip);
+    expect(mocks.setAutoResumeRoute).toHaveBeenCalledWith(false);
   });
 });

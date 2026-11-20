@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   trackingCreateChapter: vi.fn(),
   trackingManualPause: vi.fn(),
   trackingManualResume: vi.fn(),
+  trackingAutoRouteStatus: vi.fn(),
+  trackingClearAutoRoute: vi.fn(),
   createEnding: vi.fn(),
   listEndings: vi.fn(),
   updateEnding: vi.fn(),
@@ -129,6 +131,18 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.trackingManualStatus.mockResolvedValue(idleTimer);
   mocks.trackingChapterCapability.mockResolvedValue(capability);
+  mocks.trackingAutoRouteStatus.mockResolvedValue({
+    enabled: true,
+    routeId: null,
+    chapterId: null,
+    targetName: null,
+  });
+  mocks.trackingClearAutoRoute.mockResolvedValue({
+    enabled: true,
+    routeId: null,
+    chapterId: null,
+    targetName: null,
+  });
   mocks.listEndings.mockResolvedValue([]);
 });
 
@@ -518,5 +532,45 @@ describe("Routes card", () => {
     expect(onAddTime).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Adjust playtime" }));
     expect(onAdjustPlaytime).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the remembered next-launch route when idle and lets the reader clear it", async () => {
+    mocks.gameRoutes.mockResolvedValue([route()]);
+    mocks.trackingAutoRouteStatus.mockResolvedValue({
+      enabled: true,
+      routeId: "r1",
+      chapterId: null,
+      targetName: "Shiroha",
+    });
+
+    renderCard();
+
+    expect(await screen.findByText("Next launch will time Shiroha")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(mocks.trackingClearAutoRoute).toHaveBeenCalledWith("g1");
+    await waitFor(() => {
+      expect(screen.queryByText("Next launch will time Shiroha")).toBeNull();
+    });
+  });
+
+  it("refreshes the manual timer when the window regains focus after an auto-resumed launch", async () => {
+    mocks.gameRoutes.mockResolvedValue([route()]);
+    renderCard();
+    expect(await screen.findByText("Shiroha")).toBeTruthy();
+
+    mocks.trackingManualStatus.mockResolvedValue({
+      ...idleTimer,
+      active: true,
+      running: true,
+      phase: "tracking",
+      routeId: "r1",
+      chapterName: "Shiroha",
+      elapsedMs: 4_000,
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(await screen.findByText("Timing Shiroha")).toBeTruthy();
   });
 });

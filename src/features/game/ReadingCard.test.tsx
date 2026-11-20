@@ -150,10 +150,16 @@ describe("reading checkpoints", () => {
     expect(within(details).getByText("2 min")).toBeInTheDocument();
     expect(within(details).queryByText("Before the choice")).not.toBeInTheDocument();
     expect(details.querySelector(".reading__session-facts")).toBeInTheDocument();
-    await user.click(within(details).getByRole("button", { name: "Add checkpoint" }));
+    await user.click(within(details).getByRole("button", { name: "Add journal entry" }));
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByLabelText("Route")).toHaveValue("Old route");
-    await user.type(screen.getByLabelText("Session note"), "Earlier choice");
+    const storyBox = screen.getByLabelText("Story notes");
+    expect(storyBox).toHaveClass("reading__journal-input");
+    expect(storyBox).toHaveAttribute(
+      "placeholder",
+      expect.stringContaining("What happened in this scene?"),
+    );
+    await user.type(storyBox, "Earlier choice");
     mocks.context.mockResolvedValue({
       ...initial,
       latestSession: { ...initial.latestSession, id: "newest-session" },
@@ -161,10 +167,10 @@ describe("reading checkpoints", () => {
     fireEvent(window, new Event("focus"));
     await waitFor(() => expect(mocks.context).toHaveBeenCalledTimes(2));
     mocks.save.mockRejectedValueOnce(new Error("disk full"));
-    await user.click(screen.getByRole("button", { name: "Save checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Save entry" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Your text is still here");
     expect(changed).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Session note")).toHaveValue("Earlier choice");
+    expect(screen.getByLabelText("Story notes")).toHaveValue("Earlier choice");
     const saved = {
       ...entry,
       session_id: "old-session",
@@ -172,7 +178,7 @@ describe("reading checkpoints", () => {
       route_name: "Old route",
     };
     mocks.session.mockResolvedValue({ session: older, entries: [saved], hasMore: false });
-    await user.click(screen.getByRole("button", { name: "Save checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Save entry" }));
     expect(mocks.save).toHaveBeenLastCalledWith(
       expect.objectContaining({
         session_id: "old-session",
@@ -212,11 +218,11 @@ describe("reading checkpoints", () => {
     expect(await within(details).findByText("Old checkpoint 10")).toBeInTheDocument();
     expect(mocks.session).toHaveBeenLastCalledWith("game-1", "old-session", 10);
     await user.click(
-      within(details).getAllByRole("button", { name: "Edit checkpoint" })[0]!,
+      within(details).getAllByRole("button", { name: "Edit entry" })[0]!,
     );
     await user.clear(screen.getByLabelText("Save slot"));
     await user.type(screen.getByLabelText("Save slot"), "21");
-    await user.click(screen.getByRole("button", { name: "Save checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Save entry" }));
     await screen.findByRole("dialog", { name: "Reading session" });
     expect(mocks.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -229,13 +235,13 @@ describe("reading checkpoints", () => {
     const updatedDetails = screen.getByRole("dialog", { name: "Reading session" });
     await within(updatedDetails).findByText("Old checkpoint 0");
     await user.click(
-      within(updatedDetails).getAllByRole("button", { name: "Delete checkpoint" })[0]!,
+      within(updatedDetails).getAllByRole("button", { name: "Delete entry" })[0]!,
     );
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Delete checkpoint",
+        name: "Delete entry",
       }),
     );
     await screen.findByRole("dialog", { name: "Reading session" });
@@ -252,7 +258,7 @@ describe("reading checkpoints", () => {
       "Could not refresh this session",
     );
     expect(
-      within(details).queryByRole("button", { name: "Add checkpoint" }),
+      within(details).queryByRole("button", { name: "Add journal entry" }),
     ).not.toBeInTheDocument();
     mocks.session.mockResolvedValue({
       session: { ...initial.latestSession, id: "missing-session" },
@@ -261,7 +267,7 @@ describe("reading checkpoints", () => {
     });
     await user.click(within(details).getByRole("button", { name: "Reload journal" }));
     expect(
-      await within(details).findByRole("button", { name: "Add checkpoint" }),
+      await within(details).findByRole("button", { name: "Add journal entry" }),
     ).toBeEnabled();
   });
 
@@ -272,10 +278,10 @@ describe("reading checkpoints", () => {
     expect(await screen.findByText(/No reading session recorded/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open walkthrough" }));
     expect(guide).toHaveBeenCalledOnce();
-    await user.click(screen.getByRole("button", { name: "Add checkpoint" }));
-    expect(screen.getByRole("button", { name: "Save checkpoint" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Add journal entry" }));
+    expect(screen.getByRole("button", { name: "Save entry" })).toBeDisabled();
     await user.type(screen.getByLabelText("Save slot"), "12");
-    await user.click(screen.getByRole("button", { name: "Save checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Save entry" }));
     expect(mocks.save).toHaveBeenCalledWith(
       expect.objectContaining({
         game_id: "game-1",
@@ -304,10 +310,10 @@ describe("reading checkpoints", () => {
     ).toBeInTheDocument();
     expect(within(session).queryByText("Shizuku")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Where did I leave off?" }).closest("section"),
+      screen.getByRole("heading", { name: "Story journal" }).closest("section"),
     ).toHaveClass("reading-card");
     expect(
-      screen.getByText("Last checkpoint").closest(".reading__overview"),
+      screen.getByText("Latest journal entry").closest(".reading__overview"),
     ).toBeInTheDocument();
   });
 
@@ -316,8 +322,8 @@ describe("reading checkpoints", () => {
     mocks.save.mockRejectedValueOnce(new Error("disk full"));
     mount();
     await screen.findByText("Before the choice");
-    await user.click(screen.getByRole("button", { name: "Add checkpoint" }));
-    await user.type(screen.getByLabelText("Session note"), "Continue tomorrow");
+    await user.click(screen.getByRole("button", { name: "Add journal entry" }));
+    await user.type(screen.getByLabelText("Story notes"), "Continue tomorrow");
     expect(screen.getByLabelText("Route")).toHaveValue("Shizuku");
     mocks.context.mockResolvedValue({
       ...initial,
@@ -329,9 +335,9 @@ describe("reading checkpoints", () => {
     });
     fireEvent(window, new Event("focus"));
     await waitFor(() => expect(mocks.context).toHaveBeenCalledTimes(2));
-    await user.click(screen.getByRole("button", { name: "Save checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Save entry" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Your text is still here");
-    expect(screen.getByLabelText("Session note")).toHaveValue("Continue tomorrow");
+    expect(screen.getByLabelText("Story notes")).toHaveValue("Continue tomorrow");
     expect(mocks.save).toHaveBeenCalledWith(
       expect.objectContaining({ session_id: "session-1", route_name: "Shizuku" }),
     );
@@ -348,8 +354,8 @@ describe("reading checkpoints", () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText("Before the choice");
-    await user.click(screen.getByRole("button", { name: "Edit checkpoint" }));
-    await user.dblClick(screen.getByRole("button", { name: "Save checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Edit entry" }));
+    await user.dblClick(screen.getByRole("button", { name: "Save entry" }));
     expect(mocks.save).toHaveBeenCalledOnce();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -361,11 +367,11 @@ describe("reading checkpoints", () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText("Before the choice");
-    await user.click(screen.getByRole("button", { name: "Edit checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Edit entry" }));
     await user.clear(screen.getByLabelText("Save slot"));
     await user.type(screen.getByLabelText("Save slot"), "13");
     mocks.save.mockRejectedValueOnce(new IpcError("reading_conflict", "changed"));
-    await user.click(screen.getByRole("button", { name: "Save checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Save entry" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("changed or was deleted");
     expect(mocks.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -375,10 +381,10 @@ describe("reading checkpoints", () => {
       }),
     );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Delete checkpoint" }));
+    await user.click(screen.getByRole("button", { name: "Delete entry" }));
     expect(mocks.remove).not.toHaveBeenCalled();
     const dialog = screen.getByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: "Delete checkpoint" }));
+    await user.click(within(dialog).getByRole("button", { name: "Delete entry" }));
     expect(mocks.remove).toHaveBeenCalledWith("game-1", entry);
   });
 
@@ -396,7 +402,7 @@ describe("reading checkpoints", () => {
     await user.click(screen.getByRole("button", { name: "Reload journal" }));
     await screen.findByText("Checkpoint 0");
     expect(screen.queryByText("Checkpoint 1")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reading journal" }));
+    await user.click(screen.getByRole("button", { name: "All journal entries" }));
     expect(screen.getByText("Checkpoint 1")).toBeInTheDocument();
     mocks.context.mockResolvedValueOnce({
       ...initial,
@@ -444,7 +450,7 @@ describe("journal photos and export", () => {
   it("pins a screenshot to a checkpoint and saves its id", async () => {
     const user = userEvent.setup();
     mount();
-    await user.click(await screen.findByRole("button", { name: "Add checkpoint" }));
+    await user.click(await screen.findByRole("button", { name: "Add journal entry" }));
     await user.click(screen.getByRole("button", { name: "Pin a screenshot" }));
 
     const picker = await screen.findByRole("dialog", { name: "Pin a screenshot" });
@@ -456,9 +462,9 @@ describe("journal photos and export", () => {
 
     // The chosen photo is painted in the form, and it alone is enough to save:
     // a photo diary entry does not need a caption.
-    const form = screen.getByRole("dialog", { name: "Add checkpoint" });
+    const form = screen.getByRole("dialog", { name: "Add journal entry" });
     expect(await within(form).findByAltText(/Screenshot pinned to a journal/)).toBeInTheDocument();
-    const save = within(form).getByRole("button", { name: "Save checkpoint" });
+    const save = within(form).getByRole("button", { name: "Save entry" });
     expect(save).toBeEnabled();
     await user.click(save);
     expect(mocks.save).toHaveBeenCalledWith(

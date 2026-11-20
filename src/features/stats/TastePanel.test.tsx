@@ -7,7 +7,7 @@ import { TastePanel } from "./TastePanel";
 
 vi.mock("@/lib/ipc/client", () => ({
   api: {
-    aiTasteProfile: vi.fn(),
+    tasteProfile: vi.fn(),
   },
   // The real signature, so a rejection carries its message like the wire does.
   IpcError: class extends Error {
@@ -43,7 +43,7 @@ const seeded = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(api.aiTasteProfile).mockResolvedValue(seeded);
+  vi.mocked(api.tasteProfile).mockResolvedValue(seeded);
 });
 
 function renderPanel() {
@@ -90,7 +90,7 @@ describe("taste panel", () => {
 
   it("falls back to the plain tag count when nothing is rated", async () => {
     // Seeds want ratings; an unrated library must not lose its theme list.
-    vi.mocked(api.aiTasteProfile).mockResolvedValue({
+    vi.mocked(api.tasteProfile).mockResolvedValue({
       profile: {
         considered: 4,
         undetermined: [],
@@ -117,7 +117,7 @@ describe("taste panel", () => {
   });
 
   it("asks for VNDB details when a ready library has no creator seeds", async () => {
-    vi.mocked(api.aiTasteProfile).mockResolvedValue({
+    vi.mocked(api.tasteProfile).mockResolvedValue({
       profile: { considered: 5, undetermined: [], themes: [] },
       seeds: {
         ready: true,
@@ -148,7 +148,7 @@ describe("taste panel", () => {
   });
 
   it("shows the empty state when there is nothing at all", async () => {
-    vi.mocked(api.aiTasteProfile).mockResolvedValue({
+    vi.mocked(api.tasteProfile).mockResolvedValue({
       profile: { considered: 0, undetermined: [], themes: [] },
       seeds: {
         ready: false,
@@ -166,7 +166,7 @@ describe("taste panel", () => {
   });
 
   it("shows the backend error instead of a blank card", async () => {
-    vi.mocked(api.aiTasteProfile).mockRejectedValue(new IpcError("db", "db down"));
+    vi.mocked(api.tasteProfile).mockRejectedValue(new IpcError("db", "db down"));
     renderPanel();
     expect(await screen.findByRole("alert")).toHaveTextContent("db down");
   });

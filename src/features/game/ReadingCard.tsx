@@ -17,6 +17,7 @@ import {
   type SessionReadingContext,
 } from "@/lib/ipc/reading";
 import { formatDateTime, formatDurationLong } from "@/lib/time";
+import { requestAchievementsRefresh } from "@/lib/ipc/achievements";
 
 interface ReadingCardProps {
   gameId: string;
@@ -251,6 +252,8 @@ export function ReadingCard({
     setFormError(null);
     try {
       await operation();
+      // A journal save or delete can move the note achievements.
+      requestAchievementsRefresh();
       onEntriesChange();
       setDraft(null);
       setDeleting(null);
@@ -571,6 +574,19 @@ export function ReadingCard({
             }}
           >
             <p className="caption">{t("reading.manualHint")}</p>
+            <label className="field" htmlFor={`${fieldId}-note`}>
+              <span className="field__label">{t("reading.note")}</span>
+              <textarea
+                className="textarea reading__journal-input"
+                id={`${fieldId}-note`}
+                value={draft.note}
+                maxLength={4000}
+                rows={6}
+                disabled={busy}
+                placeholder={t("reading.placeholder")}
+                onChange={(event) => updateDraft("note", event.target.value)}
+              />
+            </label>
             <div className="reading__fields">
               {(["route_name", "chapter_name", "save_slot"] as const).map((field) => (
                 <label className="field" key={field} htmlFor={`${fieldId}-${field}`}>
@@ -635,19 +651,6 @@ export function ReadingCard({
                 </Button>
               )}
             </div>
-            <label className="field" htmlFor={`${fieldId}-note`}>
-              <span className="field__label">{t("reading.note")}</span>
-              <textarea
-                className="textarea"
-                id={`${fieldId}-note`}
-                value={draft.note}
-                maxLength={4000}
-                rows={5}
-                disabled={busy}
-                placeholder={t("reading.placeholder")}
-                onChange={(event) => updateDraft("note", event.target.value)}
-              />
-            </label>
             <p className="caption">
               {draft.session_id ? t("reading.linkedSession") : t("reading.manualEntry")}
             </p>

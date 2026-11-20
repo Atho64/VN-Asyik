@@ -122,9 +122,24 @@
   font-weight: 600;
 }
 .reading__note {
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-m);
+  border: 1px solid var(--border);
+  background: var(--bg);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: var(--leading-normal);
+  line-height: 1.65;
+}
+.reading__journal-input {
+  min-height: 152px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg);
+  border-color: var(--border-strong);
+  line-height: 1.65;
+}
+:root[data-reduce-effects="true"] .reading__journal-input {
+  background: var(--bg);
 }
 .reading__timestamp {
   margin-block: var(--space-1) var(--space-3);
@@ -323,4 +338,125 @@
 .gallery__scrim--selected {
   background: color-mix(in srgb, var(--accent) 42%, transparent);
   color: var(--text-on-accent);
+}
+
+/* Reading goals panel in Timeline. */
+.goals {
+  display: grid;
+  gap: var(--space-4);
+}
+.goals__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.goals__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.goals__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.goals__card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-l);
+  /* Same elevated surface as .card / .ach-card so goals read as cards lifted
+     off the page backdrop, not flat holes painted with the page color. */
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  align-content: start;
+}
+.goals__card--reached {
+  /* Reuse the app's reached/unlocked material (see .ach-card[data-unlocked]). */
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.goals__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+}
+.goals__title-wrap {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.goals__title {
+  margin: 0;
+  font-size: var(--text-m);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.goals__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.goals__progress-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.goals__figure {
+  font-size: var(--text-l);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.goals__track {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.goals__fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transition: width var(--dur-med) var(--ease);
+}
+.goals__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.goals__stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.goals__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-inline-start: auto;
+}
+.goals__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+@media (max-width: 640px) {
+  .goals__form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

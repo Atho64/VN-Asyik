@@ -54,7 +54,7 @@ function mockWalkthrough(): WalkthroughView {
     ],
     checkedItems: [],
     translations: {
-      ai_en: [
+      google_en: [
         {
           id: "route_0",
           title: "Common - Kotori, Chihaya",
@@ -112,7 +112,7 @@ describe("WalkthroughCard", () => {
     original.checkedItems = ["c_1"];
     vi.mocked(api.walkthroughGet).mockResolvedValue(original);
     const saved = structuredClone(original);
-    saved.translations.manual_en = structuredClone(original.translations.ai_en!);
+    saved.translations.manual_en = structuredClone(original.translations.google_en!);
     saved.translations.manual_en[0]!.items[1]!.text =
       "Leave because his attitude annoys you";
     saved.checkedItems = [];
@@ -175,7 +175,7 @@ describe("WalkthroughCard", () => {
       title: "ルチア",
       items: [{ id: "c_2", kind: "choice", text: "ルチアを選ぶ" }],
     });
-    data.translations.ai_en!.push({
+    data.translations.google_en!.push({
       id: "route_1",
       title: "Lucia",
       items: [{ id: "c_2", kind: "choice", text: "Choose Lucia" }],
@@ -218,7 +218,7 @@ describe("WalkthroughCard", () => {
 
   it("loads manual translations first and cancelling an edit writes nothing", async () => {
     const data = mockWalkthrough();
-    data.translations.manual_en = structuredClone(data.translations.ai_en!);
+    data.translations.manual_en = structuredClone(data.translations.google_en!);
     data.translations.manual_en[0]!.title = "My Kotori route";
     vi.mocked(api.walkthroughGet).mockResolvedValue(data);
     renderCard();
@@ -260,42 +260,33 @@ describe("WalkthroughCard", () => {
     expect(useAppStore.getState().toasts).toHaveLength(0);
   });
 
-  it.each(["ai", "google"] as const)(
-    "regenerates a cached %s translation and keeps current checked progress",
-    async (provider) => {
-      const original = mockWalkthrough();
-      original.translations.google_en = structuredClone(original.translations.ai_en!);
-      vi.mocked(api.walkthroughGet).mockResolvedValue(original);
-      let resolve!: (view: WalkthroughView) => void;
-      vi.mocked(api.walkthroughTranslate).mockReturnValue(
-        new Promise((done) => {
-          resolve = done;
-        }),
-      );
-      renderCard();
-      await screen.findByText("Common - Kotori, Chihaya");
-      if (provider === "google")
-        await userEvent.click(screen.getByRole("button", { name: "Google Translate" }));
-      expect(api.walkthroughTranslate).not.toHaveBeenCalled();
-      const refresh = screen.getByRole("button", {
-        name:
-          provider === "ai" ? "Refresh model translation" : "Refresh Google translation",
-      });
-      expect(refresh.closest(".walkthrough__translation-actions")).toBeInTheDocument();
-      await userEvent.click(refresh);
-      expect(refresh).toBeDisabled();
-      expect(api.walkthroughTranslate).toHaveBeenCalledWith("g1", provider, "en", "v751");
-      await userEvent.click(screen.getByRole("checkbox"));
-      await waitFor(() => expect(api.walkthroughToggleItem).toHaveBeenCalled());
-      const refreshed = structuredClone(original);
-      refreshed.translations[`${provider}_en`]![0]!.title = "Refreshed Kotori route";
-      await act(async () => resolve(refreshed));
-      expect(await screen.findByText("Refreshed Kotori route")).toBeInTheDocument();
-      expect(screen.getByRole("checkbox")).toBeChecked();
-      await userEvent.click(screen.getByRole("button", { name: "Japanese (original)" }));
-      expect(screen.getByText("共通・小鳥、ちはや")).toBeInTheDocument();
-    },
-  );
+  it("regenerates a cached Google translation and keeps current checked progress", async () => {
+    const original = mockWalkthrough();
+    vi.mocked(api.walkthroughGet).mockResolvedValue(original);
+    let resolve!: (view: WalkthroughView) => void;
+    vi.mocked(api.walkthroughTranslate).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    renderCard();
+    await screen.findByText("Common - Kotori, Chihaya");
+    expect(api.walkthroughTranslate).not.toHaveBeenCalled();
+    const refresh = screen.getByRole("button", { name: "Refresh Google translation" });
+    expect(refresh.closest(".walkthrough__translation-actions")).toBeInTheDocument();
+    await userEvent.click(refresh);
+    expect(refresh).toBeDisabled();
+    expect(api.walkthroughTranslate).toHaveBeenCalledWith("g1", "google", "en", "v751");
+    await userEvent.click(screen.getByRole("checkbox"));
+    await waitFor(() => expect(api.walkthroughToggleItem).toHaveBeenCalled());
+    const refreshed = structuredClone(original);
+    refreshed.translations.google_en![0]!.title = "Refreshed Kotori route";
+    await act(async () => resolve(refreshed));
+    expect(await screen.findByText("Refreshed Kotori route")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "Japanese (original)" }));
+    expect(screen.getByText("共通・小鳥、ちはや")).toBeInTheDocument();
+  });
 
   it("keeps the previous translation and progress after a failed refresh", async () => {
     const original = mockWalkthrough();
@@ -306,7 +297,7 @@ describe("WalkthroughCard", () => {
     );
     renderCard();
     await userEvent.click(
-      await screen.findByRole("button", { name: "Refresh model translation" }),
+      await screen.findByRole("button", { name: "Refresh Google translation" }),
     );
     expect(screen.getByText("Common - Kotori, Chihaya")).toBeInTheDocument();
     expect(screen.getByRole("checkbox")).toBeChecked();
@@ -316,7 +307,7 @@ describe("WalkthroughCard", () => {
       ),
     );
     expect(
-      screen.getByRole("button", { name: "Refresh model translation" }),
+      screen.getByRole("button", { name: "Refresh Google translation" }),
     ).toBeEnabled();
   });
 
@@ -330,7 +321,7 @@ describe("WalkthroughCard", () => {
     );
     const rendered = renderCard();
     await userEvent.click(
-      await screen.findByRole("button", { name: "Refresh model translation" }),
+      await screen.findByRole("button", { name: "Refresh Google translation" }),
     );
     const other = mockWalkthrough();
     other.gameId = "g2";

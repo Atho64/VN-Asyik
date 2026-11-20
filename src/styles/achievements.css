@@ -1,0 +1,331 @@
+/* Achievements: one progress ring as the focal point, filter chips and search,
+   then a responsive card grid. Classes are named for their content; no other
+   feature's layout is borrowed. Colors and spacing come from tokens only. */
+
+.ach-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  min-width: 0;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-block: var(--space-2);
+}
+
+/* Header: the title block and the overall ring summary side by side. The ring
+   plus the unlocked figure is the single focal point; the grid defers to it. */
+.ach-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.ach-head__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ach-head__sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.ach-head__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+}
+
+.ach-head__figure {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.ach-head__number {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ach-head__total {
+  color: var(--text-faint);
+  font-size: var(--text-l);
+}
+
+.ach-head__caption {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* Controls: status chips, tier chips, search. Wraps on desktop; on mobile the
+   chip rows scroll sideways and the search takes the full width. */
+.ach-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ach-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ach-search {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 360px;
+}
+
+.ach-count {
+  margin: 0;
+}
+
+/* Grid: fluid tracks that reflow from one column on a phone to several on a
+   wide screen, never a fixed-px mosaic. */
+.ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ach-grid__item {
+  display: flex;
+  min-width: 0;
+}
+
+/* Card: icon beside the text. Locked cards sit on the solid elevated surface;
+   unlocked cards mix a little accent into that same solid surface, so the tint
+   stays legible over any backdrop (never a translucent wash over artwork). */
+.ach-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-l);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.ach-card:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.ach-card[data-unlocked="true"] {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.ach-card__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-s);
+  background: var(--surface-1);
+  color: var(--text-faint);
+}
+
+.ach-card__icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.ach-card[data-unlocked="true"] .ach-card__icon {
+  color: var(--accent-strong);
+}
+
+.ach-card__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ach-card__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-m);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.ach-card__desc {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ach-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Tier reads from its label plus a neutral surface step, not from hue, so one
+   glyph works across tiers and both themes. */
+.ach-card__tier {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: var(--leading-tight);
+}
+
+.ach-card__tier[data-tier="silver"] {
+  background: var(--surface-2);
+}
+
+.ach-card__tier[data-tier="gold"] {
+  background: var(--surface-3);
+}
+
+/* Honest platform label for the screenshot group, plain text rather than a badge. */
+.ach-card__platform {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.ach-card__date {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  color: var(--accent-strong);
+  font-size: var(--text-xs);
+}
+
+.ach-card__progress {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.ach-card__bar {
+  display: block;
+  height: 6px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.ach-card__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+/* Loading placeholders sized like a card so the grid does not jump. */
+.ach-card-skeleton {
+  height: 120px;
+  border-radius: var(--radius-l);
+}
+
+/* Error state: names the failure and offers one retry action. */
+.ach-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 44ch;
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-l);
+  border: 1px dashed var(--border-strong);
+}
+
+.ach-state__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-l);
+}
+
+.ach-state__body {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-s);
+}
+
+/* Stats summary card. */
+.ach-stats__body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ach-stats__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ach-stats__progress {
+  margin: 0;
+  font-size: var(--text-m);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ach-stats__link {
+  font-size: var(--text-xs);
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+/* Mobile: a distinct stacked state, not a squeezed desktop. The chip rows
+   scroll sideways; flex-basis is reset to auto inside the column so it cannot
+   leak into a height (AGENTS.md §11). */
+@media (max-width: 767px) {
+  .ach-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ach-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ach-filters {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: var(--space-1);
+    scrollbar-width: thin;
+  }
+
+  .ach-search {
+    flex: 0 0 auto;
+    max-width: none;
+  }
+
+  .ach-grid {
+    grid-template-columns: 1fr;
+  }
+}

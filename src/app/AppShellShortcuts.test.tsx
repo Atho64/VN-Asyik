@@ -10,12 +10,8 @@ import { AppShell } from "./AppShell";
 vi.mock("@/lib/ipc/client", () => ({ api: {}, IpcError: class extends Error {} }));
 vi.mock("@/components/Backdrop", () => ({ Backdrop: () => null, focusArt: vi.fn() }));
 vi.mock("@/features/tracking/NowPlayingBar", () => ({ NowPlayingBar: () => null }));
-vi.mock("@/features/companion/CompanionBar", () => ({ CompanionBar: () => null }));
 vi.mock("@/lib/ipc/screenshots", () => ({
   listenScreenshotShortcut: vi.fn(async () => () => {}),
-}));
-vi.mock("@/lib/ipc/companionWindow", () => ({
-  companionWindowApi: { listenMain: vi.fn(async () => () => {}) },
 }));
 vi.mock("@/features/library/AddGameSheet", () => ({
   AddGameSheet: ({ onClose }: { onClose: () => void }) => (

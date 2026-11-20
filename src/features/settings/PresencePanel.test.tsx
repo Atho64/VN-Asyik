@@ -905,4 +905,54 @@ describe("PresencePanel", () => {
     await user.click(rotateToggle);
     expect(screen.getByText("1 / 4")).toBeInTheDocument();
   });
+
+  it("lets the reader choose English, Romaji, or Japanese title language for Discord RPC", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.presenceGetSettings).mockResolvedValueOnce({
+      ...defaultSettings,
+      enabled: true,
+    });
+    vi.mocked(api.presenceSaveSettings).mockResolvedValue();
+
+    renderPanel();
+
+    const group = await screen.findByRole("group", { name: "Title language" });
+    expect(
+      within(group).getByRole("button", { name: "Library default" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(within(group).getByRole("button", { name: "English" }));
+    await waitFor(() =>
+      expect(api.presencePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ title_language: "english" }),
+        expect.anything(),
+        0,
+        0,
+      ),
+    );
+
+    await user.click(within(group).getByRole("button", { name: "Romaji" }));
+    await waitFor(() =>
+      expect(api.presencePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ title_language: "romaji" }),
+        expect.anything(),
+        0,
+        0,
+      ),
+    );
+
+    await user.click(within(group).getByRole("button", { name: "Japanese" }));
+    await user.click(screen.getByRole("button", { name: "Save presence settings" }));
+    expect(api.presenceSaveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ title_language: "japanese" }),
+      undefined,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Reset formatting to defaults" }),
+    );
+    expect(
+      within(group).getByRole("button", { name: "Library default" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
 });

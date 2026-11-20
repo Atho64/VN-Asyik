@@ -18,7 +18,7 @@ interface WalkthroughCardProps {
   vnId?: string | null;
 }
 
-type LangMode = "original" | "ai" | "google" | "manual";
+type LangMode = "original" | "google" | "manual";
 
 function formatUrlSlug(url: string): string {
   try {
@@ -89,12 +89,9 @@ function WalkthroughContent({ gameId, vnId }: WalkthroughCardProps) {
         setLoading(false);
 
         if (res) {
-          const aiKey = `ai_${targetLang}`;
           const gKey = `google_${targetLang}`;
           if (res.translations[`manual_${targetLang}`]) {
             setLangMode("manual");
-          } else if (res.translations[aiKey]) {
-            setLangMode("ai");
           } else if (res.translations[gKey]) {
             setLangMode("google");
           }
@@ -172,22 +169,17 @@ function WalkthroughContent({ gameId, vnId }: WalkthroughCardProps) {
     }
   };
 
-  const handleTranslate = async (provider: "ai" | "google") => {
+  const handleTranslate = async () => {
     const epoch = ++translationEpoch.current;
     setTranslating(true);
     try {
-      const res = await api.walkthroughTranslate(gameId, provider, targetLang, vnId);
+      const res = await api.walkthroughTranslate(gameId, "google", targetLang, vnId);
       if (epoch !== translationEpoch.current) return;
       setData((current) =>
         current ? { ...res, checkedItems: current.checkedItems } : res,
       );
-      setLangMode(provider);
-      pushToast(
-        "success",
-        provider === "ai"
-          ? t("walkthrough.translateAi")
-          : t("walkthrough.translateGoogle"),
-      );
+      setLangMode("google");
+      pushToast("success", t("walkthrough.translateGoogle"));
     } catch (err: unknown) {
       if (epoch !== translationEpoch.current) return;
       pushToast("error", String(err));
@@ -256,10 +248,7 @@ function WalkthroughContent({ gameId, vnId }: WalkthroughCardProps) {
 
   const currentRoutes: WalkthroughRoute[] = (() => {
     if (!data) return [];
-    if (langMode === "ai") {
-      const aiKey = `ai_${targetLang}`;
-      if (data.translations[aiKey]) return data.translations[aiKey];
-    } else if (langMode === "google") {
+    if (langMode === "google") {
       const gKey = `google_${targetLang}`;
       if (data.translations[gKey]) return data.translations[gKey];
     } else if (langMode === "manual") {
@@ -855,38 +844,11 @@ function WalkthroughContent({ gameId, vnId }: WalkthroughCardProps) {
               <button
                 type="button"
                 onClick={() => {
-                  const key = `ai_${targetLang}`;
-                  if (data.translations[key]) {
-                    setLangMode("ai");
-                  } else {
-                    void handleTranslate("ai");
-                  }
-                }}
-                disabled={translating || editing}
-                aria-pressed={langMode === "ai"}
-                style={{
-                  minHeight: "var(--touch-target)",
-                  padding: "var(--space-1) var(--space-3)",
-                  borderRadius: "var(--radius-sm)",
-                  border: "none",
-                  fontSize: "var(--font-size-xs)",
-                  cursor: translating ? "not-allowed" : "pointer",
-                  fontWeight: langMode === "ai" ? 600 : 400,
-                  background: langMode === "ai" ? "var(--color-surface)" : "transparent",
-                  color:
-                    langMode === "ai" ? "var(--color-accent)" : "var(--color-text-dim)",
-                }}
-              >
-                {t("walkthrough.langAi")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
                   const key = `google_${targetLang}`;
                   if (data.translations[key]) {
                     setLangMode("google");
                   } else {
-                    void handleTranslate("google");
+                    void handleTranslate();
                   }
                 }}
                 disabled={translating || editing}
@@ -920,15 +882,13 @@ function WalkthroughContent({ gameId, vnId }: WalkthroughCardProps) {
             </div>
 
             <div className="walkthrough__translation-actions">
-              {langMode === "ai" || langMode === "google" ? (
+              {langMode === "google" ? (
                 <Button
                   variant="secondary"
                   disabled={translating || fetching || editing}
-                  onClick={() => void handleTranslate(langMode)}
+                  onClick={() => void handleTranslate()}
                 >
-                  {langMode === "google"
-                    ? t("walkthrough.refreshGoogle")
-                    : t("walkthrough.refreshAi")}
+                  {t("walkthrough.refreshGoogle")}
                 </Button>
               ) : null}
               <Button

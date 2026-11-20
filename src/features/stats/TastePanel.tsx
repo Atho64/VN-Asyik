@@ -19,7 +19,7 @@ export function TastePanel() {
   useEffect(() => {
     let cancelled = false;
     void api
-      .aiTasteProfile()
+      .tasteProfile()
       .then((next) => {
         if (!cancelled) setTaste(next);
       })

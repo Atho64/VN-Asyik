@@ -10,6 +10,9 @@ export const androidSessionViewSchema = z.object({
   gameTitle: z.string().nullable().optional(),
   package: z.string().nullable(),
   runnerKind: z.string().nullable().optional(),
+  routeId: z.string().nullable().optional(),
+  chapterId: z.string().nullable().optional(),
+  targetName: z.string().nullable().optional(),
   startedAtMs: z.number().nullable(),
   countedMs: z.number(),
   elapsedMs: z.number().optional(),
@@ -624,41 +627,6 @@ export const updateViewSchema = z.object({
 });
 export type UpdateView = z.infer<typeof updateViewSchema>;
 
-/** One saved LLM provider profile, without its key. */
-export const llmProviderSchema = z.enum(["openai", "anthropic"]);
-export type LlmProvider = z.infer<typeof llmProviderSchema>;
-
-export const llmProfileSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  /** Which wire format the endpoint speaks. */
-  provider: llmProviderSchema,
-  baseUrl: z.string(),
-  model: z.string(),
-  hasKey: z.boolean(),
-  keyHint: z.string().nullable(),
-});
-export type LlmProfile = z.infer<typeof llmProfileSchema>;
-
-/** The saved provider profiles and which one is live. */
-export const llmProfilesSchema = z.object({
-  active: z.string().nullable(),
-  profiles: z.array(llmProfileSchema),
-  supported: z.boolean(),
-});
-export type LlmProfiles = z.infer<typeof llmProfilesSchema>;
-
-/** One profile as the panel submits it. A missing id adds a new one. */
-export interface LlmProfileInput {
-  id?: string;
-  name: string;
-  provider: LlmProvider;
-  baseUrl: string;
-  model: string;
-  /** Omit to keep the stored key. */
-  key?: string;
-}
-
 /**
  * One recurring signal in the library's taste: a tag, a studio, a staff
  * member or a voice actor the user's games share. The For-you header shows
@@ -754,9 +722,18 @@ export const trackerCapabilitySchema = z.object({
   /* `auto` counts only while the game window is in front; `always` counts every
      second the game process runs, away time included. */
   mode: z.string(),
+  auto_resume_route: z.boolean().default(true),
   poll_interval_ms: z.number(),
 });
 export type TrackerCapability = z.infer<typeof trackerCapabilitySchema>;
+
+export const autoRouteStatusSchema = z.object({
+  enabled: z.boolean(),
+  routeId: z.string().nullable(),
+  chapterId: z.string().nullable(),
+  targetName: z.string().nullable(),
+});
+export type AutoRouteStatus = z.infer<typeof autoRouteStatusSchema>;
 
 export const processCandidateSchema = z.object({
   pid: z.number(),
@@ -1034,7 +1011,6 @@ export const prefsSchema = z.object({
   language: z.string(),
   nsfw: z.string(),
   reduce_effects: z.boolean(),
-  beta_features: z.boolean().default(false),
 });
 export type Prefs = z.infer<typeof prefsSchema>;
 
@@ -1054,6 +1030,8 @@ export type PlatformInfo = z.infer<typeof platformInfoSchema>;
 
 export const importSummarySchema = z.object({
   reading_entries: z.number().optional(),
+  global_notes: z.number().optional(),
+  reading_goals: z.number().optional(),
   games: z.number(),
   chapters: z.number(),
   sessions: z.number(),
@@ -1065,6 +1043,8 @@ export type ImportSummary = z.infer<typeof importSummarySchema>;
 /** A native file remains in Rust until this short-lived preview is confirmed. */
 export const dataImportPreviewSchema = z.object({
   readingEntries: z.number().int().nonnegative().optional(),
+  globalNotes: z.number().int().nonnegative().optional(),
+  readingGoals: z.number().int().nonnegative().optional(),
   id: z.string(),
   kind: z.enum(["library", "backup", "transfer"]),
   createdAtMs: z.number(),
@@ -1088,57 +1068,6 @@ export interface CommandError {
   code: string;
   message: string;
 }
-
-/** What the recommendation screen can do. */
-export const recommendSettingsSchema = z.object({
-  hasTavilyKey: z.boolean(),
-  tavilyKeyHint: z.string().nullable(),
-  hasChatKey: z.boolean(),
-  supported: z.boolean(),
-  chatModel: z.string(),
-});
-export type RecommendSettings = z.infer<typeof recommendSettingsSchema>;
-
-/** Only http(s) ever reaches `open_external`: these URLs come from a search API. */
-const externalUrlSchema = z
-  .string()
-  .refine((value) => /^https?:\/\//i.test(value), "not an http(s) url");
-
-/** A checkable link behind a suggestion. */
-export const citationSchema = z.object({
-  title: z.string(),
-  url: externalUrlSchema,
-});
-export type Citation = z.infer<typeof citationSchema>;
-
-/** One suggested game. */
-export const recommendationSchema = z.object({
-  title: z.string(),
-  why: z.string(),
-  sources: z.array(citationSchema),
-  owned: z.boolean(),
-});
-export type Recommendation = z.infer<typeof recommendationSchema>;
-
-/** A page the search returned. */
-export const searchResultSchema = z.object({
-  title: z.string(),
-  url: externalUrlSchema,
-  content: z.string(),
-  relevance: z.number(),
-});
-export type SearchResult = z.infer<typeof searchResultSchema>;
-
-/** The whole answer for one request. */
-export const recommendOutcomeSchema = z.object({
-  query: z.string(),
-  games: z.array(recommendationSchema),
-  answer: z.string().nullable(),
-  sources: z.array(searchResultSchema),
-  note: z.string().nullable(),
-  credits: z.number(),
-});
-export type RecommendOutcome = z.infer<typeof recommendOutcomeSchema>;
 
 /** The library's taste seeds, computed locally and shown before any query. */
 export const forYouProfileSchema = z.object({
@@ -1322,6 +1251,14 @@ export type StatsPayload = z.infer<typeof statsPayloadSchema>;
 export const presenceDetailsModeSchema = z.enum(["vndb", "custom", "manual"]);
 export type PresenceDetailsMode = z.infer<typeof presenceDetailsModeSchema>;
 
+export const presenceTitleLanguageSchema = z.enum([
+  "default",
+  "english",
+  "romaji",
+  "japanese",
+]);
+export type PresenceTitleLanguage = z.infer<typeof presenceTitleLanguageSchema>;
+
 /** Where a cover Discord cannot fetch directly may be uploaded, so the card can
  * still show it. `none` keeps every image off the network. */
 export const rpcImageHostSchema = z.enum(["none", "catbox", "imgbb"]);
@@ -1377,6 +1314,7 @@ export const presenceSettingsSchema = z.object({
   /** Keep the card on Discord while the game runs but another window has focus. */
   show_when_unfocused: z.boolean(),
   activity_name: z.string().nullable().optional(),
+  title_language: presenceTitleLanguageSchema.optional(),
   cycle_vndb_details: z.boolean(),
   cycle_seconds: z.number(),
   vndb_loading_details: z.string(),
@@ -1554,3 +1492,38 @@ export interface WindowLaunchInput {
   y?: number | null;
   apply_now?: boolean;
 }
+
+/** Effort tier of an achievement. The wire uses lowercase strings (`Tier` serde). */
+export const achievementTierSchema = z.enum(["bronze", "silver", "gold"]);
+export type AchievementTier = z.infer<typeof achievementTierSchema>;
+
+/** Catalog group A..F, as the backend labels it. */
+export const achievementGroupSchema = z.enum(["A", "B", "C", "D", "E", "F"]);
+export type AchievementGroup = z.infer<typeof achievementGroupSchema>;
+
+/**
+ * One catalog item hydrated with its live progress and unlock state.
+ *
+ * `rename_all = "camelCase"` on the Rust `AchievementView`, so the schema matches
+ * the wire shape, not the Rust field names. Locked items still carry progress;
+ * `unlockedAt` is null until the achievement is unlocked.
+ */
+export const achievementViewSchema = z.object({
+  slug: z.string(),
+  tier: achievementTierSchema,
+  group: achievementGroupSchema,
+  unlocked: z.boolean(),
+  progress: z.number(),
+  target: z.number(),
+  unlockedAt: z.number().nullable(),
+});
+export type AchievementView = z.infer<typeof achievementViewSchema>;
+
+/** `achievements_evaluate` returns the bare list of slugs unlocked by that call. */
+export const achievementsEvaluateSchema = z.array(z.string());
+
+/** Payload of the `vn:achievements-unlocked` event emitted after a refresh. */
+export const achievementsUnlockedSchema = z.object({
+  slugs: z.array(z.string()),
+});
+export type AchievementsUnlocked = z.infer<typeof achievementsUnlockedSchema>;

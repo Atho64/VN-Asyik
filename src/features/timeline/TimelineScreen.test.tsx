@@ -11,9 +11,41 @@ import { createTranslator } from "@/i18n";
 import type { Game, TimelineEvent, TimelinePage } from "@/lib/ipc/types";
 import { TimelineScreen } from "./TimelineScreen";
 
-const mocks = vi.hoisted(() => ({ timelinePage: vi.fn(), search: vi.fn() }));
-vi.mock("@/lib/ipc/client", () => ({ api: mocks }));
-vi.mock("@/lib/ipc/reading", () => ({ readingApi: { search: mocks.search } }));
+const mocks = vi.hoisted(() => ({
+  timelinePage: vi.fn(),
+  search: vi.fn(),
+  listGlobalNotes: vi.fn(),
+  saveGlobalNote: vi.fn(),
+  setGlobalNotePinned: vi.fn(),
+  deleteGlobalNote: vi.fn(),
+  listGoals: vi.fn(),
+  saveGoal: vi.fn(),
+  setGoalPinned: vi.fn(),
+  setGoalProgress: vi.fn(),
+  removeGoal: vi.fn(),
+}));
+vi.mock("@/lib/ipc/client", () => ({
+  api: mocks,
+  IpcError: class extends Error {},
+}));
+vi.mock("@/lib/ipc/reading", () => ({
+  readingApi: {
+    search: mocks.search,
+    listGlobalNotes: mocks.listGlobalNotes,
+    saveGlobalNote: mocks.saveGlobalNote,
+    setGlobalNotePinned: mocks.setGlobalNotePinned,
+    deleteGlobalNote: mocks.deleteGlobalNote,
+  },
+}));
+vi.mock("@/lib/ipc/goals", () => ({
+  goalsApi: {
+    list: mocks.listGoals,
+    save: mocks.saveGoal,
+    setPinned: mocks.setGoalPinned,
+    setProgress: mocks.setGoalProgress,
+    remove: mocks.removeGoal,
+  },
+}));
 
 const game: Game = {
   meta: { id: "g1", updated_at: 1, device_id_device: "test", deleted: false },
@@ -85,7 +117,8 @@ function mount() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  useAppStore.setState({ timelineQuery: "" });
+  useAppStore.setState({ timelineQuery: "", timelineTab: "journey" });
+  mocks.listGlobalNotes.mockResolvedValue([]);
 });
 
 describe("timeline screen", () => {
@@ -231,5 +264,155 @@ describe("timeline screen", () => {
     );
     expect(await screen.findByText("Read for 1h")).toBeInTheDocument();
     expect(screen.queryByLabelText("Loading reading log")).not.toBeInTheDocument();
+  });
+
+  it("switches to the Notes tab and creates, pins, and deletes a global note", async () => {
+    const user = userEvent.setup();
+    mocks.timelinePage.mockResolvedValue(page([session], false));
+    mocks.listGlobalNotes.mockResolvedValueOnce([]);
+    mount();
+    await screen.findByText("Read for 1h");
+
+    await user.click(screen.getByRole("tab", { name: "Notes" }));
+    expect(await screen.findByText("No notes yet")).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "New note" })[0]!);
+    await user.type(
+      screen.getByPlaceholderText(/Reading backlog/i),
+      "SciADV Reading Order",
+    );
+    await user.type(
+      screen.getByPlaceholderText(/Write your thoughts/i),
+      "Read Chaos;Head Noah before Steins;Gate.",
+    );
+
+    const savedNote = {
+      note: {
+        meta: { id: "n1", updated_at: 1000, device_id_device: "test", deleted: false },
+        game_id: null,
+        created_at: 1000,
+        title: "SciADV Reading Order",
+        body: "Read Chaos;Head Noah before Steins;Gate.",
+        pinned: false,
+      },
+      gameTitle: null,
+    };
+    mocks.saveGlobalNote.mockResolvedValueOnce(savedNote);
+    mocks.listGlobalNotes.mockResolvedValueOnce([savedNote]);
+
+    await user.click(screen.getByRole("button", { name: "Save note" }));
+    expect(mocks.saveGlobalNote).toHaveBeenCalledWith({
+      id: null,
+      expectedUpdatedAt: null,
+      gameId: null,
+      title: "SciADV Reading Order",
+      body: "Read Chaos;Head Noah before Steins;Gate.",
+      pinned: false,
+    });
+    expect(await screen.findByText("SciADV Reading Order")).toBeInTheDocument();
+    expect(
+      screen.getByText("Read Chaos;Head Noah before Steins;Gate."),
+    ).toBeInTheDocument();
+
+    // Pin the note.
+    const pinnedNote = {
+      ...savedNote,
+      note: { ...savedNote.note, pinned: true },
+    };
+    mocks.setGlobalNotePinned.mockResolvedValueOnce(pinnedNote);
+    mocks.listGlobalNotes.mockResolvedValueOnce([pinnedNote]);
+    await user.click(screen.getByRole("button", { name: "Pin" }));
+    expect(mocks.setGlobalNotePinned).toHaveBeenCalledWith("n1", true);
+    expect(await screen.findByText("Pinned")).toBeInTheDocument();
+
+    // Two-step delete confirmation.
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    mocks.deleteGlobalNote.mockResolvedValueOnce(null);
+    mocks.listGlobalNotes.mockResolvedValueOnce([]);
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+    expect(mocks.deleteGlobalNote).toHaveBeenCalledWith("n1", 1000);
+    expect(await screen.findByText("No notes yet")).toBeInTheDocument();
+  });
+
+  it("switches to the Goals tab and creates, steps, pins, and deletes a manual goal", async () => {
+    const user = userEvent.setup();
+    mocks.timelinePage.mockResolvedValue(page([session], false));
+    mocks.listGoals.mockResolvedValueOnce([]);
+    mount();
+    await screen.findByText("Read for 1h");
+
+    await user.click(screen.getByRole("tab", { name: "Goals" }));
+    expect(await screen.findByText("No reading goals yet")).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "New goal" })[0]!);
+    await user.type(
+      screen.getByPlaceholderText(/Finish 10 visual novels/i),
+      "Key Routes",
+    );
+    await user.selectOptions(screen.getByLabelText("Metric"), "manual");
+    await user.clear(screen.getByLabelText("Target count"));
+    await user.type(screen.getByLabelText("Target count"), "5");
+    await user.type(screen.getByPlaceholderText(/route, chapter/i), "route");
+
+    const savedGoal = {
+      goal: {
+        meta: { id: "goal-1", updated_at: 2000, device_id_device: "test", deleted: false },
+        title: "Key Routes",
+        kind: "manual" as const,
+        period: "yearly" as const,
+        target_value: 5,
+        manual_progress: 0,
+        unit: "route",
+        pinned: false,
+        created_at: 2000,
+      },
+      currentValue: 0,
+    };
+    mocks.saveGoal.mockResolvedValueOnce(savedGoal);
+    mocks.listGoals.mockResolvedValueOnce([savedGoal]);
+
+    await user.click(screen.getByRole("button", { name: "Save goal" }));
+    expect(mocks.saveGoal).toHaveBeenCalledWith({
+      id: null,
+      expectedUpdatedAt: null,
+      title: "Key Routes",
+      kind: "manual",
+      period: "yearly",
+      targetValue: 5,
+      manualProgress: 0,
+      unit: "route",
+      pinned: false,
+    });
+    expect(await screen.findByText("Key Routes")).toBeInTheDocument();
+    expect(screen.getByText("0 route / 5 route")).toBeInTheDocument();
+
+    // Increment manual progress.
+    const stepped = {
+      ...savedGoal,
+      goal: { ...savedGoal.goal, manual_progress: 1 },
+      currentValue: 1,
+    };
+    mocks.setGoalProgress.mockResolvedValueOnce(stepped);
+    await user.click(screen.getByRole("button", { name: "Increase progress" }));
+    expect(mocks.setGoalProgress).toHaveBeenCalledWith("goal-1", 1);
+    expect(await screen.findByText("1 route / 5 route")).toBeInTheDocument();
+
+    // Pin the goal.
+    const pinned = {
+      ...stepped,
+      goal: { ...stepped.goal, pinned: true },
+    };
+    mocks.setGoalPinned.mockResolvedValueOnce(pinned);
+    mocks.listGoals.mockResolvedValueOnce([pinned]);
+    await user.click(screen.getByRole("button", { name: "Pin" }));
+    expect(mocks.setGoalPinned).toHaveBeenCalledWith("goal-1", true);
+    expect(await screen.findByText("Pinned")).toBeInTheDocument();
+
+    // Two-step delete.
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    mocks.removeGoal.mockResolvedValueOnce(null);
+    await user.click(screen.getByRole("button", { name: "Delete?" }));
+    expect(mocks.removeGoal).toHaveBeenCalledWith("goal-1");
+    expect(await screen.findByText("No reading goals yet")).toBeInTheDocument();
   });
 });

@@ -395,7 +395,7 @@
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
-  align-items: end;
+  align-items: start;
   gap: var(--space-5);
   padding: var(--space-5) 0 var(--space-4);
   margin-bottom: var(--space-4);
@@ -511,68 +511,13 @@
   }
 }
 
-/* Transparent wrapper on desktop so header children participate in the grid; becomes a column on phones. */
+/* Transparent wrapper on desktop/tablet so title flows directly in the header stack; becomes a column on phones. */
 .detail__intro {
   display: contents;
 }
 
-@media (min-width: 900px) {
-  .detail__head {
-    display: grid;
-    /* Cap the action column width so long titles keep horizontal room. */
-    grid-template-columns: minmax(0, 1fr) minmax(12rem, 22rem);
-    column-gap: var(--space-4);
-    align-items: start;
-  }
-
-  .detail__title {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .detail__head > .detail__actions {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    justify-content: flex-end;
-    /* Top-align action stack with the title and stack vertically down to the primary Play button. */
-    align-self: start;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--space-2);
-    max-width: 24rem;
-  }
-
-  /* Group secondary action and progress on one wrapping row. */
-  .detail__actions-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-
-  .detail__progress {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    white-space: nowrap;
-  }
-
-  /* Span facts full width below the title and alt-name rows. */
-  .detail__facts {
-    grid-column: 1 / -1;
-    grid-row: 3;
-  }
-
-  /* Span status chips full width under facts. */
-  .detail__head
-    > div:not(.detail__facts):not(.detail__actions):not(.detail__alt):not(
-      .detail__title
-    ) {
-    grid-column: 1 / -1;
-    grid-row: 5;
-    justify-content: flex-start;
-  }
+.detail__actions:empty {
+  display: none;
 }
 
 .detail__title {
@@ -617,10 +562,11 @@
 .detail__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  align-items: center;
+  gap: var(--space-3);
 }
 
-/* Keep secondary action and progress grouped; wraps onto its own line below 900px without shrinking below content. */
+/* Keep progress indicator grouped cleanly beside Play, wrapping cleanly on narrow widths. */
 .detail__actions-row {
   display: flex;
   flex-wrap: wrap;
@@ -680,7 +626,7 @@
     grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   }
 
-  /* Keep cover beside the intro on narrow phones instead of stacking an isolated row. */
+  /* Keep cover beside title at top, then full-width Play, facts, lowered alternate titles, and status below. */
   .detail__hero {
     grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
     align-items: start;
@@ -688,14 +634,20 @@
     padding-top: var(--space-4);
   }
 
-  /* Flatten head container on phones so intro stays beside cover while actions span full width. */
+  .detail__hero > .detail__art {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  /* Flatten head container on phones so title stays beside cover while Play, facts, alternate titles, and status span full width. */
   .detail__hero > .detail__head {
     display: contents;
   }
 
   .detail__intro {
     grid-column: 2;
-    grid-row: 1;
+    grid-row: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -704,16 +656,23 @@
 
   .detail__hero > .detail__head > .detail__actions {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: auto;
+    gap: var(--space-2);
+  }
+
+  .detail__hero > .detail__head > .detail__facts {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .detail__hero > .detail__head > .detail__titles {
+    grid-column: 1 / -1;
+    grid-row: auto;
   }
 
   .detail__hero > .detail__head > .detail__status {
     grid-column: 1 / -1;
-    grid-row: 3;
-  }
-
-  .detail__art {
-    width: 100%;
+    grid-row: auto;
   }
 
   .detail__title {

@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
+import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { useArtwork } from "@/components/useArtwork";
-import { readingApi, type JournalSearchResult } from "@/lib/ipc/reading";
+import {
+  readingApi,
+  type GlobalNoteView,
+  type JournalSearchResult,
+} from "@/lib/ipc/reading";
 import { formatDate } from "@/lib/time";
 
 /**
@@ -114,10 +119,76 @@ function SearchRow({ result, query }: { result: JournalSearchResult; query: stri
   );
 }
 
-/** Debounced, stale-guarded search across journal checkpoints using `(created_at, id)` pagination. */
+/** One matching global or cross-game note from the Notes tab. */
+function GlobalNoteRow({
+  item,
+  query,
+}: {
+  item: GlobalNoteView;
+  query: string;
+}) {
+  const { t, locale } = useI18n();
+  const setTimelineTab = useAppStore((state) => state.setTimelineTab);
+  const { note, gameTitle } = item;
+  const heading = note.title.trim() || t("notes.untitled");
+  const scopeLabel = gameTitle ?? t("notes.globalBadge");
+
+  const body = (
+    <>
+      <div
+        className="jsearch__thumb"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--surface-2)",
+          color: "var(--text-muted)",
+        }}
+      >
+        <Icon name="library" size={18} />
+      </div>
+      <div className="jsearch__body">
+        <span className="jsearch__title">
+          <Highlight text={heading} query={query} />
+        </span>
+        {note.body.trim() ? (
+          <span className="jsearch__note">
+            <Highlight text={note.body} query={query} />
+          </span>
+        ) : null}
+        <span className="jsearch__meta caption">
+          {formatDate(note.meta.updated_at, locale)}
+          {` · ${scopeLabel}`}
+        </span>
+      </div>
+    </>
+  );
+
+  return (
+    <li>
+      {note.game_id ? (
+        <Link to={`/game/${note.game_id}`} className="jsearch__row">
+          {body}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          className="jsearch__row"
+          style={{ width: "100%", textAlign: "start" }}
+          onClick={() => setTimelineTab("notes")}
+        >
+          {body}
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** Debounced, stale-guarded search across journal checkpoints and global notes. */
 export function JournalSearch({ query }: { query: string }) {
   const { t } = useI18n();
   const [results, setResults] = useState<JournalSearchResult[] | null>(null);
+  const [globalNotes, setGlobalNotes] = useState<GlobalNoteView[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [busy, setBusy] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -128,13 +199,19 @@ export function JournalSearch({ query }: { query: string }) {
     const id = ++request.current;
     setBusy(true);
     setFailed(false);
-    readingApi
-      .search(query, undefined, before)
-      .then((page) => {
+    const notesPromise =
+      !before && readingApi.listGlobalNotes
+        ? readingApi.listGlobalNotes({ query }).catch(() => [] as GlobalNoteView[])
+        : Promise.resolve(null);
+    Promise.all([readingApi.search(query, undefined, before), notesPromise])
+      .then(([page, matchingNotes]) => {
         if (request.current !== id) return;
         setResults((previous) =>
           before ? [...(previous ?? []), ...page.results] : page.results,
         );
+        if (matchingNotes !== null) {
+          setGlobalNotes(matchingNotes);
+        }
         setHasMore(page.hasMore);
       })
       .catch(() => {
@@ -178,7 +255,7 @@ export function JournalSearch({ query }: { query: string }) {
     );
   }
 
-  if (results.length === 0) {
+  if (results.length === 0 && globalNotes.length === 0) {
     return (
       <EmptyState
         title={t("timeline.searchEmptyTitle")}
@@ -187,12 +264,17 @@ export function JournalSearch({ query }: { query: string }) {
     );
   }
 
+  const totalCount = results.length + globalNotes.length;
+
   return (
     <div className="jsearch">
       <p className="jsearch__count caption tnum" role="status">
-        {t("timeline.searchCount", { count: results.length })}
+        {t("timeline.searchCount", { count: totalCount })}
       </p>
       <ul className="jsearch__list">
+        {globalNotes.map((item) => (
+          <GlobalNoteRow key={`note:${item.note.meta.id}`} item={item} query={query} />
+        ))}
         {results.map((result) => (
           <SearchRow key={result.entry.meta.id} result={result} query={query} />
         ))}

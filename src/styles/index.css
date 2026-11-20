@@ -8,10 +8,6 @@
 @import "./screens.css";
 @import "./game-header.css";
 @import "./timeline.css";
-@import "./chat.css";
 @import "./bigpicture.css";
 @import "./reading.css";
-@import "./companion.css";
-@import "./companion-memory.css";
-
-@import "./companion-vision.css";
+@import "./achievements.css";

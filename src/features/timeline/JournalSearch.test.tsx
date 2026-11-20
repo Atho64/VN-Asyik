@@ -89,7 +89,7 @@ describe("journal search", () => {
   it("shows the empty state when nothing matches", async () => {
     mocks.search.mockResolvedValueOnce(page([], false));
     mount("nonexistent");
-    expect(await screen.findByText("No matching checkpoints")).toBeInTheDocument();
+    expect(await screen.findByText("No matching journal entries")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -98,7 +98,7 @@ describe("journal search", () => {
       page([result({ note: "", photo_image_id: "sf83040" })], false),
     );
     mount();
-    expect(await screen.findByText("Journal checkpoint")).toBeInTheDocument();
+    expect(await screen.findByText("Story journal entry")).toBeInTheDocument();
   });
 
   it("loads older matches onto the same list using the last row as the cursor", async () => {

@@ -19,6 +19,19 @@ import type {
 
 export type ToastKind = "info" | "success" | "error";
 
+/** Achievement screen filters, kept in the store so they survive navigation. */
+export interface AchievementsBrowse {
+  status: "all" | "unlocked" | "locked";
+  tier: "all" | "bronze" | "silver" | "gold";
+  query: string;
+}
+
+export const initialAchievementsBrowse: AchievementsBrowse = {
+  status: "all",
+  tier: "all",
+  query: "",
+};
+
 export interface Toast {
   id: number;
   kind: ToastKind;
@@ -44,8 +57,11 @@ interface AppState {
   /** Stored in app state so Timeline search survives route changes. */
   timelineQuery: string;
   /** Stored in app state so the active Timeline tab survives route changes. */
-  timelineTab: "journey" | "screenshots";
-  setTimelineTab: (tab: "journey" | "screenshots") => void;
+  timelineTab: "journey" | "notes" | "goals" | "screenshots";
+  setTimelineTab: (tab: "journey" | "notes" | "goals" | "screenshots") => void;
+  /** Stored in app state so achievement filters and search survive route changes. */
+  achievementsBrowse: AchievementsBrowse;
+  updateAchievementsBrowse: (patch: Partial<AchievementsBrowse>) => void;
   toasts: Toast[];
   paletteOpen: boolean;
   /** In-flight VNDB refreshes tracked here because game pages unmount on navigation. */
@@ -119,7 +135,6 @@ const defaultPrefs: Prefs = {
   language: "en",
   nsfw: "blur",
   reduce_effects: false,
-  beta_features: false,
 };
 
 let toastId = 0;
@@ -134,6 +149,7 @@ export const useAppStore = create<AppState>((set) => ({
   libraryBrowse: initialLibraryBrowse,
   timelineQuery: "",
   timelineTab: "journey",
+  achievementsBrowse: initialAchievementsBrowse,
   toasts: [],
   paletteOpen: false,
   refreshingVndb: [],
@@ -189,6 +205,8 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({ libraryBrowse: { ...state.libraryBrowse, ...patch } })),
   setTimelineQuery: (timelineQuery) => set({ timelineQuery }),
   setTimelineTab: (timelineTab) => set({ timelineTab }),
+  updateAchievementsBrowse: (patch) =>
+    set((state) => ({ achievementsBrowse: { ...state.achievementsBrowse, ...patch } })),
   upsertCard: (card) =>
     set((state) => {
       const index = state.cards.findIndex(

@@ -20,6 +20,9 @@ import type {
 const TEMPLATE_TOKENS = [
   "{vn_name}",
   "{title_original}",
+  "{title_english}",
+  "{title_romaji}",
+  "{title_japanese}",
   "{status}",
   "{playtime}",
   "{chapter}",
@@ -798,6 +801,7 @@ export function PresencePanel() {
     updateSettings({
       details_mode: "vndb",
       activity_name: null,
+      title_language: "default",
       cycle_vndb_details: false,
       cycle_seconds: 5,
       vndb_details_items: [],
@@ -1049,6 +1053,38 @@ export function PresencePanel() {
                     </Chip>
                   ))}
                 </div>
+              </div>
+
+              {/* Stack label above title language chips so four options wrap cleanly on narrow mobile cards. */}
+              <div className="presence-mode">
+                <span className="settings__label">
+                  {t("settings.presenceTitleLanguage")}
+                </span>
+                <div
+                  className="settings__control"
+                  role="group"
+                  aria-label={t("settings.presenceTitleLanguage")}
+                >
+                  {(
+                    [
+                      ["default", "settings.presenceTitleLanguageDefault"],
+                      ["english", "settings.presenceTitleLanguageEnglish"],
+                      ["romaji", "settings.presenceTitleLanguageRomaji"],
+                      ["japanese", "settings.presenceTitleLanguageJapanese"],
+                    ] as const
+                  ).map(([lang, labelKey]) => (
+                    <Chip
+                      key={lang}
+                      selected={(settings.title_language ?? "default") === lang}
+                      onClick={() => updateSettings({ title_language: lang })}
+                    >
+                      {t(labelKey)}
+                    </Chip>
+                  ))}
+                </div>
+                <span className="settings__hint">
+                  {t("settings.presenceTitleLanguageHint")}
+                </span>
               </div>
 
               <div className="settings__field">

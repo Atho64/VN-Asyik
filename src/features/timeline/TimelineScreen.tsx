@@ -10,6 +10,8 @@ import { useArtwork } from "@/components/useArtwork";
 import { api } from "@/lib/ipc/client";
 import type { TimelineEvent } from "@/lib/ipc/types";
 import { formatDate, formatDurationLong } from "@/lib/time";
+import { GlobalNotesPanel } from "./GlobalNotesPanel";
+import { GoalsPanel } from "./GoalsPanel";
 import { JournalSearch } from "./JournalSearch";
 import { ScreenshotsPanel } from "@/features/screenshots/ScreenshotsPanel";
 
@@ -273,6 +275,8 @@ export function TimelineScreen() {
         {(
           [
             ["journey", "timeline.tabJourney"],
+            ["notes", "timeline.tabNotes"],
+            ["goals", "timeline.tabGoals"],
             ["screenshots", "timeline.tabScreenshots"],
           ] as const
         ).map(([value, labelKey]) => (
@@ -290,24 +294,28 @@ export function TimelineScreen() {
       </div>
       {tab === "screenshots" ? (
         <ScreenshotsPanel />
+      ) : tab === "notes" ? (
+        <GlobalNotesPanel />
+      ) : tab === "goals" ? (
+        <GoalsPanel />
       ) : (
         <>
-      <div className="timeline__search">
-        <div className="search">
-          <span className="search__icon">
-            <Icon name="search" />
-          </span>
-          <input
-            className="input"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t("timeline.searchPlaceholder")}
-            aria-label={t("timeline.searchLabel")}
-          />
-        </div>
-      </div>
-      {searching ? <JournalSearch query={query.trim()} /> : feed}
+          <div className="timeline__search">
+            <div className="search">
+              <span className="search__icon">
+                <Icon name="search" />
+              </span>
+              <input
+                className="input"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("timeline.searchPlaceholder")}
+                aria-label={t("timeline.searchLabel")}
+              />
+            </div>
+          </div>
+          {searching ? <JournalSearch query={query.trim()} /> : feed}
         </>
       )}
     </div>

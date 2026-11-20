@@ -51,7 +51,11 @@ export function PlayButton({
     setError(null);
     setOutcome(null);
     try {
-      setOutcome(await api.launchGame(gameId));
+      const next = await api.launchGame(gameId);
+      setOutcome(next);
+      if (next.started) {
+        window.dispatchEvent(new CustomEvent("vn:tracking-changed"));
+      }
     } catch (caught) {
       setError(caught instanceof IpcError ? caught.message : t("common.error"));
     } finally {

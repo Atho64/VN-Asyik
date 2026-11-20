@@ -122,6 +122,19 @@ export function TrackingScreen() {
     }
   };
 
+  const toggleAutoResumeRoute = async (): Promise<void> => {
+    if (!capability || busy) return;
+    const current = capability.auto_resume_route ?? true;
+    setBusy(true);
+    try {
+      setCapability(await api.trackingSetAutoResumeRoute(!current));
+    } catch (caught) {
+      fail(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const scan = async (path: string): Promise<void> => {
     setScanning(path);
     try {
@@ -239,6 +252,31 @@ export function TrackingScreen() {
 
       {usageAccess?.applicable ? <AndroidSessionPanel /> : null}
 
+      {usageAccess?.applicable && !capability.available ? (
+        <Card>
+          <CardHeader title={t("tracking.title")} />
+          <div className="settings__row">
+            <span className="settings__label">
+              {t("tracking.autoResumeRoute")}
+              <span className="settings__hint">
+                {t("tracking.autoResumeRouteAndroidHint")}
+              </span>
+            </span>
+            <div className="settings__control">
+              <Chip
+                selected={capability.auto_resume_route ?? true}
+                onClick={() => void toggleAutoResumeRoute()}
+                ariaLabel={t("tracking.autoResumeRoute")}
+              >
+                {(capability.auto_resume_route ?? true)
+                  ? t("tracking.on")
+                  : t("tracking.off")}
+              </Chip>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       {capability.available ? (
         <>
           <Card>
@@ -290,6 +328,23 @@ export function TrackingScreen() {
                   {capability.mode === "auto"
                     ? t("tracking.autoOn")
                     : t("tracking.autoOff")}
+                </Chip>
+              </div>
+            </div>
+            <div className="settings__row">
+              <span className="settings__label">
+                {t("tracking.autoResumeRoute")}
+                <span className="settings__hint">{t("tracking.autoResumeRouteHint")}</span>
+              </span>
+              <div className="settings__control">
+                <Chip
+                  selected={capability.auto_resume_route ?? true}
+                  onClick={() => void toggleAutoResumeRoute()}
+                  ariaLabel={t("tracking.autoResumeRoute")}
+                >
+                  {(capability.auto_resume_route ?? true)
+                    ? t("tracking.on")
+                    : t("tracking.off")}
                 </Chip>
               </div>
             </div>
@@ -515,7 +570,11 @@ function AndroidSessionPanel() {
         <div className="settings__row">
           <span className="settings__label">
             {title ?? session.gameId}
-            <span className="settings__hint">{session.package}</span>
+            <span className="settings__hint">
+              {session.targetName
+                ? `${session.package} · ${session.targetName}`
+                : session.package}
+            </span>
             {!error ? (
               <span className="settings__hint">
                 {t(

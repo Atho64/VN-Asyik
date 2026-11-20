@@ -16,7 +16,6 @@ import { VndbFacts } from "@/features/game/VndbFacts";
 import { vndbVnUrl } from "@/features/game/vndbMetadata";
 import { Card, CardHeader } from "@/components/Card";
 import { RoutesCard } from "@/features/game/RoutesCard";
-import { ScriptCard } from "@/features/game/ScriptCard";
 import { WalkthroughCard } from "@/features/game/WalkthroughCard";
 import { ReadingCard } from "@/features/game/ReadingCard";
 import { SessionHistory } from "@/features/game/SessionHistory";
@@ -83,7 +82,6 @@ export function GameDetailScreen() {
   const walkthroughRef = useRef<HTMLDivElement>(null);
   const { id } = useParams<{ id: string }>();
   const { t, locale } = useI18n();
-  const beta = useAppStore((state) => state.prefs.beta_features);
   const pushToast = useAppStore((state) => state.pushToast);
   const upsertCard = useAppStore((state) => state.upsertCard);
   const removeCard = useAppStore((state) => state.removeCard);
@@ -431,6 +429,7 @@ export function GameDetailScreen() {
               src={art.imageUrl}
               alt={concealed ? "" : t("game.coverAlt", { title: game.title })}
               aria-hidden={concealed ? "true" : undefined}
+              fetchPriority="high"
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : (
@@ -488,23 +487,24 @@ export function GameDetailScreen() {
         <div className="detail__head">
           <div className="detail__intro">
             <h2 className="detail__title over-art">{game.title}</h2>
-            {otherTitles.length > 0 ? (
-              <details className="detail__titles" key={game.meta.id}>
-                <summary className="detail__titles-toggle">
-                  {t("detail.alsoKnownAs")}
-                  <span className="detail__titles-count tnum">{otherTitles.length}</span>
-                </summary>
-                <ul className="detail__alts" aria-label={t("detail.alsoKnownAs")}>
-                  {otherTitles.map((title) => (
-                    <li key={`${title.role}:${title.text}`} className="detail__alt">
-                      <span className="detail__alt-role">
-                        {t(`detail.titleRole.${title.role}`)}
-                      </span>
-                      <span className="detail__alt-text">{title.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
+          </div>
+
+          <div className="detail__actions">
+            <PlayButton gameId={game.meta.id} mappedExecutable={executables[0] ?? null} />
+            {progress !== null && progressText ? (
+              <div className="detail__actions-row">
+                <span className="detail__progress caption">
+                  <ProgressRing
+                    progress={progress}
+                    size={22}
+                    title={t("game.progressHint", {
+                      percent: Math.round(progress * 100),
+                      length: lengthText ?? "",
+                    })}
+                  />
+                  {progressText}
+                </span>
+              </div>
             ) : null}
           </div>
 
@@ -561,40 +561,24 @@ export function GameDetailScreen() {
             ) : null}
           </div>
 
-          <div className="detail__actions">
-            <div className="detail__actions-row">
-              {beta ? (
-                <>
-                  <Link
-                    className="btn btn--secondary"
-                    to={"/companion?game=" + encodeURIComponent(game.meta.id)}
-                  >
-                    {t("companion.readWith")}
-                  </Link>
-                  <Link
-                    className="btn btn--secondary"
-                    to={`/chat?game=${encodeURIComponent(game.meta.id)}`}
-                  >
-                    {t("vnchat.askGame")}
-                  </Link>
-                </>
-              ) : null}
-              {progress !== null && progressText ? (
-                <span className="detail__progress caption">
-                  <ProgressRing
-                    progress={progress}
-                    size={22}
-                    title={t("game.progressHint", {
-                      percent: Math.round(progress * 100),
-                      length: lengthText ?? "",
-                    })}
-                  />
-                  {progressText}
-                </span>
-              ) : null}
-            </div>
-            <PlayButton gameId={game.meta.id} mappedExecutable={executables[0] ?? null} />
-          </div>
+          {otherTitles.length > 0 ? (
+            <details className="detail__titles" key={game.meta.id}>
+              <summary className="detail__titles-toggle">
+                {t("detail.alsoKnownAs")}
+                <span className="detail__titles-count tnum">{otherTitles.length}</span>
+              </summary>
+              <ul className="detail__alts" aria-label={t("detail.alsoKnownAs")}>
+                {otherTitles.map((title) => (
+                  <li key={`${title.role}:${title.text}`} className="detail__alt">
+                    <span className="detail__alt-role">
+                      {t(`detail.titleRole.${title.role}`)}
+                    </span>
+                    <span className="detail__alt-text">{title.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
 
           {/* Label status chips explicitly so they read as state setters rather than header facts. */}
           <div className="detail__status">
@@ -780,8 +764,6 @@ export function GameDetailScreen() {
               onAdjustPlaytime={() => setAdjustOpen(true)}
             />
           ) : null}
-
-          {id && beta ? <ScriptCard gameId={id} /> : null}
 
           {id ? (
             <div ref={walkthroughRef} tabIndex={-1} aria-label={t("walkthrough.title")}>

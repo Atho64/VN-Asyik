@@ -6,6 +6,7 @@ import { Button } from "@/components/Button";
 import { Icon } from "@/components/Icon";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { CaptureStatus } from "@/lib/ipc/types";
+import { requestAchievementsRefresh } from "@/lib/ipc/achievements";
 
 /**
  * Capture button gated by backend `screenshotStatus` capability checks (platform
@@ -64,6 +65,7 @@ export function ScreenshotButton({
     setBusy(true);
     try {
       await api.screenshotCapture(gameId);
+      requestAchievementsRefresh();
       pushToast("success", t("screenshot.captured"));
       onCaptured?.();
     } catch (caught) {

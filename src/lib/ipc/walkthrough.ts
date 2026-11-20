@@ -43,10 +43,10 @@ export const walkthroughApi = {
       url: url ?? null,
     }),
 
-  /** Translate walkthrough routes using AI (with VNDB glossary) or Google Translate. */
+  /** Translate walkthrough routes using Google Translate (with VNDB character glossary). */
   translate: (
     gameId: string,
-    provider: "ai" | "google",
+    provider: "google",
     targetLang: "en" | "id",
     vnId?: string | null,
   ): Promise<WalkthroughView> =>

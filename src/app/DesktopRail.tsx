@@ -15,13 +15,11 @@ export interface NavEntry {
     | "nav.stats"
     | "nav.timeline"
     | "nav.recommend"
-    | "vnchat.title"
-    | "companion.title"
+    | "nav.achievements"
     | "nav.settings"
     | "nav.presence"
     | "nav.guide";
   icon: IconName;
-  beta?: boolean;
 }
 
 export function DesktopRail({

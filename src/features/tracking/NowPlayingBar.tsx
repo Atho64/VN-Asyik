@@ -123,7 +123,9 @@ export function NowPlayingBar() {
             {title}
           </div>
           <div className="caption tnum">
-            {`${t("tracking.tracking")} · ${t("tracking.active")} ${formatDuration(activeMs, locale)}`}
+            {androidSession.targetName
+              ? `${androidSession.targetName} · ${t("tracking.tracking")} · ${t("tracking.active")} ${formatDuration(activeMs, locale)}`
+              : `${t("tracking.tracking")} · ${t("tracking.active")} ${formatDuration(activeMs, locale)}`}
           </div>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>

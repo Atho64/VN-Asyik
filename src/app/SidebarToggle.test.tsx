@@ -33,16 +33,7 @@ vi.mock("@/features/tracking/NowPlayingBar", () => ({
     return null;
   },
 }));
-vi.mock("@/features/companion/CompanionBar", () => ({
-  CompanionBar: () => null,
-}));
 vi.mock("@/features/library/AddGameSheet", () => ({ AddGameSheet: () => null }));
-vi.mock("@/lib/ipc/companionWindow", () => ({
-  companionWindowApi: {
-    hide: vi.fn().mockResolvedValue(undefined),
-    listenMain: vi.fn().mockResolvedValue(() => undefined),
-  },
-}));
 
 const { AppShell } = await import("./AppShell");
 

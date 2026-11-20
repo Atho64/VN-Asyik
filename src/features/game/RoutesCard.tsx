@@ -9,11 +9,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/Icon";
 import { api, startPolling } from "@/lib/ipc/client";
 import type {
+  AutoRouteStatus,
   ChapterCapabilityView,
   ManualTimerView,
   RouteView,
 } from "@/lib/ipc/types";
 import { formatDuration } from "@/lib/time";
+import { requestAchievementsRefresh } from "@/lib/ipc/achievements";
 
 /**
  * Unified per-route view grouping chapters, endings, and the manual timer so
@@ -35,6 +37,7 @@ export function RoutesCard({
 
   const [routes, setRoutes] = useState<RouteView[]>([]);
   const [timer, setTimer] = useState<ManualTimerView | null>(null);
+  const [autoRoute, setAutoRoute] = useState<AutoRouteStatus | null>(null);
   const [capability, setCapability] = useState<ChapterCapabilityView | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -52,10 +55,23 @@ export function RoutesCard({
   const [renamingRoute, setRenamingRoute] = useState<string | null>(null);
   const [routeRenameValue, setRouteRenameValue] = useState("");
 
+  const readAutoRoute = useCallback(async (): Promise<AutoRouteStatus | null> => {
+    if (!api.trackingAutoRouteStatus) return null;
+    try {
+      return await api.trackingAutoRouteStatus(gameId);
+    } catch {
+      return null;
+    }
+  }, [gameId]);
+
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      const list = await api.gameRoutes(gameId);
+      const [list, remembered] = await Promise.all([
+        api.gameRoutes(gameId),
+        readAutoRoute(),
+      ]);
       setRoutes(list);
+      setAutoRoute(remembered);
       setLoadError(null);
       setSelectedChapterId((current) => {
         if (current) {
@@ -73,21 +89,23 @@ export function RoutesCard({
     } finally {
       setLoaded(true);
     }
-  }, [gameId]);
+  }, [gameId, readAutoRoute]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const [list, state, capability] = await Promise.all([
+        const [list, state, capability, remembered] = await Promise.all([
           api.gameRoutes(gameId),
           api.trackingManualStatus(),
           api.trackingChapterCapability(gameId),
+          readAutoRoute(),
         ]);
         if (cancelled) return;
         setRoutes(list);
         setTimer(state);
         setCapability(capability);
+        setAutoRoute(remembered);
         setSelectedChapterId(list.flatMap((route) => route.chapters)[0]?.id ?? null);
       } catch (error) {
         if (!cancelled) {
@@ -100,7 +118,7 @@ export function RoutesCard({
     return () => {
       cancelled = true;
     };
-  }, [gameId]);
+  }, [gameId, readAutoRoute]);
 
   useEffect(() => {
     if (!timer?.active || busy) return;
@@ -118,6 +136,51 @@ export function RoutesCard({
       stopPolling();
     };
   }, [gameId, timer?.active, timer?.running, busy]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let delayedId: number | null = null;
+
+    const syncStatusOnReturn = async (): Promise<void> => {
+      if (busy || document.visibilityState === "hidden") return;
+      try {
+        const [nextTimer, nextAuto] = await Promise.all([
+          api.trackingManualStatus(),
+          readAutoRoute(),
+        ]);
+        if (!cancelled) {
+          setTimer(nextTimer);
+          setAutoRoute(nextAuto);
+        }
+      } catch {
+        // Best-effort status check when returning to the window or launching Play.
+      }
+    };
+
+    const onReturn = (): void => {
+      void syncStatusOnReturn();
+    };
+
+    const onLaunch = (): void => {
+      void syncStatusOnReturn();
+      if (delayedId !== null) window.clearTimeout(delayedId);
+      delayedId = window.setTimeout(() => {
+        delayedId = null;
+        void syncStatusOnReturn();
+      }, 2500);
+    };
+
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("vn:tracking-changed", onLaunch);
+    return () => {
+      cancelled = true;
+      if (delayedId !== null) window.clearTimeout(delayedId);
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("vn:tracking-changed", onLaunch);
+    };
+  }, [busy, readAutoRoute]);
 
   /** Renders the chapter detection availability notice (supported, unsupported, or unverified). */
   const intro = useMemo(() => {
@@ -140,6 +203,8 @@ export function RoutesCard({
       setBusy(true);
       try {
         await action();
+        // Endings, routes and chapters changed: ask for one coalesced evaluate.
+        requestAchievementsRefresh();
         if (message) pushToast("success", message);
         await refresh();
       } catch (error) {
@@ -156,12 +221,13 @@ export function RoutesCard({
     setBusy(true);
     try {
       setTimer(await api.trackingManualStart(selectedChapterId, gameId));
+      setAutoRoute(await readAutoRoute());
     } catch (error) {
       pushToast("error", error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
-  }, [gameId, pushToast, selectedChapterId]);
+  }, [gameId, pushToast, readAutoRoute, selectedChapterId]);
 
   /** Start timing a whole route, with no chapter named. */
   const startRouteTimer = useCallback(
@@ -169,14 +235,28 @@ export function RoutesCard({
       setBusy(true);
       try {
         setTimer(await api.trackingManualStartRoute(routeId, gameId));
+        setAutoRoute(await readAutoRoute());
       } catch (error) {
         pushToast("error", error instanceof Error ? error.message : String(error));
       } finally {
         setBusy(false);
       }
     },
-    [gameId, pushToast],
+    [gameId, pushToast, readAutoRoute],
   );
+
+  const clearAutoRoute = useCallback(async (): Promise<void> => {
+    if (!api.trackingClearAutoRoute) return;
+    setBusy(true);
+    try {
+      setAutoRoute(await api.trackingClearAutoRoute(gameId));
+      pushToast("success", t("manual.autoResumeCleared"));
+    } catch (error) {
+      pushToast("error", error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [gameId, pushToast, t]);
 
   const stopTimer = useCallback(async (): Promise<void> => {
     const name =
@@ -751,6 +831,23 @@ export function RoutesCard({
       )}
 
       <div className="manual-timer">
+        {!timer?.active && autoRoute?.enabled && autoRoute.targetName ? (
+          <div className="manual-timer__status" role="status">
+            <span className="manual-timer__label">
+              {t("manual.autoResumeNext", { name: autoRoute.targetName })}
+            </span>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                void clearAutoRoute();
+              }}
+            >
+              {t("manual.autoResumeClear")}
+            </Button>
+          </div>
+        ) : null}
+
         <div className="manual-timer__status">
           {timer?.active ? (
             <>

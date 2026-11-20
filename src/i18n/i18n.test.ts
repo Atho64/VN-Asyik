@@ -48,44 +48,6 @@ describe("dictionary completeness", () => {
     }
   });
 
-  it("defines the companion's dynamic status and knowledge keys", () => {
-    const families = {
-      "vnchat.persona": ["companion", "kawaii", "analyst", "playful", "concise"],
-      "companion.knowledge": ["metadata", "observed", "all"],
-      "companion.knowledgeHint": ["metadata", "observed", "all"],
-      "companion.state": ["starting", "active", "paused", "ending"],
-      "companion.sourceState": [
-        "off",
-        "manual",
-        "waiting",
-        "receiving",
-        "stale",
-        "disconnected",
-        "paused",
-      ],
-      "companion.reason": [
-        "user",
-        "ended_by_user",
-        "shutdown",
-        "interrupted",
-        "game_missing",
-        "db_error",
-        "game_changed",
-        "game_closed",
-        "game_unavailable",
-        "source_changed",
-        "source_lost",
-      ],
-    };
-    for (const [prefix, values] of Object.entries(families)) {
-      for (const value of values) {
-        const key = `${prefix}.${value}`;
-        expect(en, key).toHaveProperty(key);
-        expect(id, key).toHaveProperty(key);
-      }
-    }
-  });
-
   /**
    * Ensures every literal `t("key")` call exists in the dictionaries (missing keys render raw);
    * dynamic enum-based keys are checked explicitly below.
@@ -203,21 +165,43 @@ describe("copy hygiene", () => {
       expect(emoji.test(value), `id:${key}`).toBe(false);
     }
   });
+});
 
-  it("never uses single-brace interpolation in vnchat, script, or companion keys", () => {
-    const singleBrace = /(?<!\{)\{[a-zA-Z_]\w*\}(?!\})/;
-    const scoped = (key: string) =>
-      key.startsWith("vnchat.") ||
-      key.startsWith("script.") ||
-      key.startsWith("companion.") ||
-      key.startsWith("vision.");
-    for (const [key, value] of Object.entries(en)) {
-      if (!scoped(key)) continue;
-      expect(singleBrace.test(value), `en:${key}`).toBe(false);
+describe("achievement catalog i18n", () => {
+  // The icon file names are the catalog's slugs; every one must have a name and
+  // an honest condition description in both locales, so no card renders a raw key.
+  const slugs = readdirSync(join(SRC, "assets", "achievements"), { encoding: "utf8" })
+    .filter((name) => name.endsWith(".svg"))
+    .map((name) => name.replace(/\.svg$/, ""));
+
+  it("covers the approved 65-item catalog", () => {
+    expect(slugs.length).toBe(65);
+  });
+
+  it("has a name and description for every slug in English and Indonesian", () => {
+    const enDict = en as Record<string, string>;
+    const idDict = id as Record<string, string>;
+    const missing: string[] = [];
+    for (const slug of slugs) {
+      for (const prefix of ["achievements.names.", "achievements.desc."]) {
+        const key = `${prefix}${slug}`;
+        if (!enDict[key]?.trim()) missing.push(`en:${key}`);
+        if (!idDict[key]?.trim()) missing.push(`id:${key}`);
+      }
     }
-    for (const [key, value] of Object.entries(id)) {
-      if (!scoped(key)) continue;
-      expect(singleBrace.test(value), `id:${key}`).toBe(false);
+    expect(missing).toEqual([]);
+  });
+
+  it("gives every group and tier a label in both locales", () => {
+    const enDict = en as Record<string, string>;
+    const idDict = id as Record<string, string>;
+    for (const group of ["A", "B", "C", "D", "E", "F"]) {
+      expect(enDict[`achievements.group.${group}`]?.trim()).toBeTruthy();
+      expect(idDict[`achievements.group.${group}`]?.trim()).toBeTruthy();
+    }
+    for (const tier of ["bronze", "silver", "gold"]) {
+      expect(enDict[`achievements.tier.${tier}`]?.trim()).toBeTruthy();
+      expect(idDict[`achievements.tier.${tier}`]?.trim()).toBeTruthy();
     }
   });
 });

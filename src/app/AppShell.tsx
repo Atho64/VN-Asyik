@@ -10,17 +10,19 @@ import { Icon } from "@/components/Icon";
 import { Toasts } from "@/components/Toasts";
 import { ContextMenuProvider } from "@/app/ContextMenuProvider";
 import { NowPlayingBar } from "@/features/tracking/NowPlayingBar";
-import { CompanionBar } from "@/features/companion/CompanionBar";
 import { CommandPalette } from "@/features/palette/CommandPalette";
 import { AddGameSheet } from "@/features/library/AddGameSheet";
 import { Button } from "@/components/Button";
 import { Sheet } from "@/components/Sheet";
 import { api } from "@/lib/ipc/client";
-import { companionWindowApi } from "@/lib/ipc/companionWindow";
 import { DesktopRail, type NavEntry } from "@/app/DesktopRail";
+import {
+  useAchievementUnlockToasts,
+  useAchievementsRefresh,
+} from "@/features/achievements/events";
 
 /**
- * Top-level navigation: Library, Stats, Timeline, Recommend, Chat, Presence,
+ * Top-level navigation: Library, Stats, Timeline, Discover, Presence,
  * Guide, and Settings. Tracking, VNDB Sync and Device Data Transfer live inside
  * Settings to keep the main navigation uncluttered.
  */
@@ -28,9 +30,8 @@ const navEntries: NavEntry[] = [
   { to: "/", labelKey: "nav.library", icon: "library" },
   { to: "/stats", labelKey: "nav.stats", icon: "stats" },
   { to: "/timeline", labelKey: "nav.timeline", icon: "clock" },
-  { to: "/recommend", beta: true, labelKey: "nav.recommend", icon: "spark" },
-  { to: "/chat", beta: true, labelKey: "vnchat.title", icon: "chat" },
-  { to: "/companion", beta: true, labelKey: "companion.title", icon: "shelf" },
+  { to: "/recommend", labelKey: "nav.recommend", icon: "spark" },
+  { to: "/achievements", labelKey: "nav.achievements", icon: "achievements" },
   { to: "/presence", labelKey: "nav.presence", icon: "gamepad" },
   { to: "/guide", labelKey: "nav.guide", icon: "guide" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
@@ -38,12 +39,10 @@ const navEntries: NavEntry[] = [
 
 const mobilePaths = new Set(["/", "/stats", "/settings"]);
 const mobileEntries = navEntries.filter((entry) => mobilePaths.has(entry.to));
+const moreEntries = navEntries.filter((entry) => !mobilePaths.has(entry.to));
 
 export function AppShell() {
   const { t } = useI18n();
-  const beta = useAppStore((state) => state.prefs.beta_features);
-  const visibleEntries = navEntries.filter((entry) => !entry.beta || beta);
-  const moreEntries = visibleEntries.filter((entry) => !mobilePaths.has(entry.to));
   const paletteOpen = useAppStore((state) => state.paletteOpen);
   const appearance = useAppStore((state) => state.appearance);
   const setPaletteOpen = useAppStore((state) => state.setPaletteOpen);
@@ -59,23 +58,10 @@ export function AppShell() {
     pathname === "/devices" ||
     pathname === "/tracking";
 
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void companionWindowApi
-      .listenMain((path) => {
-        void navigate(path);
-      })
-      .then((stop) => {
-        if (disposed) stop();
-        else unlisten = stop;
-      })
-      .catch(() => {});
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [navigate]);
+  // Achievement unlock toasts and the single coalesced refresh listener live in
+  // the shell so they run on every screen, not only while the catalog is open.
+  useAchievementUnlockToasts();
+  useAchievementsRefresh();
 
   // The global shortcut captures from Rust; this only reports what happened.
   useEffect(() => {
@@ -183,14 +169,13 @@ export function AppShell() {
         <Backdrop />
       )}
 
-      <DesktopRail entries={visibleEntries} settingsActive={settingsActive} />
+      <DesktopRail entries={navEntries} settingsActive={settingsActive} />
 
       <div className="app__content">
         <main ref={mainRef} className="app__main" id="main-content">
           <Outlet />
         </main>
         <NowPlayingBar />
-        {beta ? <CompanionBar /> : null}
       </div>
 
       <nav className="bottomnav" aria-label={t("app.name")}>

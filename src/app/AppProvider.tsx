@@ -5,7 +5,6 @@
 
 import { useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
 
-import { listenBetaFeatures } from "@/lib/ipc/prefs";
 import { api, IpcError } from "@/lib/ipc/client";
 import type { GameCard } from "@/lib/ipc/types";
 import { savedBrowseEqual, toSavedLibraryBrowse } from "@/lib/library";
@@ -41,13 +40,7 @@ async function loadLibrary(os: string | undefined): Promise<GameCard[]> {
   return api.listGames();
 }
 
-export function AppProvider({
-  children,
-  companionWindow = false,
-}: {
-  children: ReactNode;
-  companionWindow?: boolean;
-}) {
+export function AppProvider({ children }: { children: ReactNode }) {
   const prefs = useAppStore((state) => state.prefs);
   const setPrefs = useAppStore((state) => state.setPrefs);
   const setPlatform = useAppStore((state) => state.setPlatform);
@@ -67,26 +60,6 @@ export function AppProvider({
 
   const locale = resolveLocale(prefs.language);
   const t = useMemo(() => createTranslator(locale), [locale]);
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void listenBetaFeatures((enabled) => {
-      if (!disposed)
-        useAppStore.setState((state) => ({
-          prefs: { ...state.prefs, beta_features: enabled },
-        }));
-    })
-      .then((stop) => {
-        if (disposed) stop();
-        else unlisten = stop;
-      })
-      .catch(() => undefined);
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
 
   // One boot pass: prefs, platform capabilities, then the library itself. The
   // library is separate so its failure does not blank the whole app.
@@ -118,7 +91,6 @@ export function AppProvider({
           autostart: null,
         });
         if (platform) setPlatform(platform);
-        if (companionWindow) return;
 
         try {
           const cards = await loadLibrary(platform?.os);
@@ -138,10 +110,8 @@ export function AppProvider({
     };
 
     void boot();
-    if (companionWindow) window.addEventListener("focus", boot);
     return () => {
       cancelled = true;
-      window.removeEventListener("focus", boot);
     };
     // Boot runs once. `t` is only used for the fallback message.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,29 +162,23 @@ export function AppProvider({
   // starts in English. Relabel it as soon as the UI knows the language, and
   // again on every switch: the tray is a user-visible surface like any other.
   useEffect(() => {
-    if (companionWindow) return;
     void api.traySetLabels(t("tray.show"), t("tray.hide"), t("tray.quit")).catch(() => {
       // Platforms without a tray have nothing to relabel.
     });
-  }, [t, companionWindow]);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
-    const refresh = () => {
-      void api
-        .appearanceGet()
-        .then((result) => {
-          if (!cancelled) setAppearance(result);
-        })
-        .catch(() => undefined);
-    };
-    refresh();
-    if (companionWindow) window.addEventListener("focus", refresh);
+    void api
+      .appearanceGet()
+      .then((result) => {
+        if (!cancelled) setAppearance(result);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
-      window.removeEventListener("focus", refresh);
     };
-  }, [setAppearance, companionWindow]);
+  }, [setAppearance]);
 
   /* Theme and accent apply via CSS custom properties so one update recolors controls
    * globally; `updateAppearance` is the single writer (theme -> accent -> game tint). */
@@ -262,7 +226,6 @@ export function AppProvider({
    * so this is one request a day in practice. A failure is silent on purpose: a
    * library screen must not show an error because a release feed was unreachable. */
   useEffect(() => {
-    if (companionWindow) return;
     let cancelled = false;
     void api
       .updateCheck(false)
@@ -273,7 +236,7 @@ export function AppProvider({
     return () => {
       cancelled = true;
     };
-  }, [setUpdate, companionWindow]);
+  }, [setUpdate]);
 
   useLayoutEffect(() => {
     // The focused card can leave the virtual range while its artwork remains
@@ -284,7 +247,6 @@ export function AppProvider({
 
   // Reduce effects is suggested, never forced, on platforms that ask for it.
   useEffect(() => {
-    if (companionWindow) return;
     if (prefersReducedTransparency() && !prefs.reduce_effects) {
       void api
         .setReduceEffects(true)
@@ -296,7 +258,7 @@ export function AppProvider({
   }, []);
 
   useEffect(() => {
-    if (companionWindow || !uiPrefsLoaded || !uiPrefs?.library_remember_browse) return;
+    if (!uiPrefsLoaded || !uiPrefs?.library_remember_browse) return;
     if (typeof api.uiPrefsSet !== "function") return;
     const next = toSavedLibraryBrowse(libraryBrowse);
     const saved = uiPrefs.library_saved_browse;
@@ -309,7 +271,6 @@ export function AppProvider({
     }, 150);
     return () => window.clearTimeout(timer);
   }, [
-    companionWindow,
     uiPrefsLoaded,
     uiPrefs?.library_remember_browse,
     uiPrefs?.library_saved_browse,
@@ -318,8 +279,8 @@ export function AppProvider({
   ]);
 
   const value = useMemo<AppContextValue>(
-    () => ({ t, locale, ready: companionWindow || libraryLoaded, bootError }),
-    [t, locale, companionWindow, libraryLoaded, bootError],
+    () => ({ t, locale, ready: libraryLoaded, bootError }),
+    [t, locale, libraryLoaded, bootError],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -90,7 +90,6 @@ function setPolicy(nsfw: NsfwMode) {
       language: "en",
       nsfw,
       reduce_effects: false,
-      beta_features: false,
     },
   });
 }

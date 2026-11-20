@@ -79,6 +79,36 @@ export const journalSearchPageSchema = z.object({
 });
 export type JournalSearchPage = z.infer<typeof journalSearchPageSchema>;
 
+export const globalNoteSchema = z.object({
+  meta: z.object({
+    id: z.string(),
+    updated_at: z.number(),
+    device_id_device: z.string(),
+    deleted: z.boolean(),
+  }),
+  game_id: z.string().nullable().default(null),
+  created_at: z.number(),
+  title: z.string().default(""),
+  body: z.string(),
+  pinned: z.boolean().default(false),
+});
+export type GlobalNote = z.infer<typeof globalNoteSchema>;
+
+export const globalNoteViewSchema = z.object({
+  note: globalNoteSchema,
+  gameTitle: z.string().nullable(),
+});
+export type GlobalNoteView = z.infer<typeof globalNoteViewSchema>;
+
+export interface SaveGlobalNoteInput {
+  id: string | null;
+  expectedUpdatedAt: number | null;
+  gameId: string | null;
+  title: string;
+  body: string;
+  pinned: boolean;
+}
+
 export const readingApi = {
   session: (gameId: string, sessionId: string, offset = 0) =>
     call("reading_session_context", sessionReadingContextSchema, {
@@ -104,4 +134,23 @@ export const readingApi = {
    */
   search: (query: string, gameId?: string, before?: { ts: number; id: string }) =>
     call("journal_search", journalSearchPageSchema, { query, gameId, before }),
+  listGlobalNotes: (input?: {
+    query?: string | null | undefined;
+    gameId?: string | null | undefined;
+    globalOnly?: boolean | undefined;
+  }) =>
+    call("global_notes_list", globalNoteViewSchema.array(), {
+      query: input?.query ?? null,
+      gameId: input?.gameId ?? null,
+      globalOnly: input?.globalOnly ?? false,
+    }),
+  saveGlobalNote: (input: SaveGlobalNoteInput) =>
+    call("global_note_save", globalNoteViewSchema, { input }),
+  setGlobalNotePinned: (id: string, pinned: boolean) =>
+    call("global_note_set_pinned", globalNoteViewSchema, { id, pinned }),
+  deleteGlobalNote: (id: string, expectedUpdatedAt?: number) =>
+    call("global_note_delete", z.null(), {
+      id,
+      expectedUpdatedAt: expectedUpdatedAt ?? null,
+    }),
 };

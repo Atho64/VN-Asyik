@@ -1,8 +1,6 @@
-import { useAppStore } from "@/app/store";
 import { useI18n } from "@/app/useI18n";
 
 import chapterShot from "@/assets/guide/chapters.jpg";
-import chatShot from "@/assets/guide/chat.jpg";
 import discoverShot from "@/assets/guide/discover.jpg";
 import gameShot from "@/assets/guide/game.jpg";
 import libraryShot from "@/assets/guide/library.jpg";
@@ -18,14 +16,11 @@ const sections = [
   { key: "game", shot: gameShot },
   { key: "stats", shot: statsShot },
   { key: "discover", shot: discoverShot },
-  { key: "chat", shot: chatShot },
-  { key: "companion", shot: undefined },
   { key: "settings", shot: settingsShot },
 ] as const;
 
 export function GuideScreen() {
   const { t } = useI18n();
-  const beta = useAppStore((state) => state.prefs.beta_features);
 
   return (
     <div className="guide">
@@ -34,35 +29,26 @@ export function GuideScreen() {
         <p className="page-sub">{t("guide.intro")}</p>
       </header>
 
-      {sections
-        .filter(
-          ({ key }) =>
-            beta || (key !== "chat" && key !== "discover" && key !== "companion"),
-        )
-        .map(({ key, shot }) => (
-          <article key={key} className="guide__section">
-            {shot ? (
-              <img
-                className="guide__shot"
-                src={shot}
-                alt=""
-                loading="lazy"
-                decoding="async"
-              />
-            ) : null}
-            <div className="guide__body">
-              <h2 className="guide__title">{t(`guide.${key}.title`)}</h2>
-              <p className="guide__text">{t(`guide.${key}.body`)}</p>
-              <ul className="guide__points">
-                <li>{t(`guide.${key}.p1`)}</li>
-                <li>{t(`guide.${key}.p2`)}</li>
-                <li>{t(`guide.${key}.p3`)}</li>
-                {/* Only the chat section has a fourth point: saved providers. */}
-                {key === "chat" ? <li>{t("guide.chat.p4")}</li> : null}
-              </ul>
-            </div>
-          </article>
-        ))}
+      {sections.map(({ key, shot }) => (
+        <article key={key} className="guide__section">
+          <img
+            className="guide__shot"
+            src={shot}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+          <div className="guide__body">
+            <h2 className="guide__title">{t(`guide.${key}.title`)}</h2>
+            <p className="guide__text">{t(`guide.${key}.body`)}</p>
+            <ul className="guide__points">
+              <li>{t(`guide.${key}.p1`)}</li>
+              <li>{t(`guide.${key}.p2`)}</li>
+              <li>{t(`guide.${key}.p3`)}</li>
+            </ul>
+          </div>
+        </article>
+      ))}
 
       <p className="guide__footer">{t("guide.footer")}</p>
     </div>

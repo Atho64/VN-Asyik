@@ -76,7 +76,6 @@ beforeEach(() => {
       language: "en",
       nsfw: "blur",
       reduce_effects: false,
-      beta_features: false,
     },
   });
 });

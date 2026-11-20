@@ -20,14 +20,7 @@ vi.mock("@/lib/ipc/client", () => ({
 
 vi.mock("@/components/Backdrop", () => ({ Backdrop: () => null, focusArt: vi.fn() }));
 vi.mock("@/features/tracking/NowPlayingBar", () => ({ NowPlayingBar: () => null }));
-vi.mock("@/features/companion/CompanionBar", () => ({ CompanionBar: () => null }));
 vi.mock("@/features/library/AddGameSheet", () => ({ AddGameSheet: () => null }));
-vi.mock("@/lib/ipc/companionWindow", () => ({
-  companionWindowApi: {
-    hide: vi.fn().mockResolvedValue(undefined),
-    listenMain: vi.fn().mockResolvedValue(() => undefined),
-  },
-}));
 // The real Big Picture screen polls gamepads and measures covers; the shell's
 // behaviour under test is only the route it lands on and the fullscreen drop.
 vi.mock("@/features/bigpicture/BigPictureScreen", () => ({

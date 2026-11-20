@@ -6,9 +6,7 @@ import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { Icon } from "@/components/Icon";
 import { AppearancePanel } from "@/features/settings/AppearancePanel";
-import { ChatPanel } from "@/features/settings/ChatPanel";
 import { LocalePanel } from "@/features/settings/LocalePanel";
-import { LunaPanel } from "@/features/settings/LunaPanel";
 import { TitleParsingPanel } from "@/features/settings/TitleParsingPanel";
 import {
   LibraryLaunchSection,
@@ -47,7 +45,6 @@ export default function SettingsScreen({
   const pushToast = useAppStore((state) => state.pushToast);
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? "general");
   const [afk, setAfk] = useState<AfkConfig | null>(null);
-  const [betaSaving, setBetaSaving] = useState(false);
   const [syncSettings, setSyncSettings] = useState<SyncSettings | null>(null);
 
   useEffect(() => {
@@ -222,46 +219,6 @@ export default function SettingsScreen({
                 </Chip>
               </div>
             </div>
-          </section>
-
-          <section className="settings__group">
-            <h2 className="settings__group-title">{t("settings.betaTitle")}</h2>
-            <div className="settings__row">
-              <span className="settings__label">
-                <span id="beta-label">{t("settings.betaLabel")}</span>
-                <span className="settings__hint" id="beta-hint">
-                  {t("settings.betaHint")}
-                </span>
-              </span>
-              <div className="settings__control">
-                <Button
-                  variant="secondary"
-                  role="switch"
-                  aria-checked={prefs.beta_features}
-                  aria-labelledby="beta-label"
-                  aria-describedby="beta-hint"
-                  disabled={betaSaving}
-                  onClick={() => {
-                    setBetaSaving(true);
-                    void apply(() => api.setBetaFeatures(!prefs.beta_features)).finally(
-                      () => setBetaSaving(false),
-                    );
-                  }}
-                >
-                  {betaSaving
-                    ? t("settings.betaSaving")
-                    : prefs.beta_features
-                      ? t("settings.betaOn")
-                      : t("settings.betaOff")}
-                </Button>
-              </div>
-            </div>
-            {prefs.beta_features ? (
-              <>
-                <ChatPanel />
-                <LunaPanel />
-              </>
-            ) : null}
           </section>
 
           <section className="settings__group">

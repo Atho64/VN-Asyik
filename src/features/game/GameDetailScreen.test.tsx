@@ -47,7 +47,6 @@ vi.mock("@/lib/ipc/client", () => ({
 // The panels below the hero are unrelated to artwork policy.
 vi.mock("@/features/tracking/MapExecutable", () => ({ MapExecutable: () => null }));
 vi.mock("@/features/game/RoutesCard", () => ({ RoutesCard: () => null }));
-vi.mock("@/features/game/ScriptCard", () => ({ ScriptCard: () => null }));
 vi.mock("@/features/game/WalkthroughCard", () => ({ WalkthroughCard: () => null }));
 vi.mock("@/features/game/ReadingCard", () => ({ ReadingCard: () => null }));
 vi.mock("@/features/game/PlayButton", () => ({ PlayButton: () => null }));
@@ -126,7 +125,6 @@ function setPolicy(nsfw: NsfwMode) {
       language: "en",
       nsfw,
       reduce_effects: false,
-      beta_features: false,
     },
   });
 }
@@ -169,20 +167,6 @@ beforeEach(() => {
 });
 
 describe("game detail artwork policy", () => {
-  it("shows companion and chatbot shortcuts only after Beta opt-in", async () => {
-    renderDetail();
-    await screen.findByRole("heading", { name: "A visual novel" });
-    expect(screen.queryByRole("link", { name: "Read with companion" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Discuss this VN" })).toBeNull();
-    act(() =>
-      useAppStore.setState({
-        prefs: { ...useAppStore.getState().prefs, beta_features: true },
-      }),
-    );
-    expect(screen.getByRole("link", { name: "Read with companion" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Discuss this VN" })).toBeInTheDocument();
-  });
-
   it("blurs an explicit hero cover under the Blur setting", async () => {
     const { container } = renderDetail();
     await waitFor(() =>
@@ -386,7 +370,29 @@ describe("game detail layout", () => {
     expect(titles).toHaveTextContent("原題");
     expect(titles).toHaveTextContent("A very long alternative title");
     expect(container.querySelector(".detail__intro .detail__facts")).toBeNull();
+    expect(container.querySelector(".detail__intro .detail__titles")).toBeNull();
     expect(container.querySelector(".detail__head > .detail__facts")).not.toBeNull();
+    expect(container.querySelector(".detail__head > .detail__titles")).not.toBeNull();
+
+    // Title leads the header, Play actions sit directly below the title, and alternate titles sit below facts.
+    const heroChildren = Array.from(container.querySelectorAll(".detail__hero > *"));
+    expect(heroChildren[0]).toHaveClass("detail__art");
+    expect(heroChildren[1]).toHaveClass("detail__head");
+
+    const headChildren = Array.from(container.querySelectorAll(".detail__head > *"));
+    const introIndex = headChildren.findIndex((el) => el.classList.contains("detail__intro"));
+    const actionsIndex = headChildren.findIndex((el) =>
+      el.classList.contains("detail__actions"),
+    );
+    const factsIndex = headChildren.findIndex((el) => el.classList.contains("detail__facts"));
+    const titlesIndex = headChildren.findIndex((el) => el.classList.contains("detail__titles"));
+    const statusIndex = headChildren.findIndex((el) => el.classList.contains("detail__status"));
+    expect(introIndex).toBe(0);
+    expect(actionsIndex).toBe(1);
+    expect(factsIndex).toBeGreaterThan(actionsIndex);
+    expect(titlesIndex).toBeGreaterThan(factsIndex);
+    expect(statusIndex).toBeGreaterThan(titlesIndex);
+
     if (!summary) throw new Error("Missing titles disclosure");
     await userEvent.click(summary);
     expect(titles).toHaveAttribute("open");
