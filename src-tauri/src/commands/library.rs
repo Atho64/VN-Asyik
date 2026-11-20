@@ -1,9 +1,10 @@
 //! Library commands: games, chapters, sessions, endings, aggregates.
 
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 use tauri::State;
 use vn_core::clock::Timestamp;
-use vn_core::ids::EntityId;
+use vn_core::ids::{DeviceId, EntityId};
 use vn_core::library::StatusBreakdown;
 use vn_core::model::{Chapter, Ending, Game, GameStatus, PlaySession, Route, SessionSource};
 
@@ -278,7 +279,7 @@ pub async fn create_ending(
     Ok(ending)
 }
 
-/// Change an ending's name, route, or whether it was achieved.
+/// Change an ending's name, route label, or whether it was achieved.
 ///
 /// # Errors
 /// `invalid` for a blank name, `not_found` for an unknown id, or a database
@@ -291,8 +292,35 @@ pub async fn update_ending(
     route: Option<String>,
     achieved: bool,
 ) -> CommandResult<Ending> {
+    edit_ending(
+        state.db().pool(),
+        state.device(),
+        ending_id,
+        name,
+        route,
+        achieved,
+    )
+    .await
+}
+
+/// Edit an ending's name, free-text route label, and achieved state.
+///
+/// The route link (`route_id`) is owned by `set_ending_route` and route merges,
+/// not by this editor, so it is preserved verbatim: marking an ending achieved
+/// must not drop it into "no route". Pool-based so the rule is testable without
+/// a Tauri state.
+///
+/// # Errors
+/// `invalid` for a blank name, `not_found` for an unknown id, or a database failure.
+pub async fn edit_ending(
+    pool: &SqlitePool,
+    device: &DeviceId,
+    ending_id: String,
+    name: String,
+    route: Option<String>,
+    achieved: bool,
+) -> CommandResult<Ending> {
     let id = EntityId::parse(&ending_id)?;
-    let pool = state.db().pool();
     let existing = queries::ending_by_id(pool, id)
         .await?
         .filter(|ending| !ending.meta.deleted)
@@ -301,7 +329,7 @@ pub async fn update_ending(
     let at = now()?;
     // Rebuild through the domain constructor so the length and blank-name rules live
     // in one place rather than being re-checked by hand here.
-    let mut updated = Ending::new(state.device(), at, existing.game_id, name)?;
+    let mut updated = Ending::new(device, at, existing.game_id, name)?;
     // Keep the identity: this edits a row, it does not create one.
     updated.meta = vn_core::model::SyncMeta {
         id,
@@ -312,6 +340,8 @@ pub async fn update_ending(
     updated.route = route
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty());
+    // Preserve the route link: this editor does not manage route_id.
+    updated.route_id = existing.route_id;
     updated.achieved = achieved;
     updated.achieved_at = if achieved {
         // Preserve the original date: re-saving an ending must not silently rewrite

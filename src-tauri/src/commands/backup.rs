@@ -30,6 +30,15 @@ pub struct BackupFile {
     /// Reading checkpoints, including tombstones so deleted notes stay deleted.
     #[serde(default)]
     pub reading_entries: Vec<vn_core::reading::ReadingEntry>,
+    /// Global and cross-game notes, including tombstones.
+    #[serde(default)]
+    pub global_notes: Vec<vn_core::reading::GlobalNote>,
+    /// Custom reading goals, including tombstones.
+    #[serde(default)]
+    pub reading_goals: Vec<vn_core::goals::ReadingGoal>,
+    /// Achievement unlocks (monotonic). Absent in pre-achievement backups.
+    #[serde(default)]
+    pub achievement_unlocks: Vec<vn_core::achievements::AchievementUnlock>,
     /// Preferences at export time.
     pub prefs: PrefsSnapshot,
 }
@@ -39,8 +48,20 @@ pub struct BackupFile {
 /// The frontend owns file placement via a save dialog, so this stays a pure
 /// data command that is trivially testable.
 #[tauri::command]
-pub async fn export_backup(state: State<'_, AppState>) -> CommandResult<BackupFile> {
-    let pool = state.db().pool();
+pub async fn export_backup(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<BackupFile> {
+    let payload = collect_backup(state.db().pool()).await?;
+    // Producing the payload is the backend seam for "a backup was made"; the
+    // picker-based export marks only after a successful save instead.
+    crate::commands::achievements::note_backup_made(state.db().pool()).await?;
+    crate::commands::achievements::refresh_quietly(&app, state.db().pool(), state.device()).await;
+    Ok(payload)
+}
+
+/// Read every live row into a backup payload (no marker side effects).
+async fn collect_backup(pool: &SqlitePool) -> CommandResult<BackupFile> {
     let games = queries::list_games(pool).await?;
 
     let mut routes = Vec::new();
@@ -55,6 +76,9 @@ pub async fn export_backup(state: State<'_, AppState>) -> CommandResult<BackupFi
         endings.extend(queries::list_endings(pool, game.meta.id).await?);
         reading_entries.extend(crate::db::reading::list_all(pool, game.meta.id).await?);
     }
+    let global_notes = crate::db::notes::list_all_including_deleted(pool).await?;
+    let reading_goals = crate::db::goals::list_all_including_deleted(pool).await?;
+    let achievement_unlocks = crate::db::achievements::list_all_including_deleted(pool).await?;
 
     let created_at = Timestamp::now()?;
     Ok(BackupFile {
@@ -70,6 +94,9 @@ pub async fn export_backup(state: State<'_, AppState>) -> CommandResult<BackupFi
         sessions,
         endings,
         reading_entries,
+        global_notes,
+        reading_goals,
+        achievement_unlocks,
         prefs: queries::load_prefs(pool).await?,
     })
 }
@@ -88,6 +115,9 @@ pub struct ImportSummary {
     /// Endings written.
     pub endings: usize,
     pub reading_entries: usize,
+    pub global_notes: usize,
+    pub reading_goals: usize,
+    pub achievement_unlocks: usize,
     /// Sessions skipped because their id already existed (append-only rule).
     pub sessions_skipped: usize,
 }
@@ -98,11 +128,18 @@ pub async fn export_backup_file(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<bool> {
-    let payload = export_backup(state).await?;
+    let payload = collect_backup(state.db().pool()).await?;
     let filename = format!("vn-asyik-backup-{}.json", payload.header.created_at_ms);
     let contents = serde_json::to_string_pretty(&payload)
         .map_err(|err| CommandError::new("backup", err.to_string()))?;
-    crate::platform::storage::save_document(app, filename, contents).await
+    let saved = crate::platform::storage::save_document(app.clone(), filename, contents).await?;
+    // A cancelled picker is not a backup; mark only a successful save.
+    if saved {
+        crate::commands::achievements::note_backup_made(state.db().pool()).await?;
+        crate::commands::achievements::refresh_quietly(&app, state.db().pool(), state.device())
+            .await;
+    }
+    Ok(saved)
 }
 
 /// Read a user-selected backup; cancellation leaves the library untouched.
@@ -111,12 +148,12 @@ pub async fn import_backup_file(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<Option<ImportSummary>> {
-    let Some(contents) = crate::platform::storage::open_document(app).await? else {
+    let Some(contents) = crate::platform::storage::open_document(app.clone()).await? else {
         return Ok(None);
     };
     let payload = serde_json::from_str(&contents)
         .map_err(|_| CommandError::new("invalid_backup", "Choose a VN Asyik backup JSON file"))?;
-    import_backup(state, payload).await.map(Some)
+    import_backup(app, state, payload).await.map(Some)
 }
 
 /// Import a backup payload.
@@ -125,10 +162,14 @@ pub async fn import_backup_file(
 /// skipped rather than overwritten. A newer schema is refused outright.
 #[tauri::command]
 pub async fn import_backup(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     payload: BackupFile,
 ) -> CommandResult<ImportSummary> {
-    import_payload(state.db().pool(), &payload).await
+    let summary = import_payload(state.db().pool(), &payload).await?;
+    // Imported history can earn achievements retroactively.
+    crate::commands::achievements::refresh_quietly(&app, state.db().pool(), state.device()).await;
+    Ok(summary)
 }
 
 /// Restore one backup atomically, including its preferences.
@@ -179,6 +220,9 @@ pub async fn import_payload(
         sessions: 0,
         endings: 0,
         reading_entries: 0,
+        global_notes: 0,
+        reading_goals: 0,
+        achievement_unlocks: 0,
         sessions_skipped: 0,
     };
 
@@ -209,10 +253,7 @@ pub async fn import_payload(
         }
     }
 
-    for entry in &payload.reading_entries {
-        crate::db::reading::upsert(&mut *tx, entry).await?;
-        summary.reading_entries += 1;
-    }
+    import_journal_and_extras(&mut tx, payload, &mut summary).await?;
 
     queries::set_pref(&mut *tx, "theme", theme.as_str()).await?;
     queries::set_pref(&mut *tx, "nsfw", nsfw.as_str()).await?;
@@ -230,4 +271,32 @@ pub async fn import_payload(
     tx.commit().await.map_err(DbError::from)?;
 
     Ok(summary)
+}
+
+/// Write the journal, notes, goals and achievement rows of a backup.
+async fn import_journal_and_extras(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    payload: &BackupFile,
+    summary: &mut ImportSummary,
+) -> CommandResult<()> {
+    for entry in &payload.reading_entries {
+        crate::db::reading::upsert(&mut **tx, entry).await?;
+        summary.reading_entries += 1;
+    }
+    for note in &payload.global_notes {
+        crate::db::notes::upsert(&mut **tx, note).await?;
+        summary.global_notes += 1;
+    }
+    for goal in &payload.reading_goals {
+        crate::db::goals::upsert(&mut **tx, goal).await?;
+        summary.reading_goals += 1;
+    }
+    for unlock in &payload.achievement_unlocks {
+        unlock
+            .validate()
+            .map_err(|err| CommandError::new("invalid_backup", err))?;
+        crate::db::achievements::upsert(&mut **tx, unlock).await?;
+        summary.achievement_unlocks += 1;
+    }
+    Ok(())
 }

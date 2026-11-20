@@ -415,6 +415,9 @@ fn sample_preview_context() -> PresenceContext {
         vndb_year: Some("2009".to_string()),
         vndb_released: Some("2009-10-15".to_string()),
         title_original: Some("シュタインズ・ゲート".to_string()),
+        title_english: Some("STEINS;GATE".to_string()),
+        title_romaji: Some("Steins;Gate".to_string()),
+        title_japanese: Some("シュタインズ・ゲート".to_string()),
         status: Some("Reading".to_string()),
         playtime: Some("42:17".to_string()),
         elapsed_time: "02:45".to_string(),
@@ -798,5 +801,81 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn preview_card_activity_respects_english_romaji_and_japanese_title_language() {
+        let db = crate::db::Db::open_memory().await.expect("db");
+        let id = "01a151db-7777-7000-8000-000000000003".to_string();
+        sqlx::query(
+            "INSERT INTO games (id, title, title_original, vndb_id, status, updated_at, device_id) \
+             VALUES (?, 'Ao no Kanata no Four Rhythm', '蒼の彼方のフォーリズム', 'v12849', 'playing', 1, 'dev')",
+        )
+        .bind(&id)
+        .execute(db.pool())
+        .await
+        .expect("insert game");
+        let titles_json = serde_json::json!([
+            {"lang": "en", "title": "Aokana: Four Rhythms Across the Blue", "latin": null, "official": true, "main": false},
+            {"lang": "ja", "title": "蒼の彼方のフォーリズム", "latin": "Ao no Kanata no Four Rhythm", "official": true, "main": true}
+        ])
+        .to_string();
+        sqlx::query(
+            "INSERT INTO vndb_details (vn_id, title, alttitle, titles_json, olang, developers_json, fetched_at) \
+             VALUES ('v12849', 'Ao no Kanata no Four Rhythm', '蒼の彼方のフォーリズム', ?, 'ja', '[]', 1)",
+        )
+        .bind(&titles_json)
+        .execute(db.pool())
+        .await
+        .expect("insert vndb_details");
+
+        for (lang, expected) in [
+            (
+                vn_core::presence::PresenceTitleLanguage::English,
+                "Aokana: Four Rhythms Across the Blue",
+            ),
+            (
+                vn_core::presence::PresenceTitleLanguage::Romaji,
+                "Ao no Kanata no Four Rhythm",
+            ),
+            (
+                vn_core::presence::PresenceTitleLanguage::Japanese,
+                "蒼の彼方のフォーリズム",
+            ),
+        ] {
+            let settings = PresenceSettings {
+                enabled: true,
+                title_language: lang,
+                ..Default::default()
+            };
+            let act = preview_card_activity(
+                db.pool(),
+                std::path::Path::new("."),
+                Some(&id),
+                &settings,
+                None,
+                None,
+            )
+            .await
+            .expect("preview");
+            assert_eq!(act.name.as_deref(), Some(expected), "{lang:?}");
+        }
+
+        // Sample preview (no game selected) also fills all three variants.
+        let sample_ja = preview_card_activity(
+            db.pool(),
+            std::path::Path::new("."),
+            None,
+            &PresenceSettings {
+                enabled: true,
+                title_language: vn_core::presence::PresenceTitleLanguage::Japanese,
+                ..Default::default()
+            },
+            None,
+            None,
+        )
+        .await
+        .expect("sample preview");
+        assert_eq!(sample_ja.name.as_deref(), Some("シュタインズ・ゲート"));
     }
 }

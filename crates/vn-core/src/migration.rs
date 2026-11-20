@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Current schema version. Bump with a matching migration and test (`AGENTS.md` §5).
-pub const SCHEMA_VERSION: u32 = 37;
+pub const SCHEMA_VERSION: u32 = 40;
 
 /// Highest backup schema version this build reads; newer backups are refused.
 pub const MAX_READABLE_SCHEMA: u32 = SCHEMA_VERSION;

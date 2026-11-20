@@ -535,3 +535,117 @@ async fn a_payload_from_a_newer_schema_is_skipped_rather_than_misread() {
 
     let _ = std::fs::remove_dir_all(&folder);
 }
+
+#[tokio::test]
+async fn achievement_unlocks_merge_to_the_earliest_date_and_converge() {
+    use vn_core::achievements::AchievementUnlock;
+    use vn_core::model::SyncMeta;
+    use vn_tracker_lib::db::achievements;
+
+    let a = device().await;
+    let b = device().await;
+    // Both devices earned the same achievement; A earned it earlier, B edited
+    // its row later. The earliest unlock date must win on both devices.
+    let early = AchievementUnlock {
+        meta: SyncMeta::new(&a.device_id, Timestamp::from_millis(5_000)),
+        achievement_id: "first-session".to_owned(),
+        unlocked_at: Timestamp::from_millis(1_000),
+    };
+    let late = AchievementUnlock {
+        meta: SyncMeta::new(&b.device_id, Timestamp::from_millis(2_000)),
+        achievement_id: "first-session".to_owned(),
+        unlocked_at: Timestamp::from_millis(9_000),
+    };
+    achievements::upsert(a.db.pool(), &early)
+        .await
+        .expect("a unlock");
+    achievements::upsert(b.db.pool(), &late)
+        .await
+        .expect("b unlock");
+
+    let payload_a = sync::collect_local(a.db.pool(), &a.device_id)
+        .await
+        .expect("export a");
+    let outcome = sync::merge_transfer(b.db.pool(), &b.device_id, &payload_a)
+        .await
+        .expect("b pulls");
+    assert!(
+        outcome
+            .conflicts
+            .iter()
+            .any(|c| c.table == "achievement_unlocks" && c.reason == "unlock_wins"),
+        "the monotonic pick must be logged: {:?}",
+        outcome.conflicts
+    );
+    let rows_b = achievements::list_all_including_deleted(b.db.pool())
+        .await
+        .expect("b rows");
+    assert_eq!(rows_b.len(), 1, "one row per slug, not per UUID");
+    assert_eq!(
+        rows_b[0].unlocked_at.as_millis(),
+        1_000,
+        "earliest unlock wins"
+    );
+
+    // The other direction converges on the same date.
+    let payload_b = sync::collect_local(b.db.pool(), &b.device_id)
+        .await
+        .expect("export b");
+    sync::merge_transfer(a.db.pool(), &a.device_id, &payload_b)
+        .await
+        .expect("a pulls");
+    let rows_a = achievements::list_all_including_deleted(a.db.pool())
+        .await
+        .expect("a rows");
+    assert_eq!(rows_a.len(), 1);
+    assert_eq!(rows_a[0].unlocked_at.as_millis(), 1_000);
+
+    // Re-importing the same payload writes nothing.
+    let again = sync::merge_transfer(b.db.pool(), &b.device_id, &payload_a)
+        .await
+        .expect("repeat");
+    assert_eq!(again.pulled, 0, "re-merge must be a no-op");
+}
+
+#[tokio::test]
+async fn a_deleted_unlock_copy_never_revokes_a_live_unlock() {
+    use vn_core::achievements::AchievementUnlock;
+    use vn_core::model::SyncMeta;
+    use vn_tracker_lib::db::achievements;
+
+    let a = device().await;
+    let b = device().await;
+    let live = AchievementUnlock {
+        meta: SyncMeta::new(&b.device_id, Timestamp::from_millis(1_000)),
+        achievement_id: "night-owl".to_owned(),
+        unlocked_at: Timestamp::from_millis(500),
+    };
+    achievements::upsert(b.db.pool(), &live)
+        .await
+        .expect("live");
+    let mut dead = AchievementUnlock {
+        meta: SyncMeta::new(&a.device_id, Timestamp::from_millis(9_000)),
+        achievement_id: "night-owl".to_owned(),
+        unlocked_at: Timestamp::from_millis(100),
+    };
+    dead.meta.deleted = true;
+    achievements::upsert(a.db.pool(), &dead)
+        .await
+        .expect("tombstone");
+
+    let payload = sync::collect_local(a.db.pool(), &a.device_id)
+        .await
+        .expect("export");
+    sync::merge_transfer(b.db.pool(), &b.device_id, &payload)
+        .await
+        .expect("merge");
+    let rows = achievements::list_all_including_deleted(b.db.pool())
+        .await
+        .expect("rows");
+    assert_eq!(rows.len(), 1);
+    assert!(
+        !rows[0].meta.deleted,
+        "a newer tombstone must not revoke an unlock"
+    );
+    assert_eq!(rows[0].unlocked_at.as_millis(), 500);
+}

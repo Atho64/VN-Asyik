@@ -55,12 +55,14 @@ fn fixture() -> BackupFile {
         sessions: vec![session],
         endings: vec![ending],
         reading_entries: vec![],
+        global_notes: vec![],
+        reading_goals: vec![],
+        achievement_unlocks: vec![],
         prefs: PrefsSnapshot {
             theme: "light".to_owned(),
             language: "id".to_owned(),
             nsfw: "hide".to_owned(),
             reduce_effects: true,
-            beta_features: false,
         },
     }
 }
@@ -77,6 +79,9 @@ fn transfer(file: &BackupFile, device: &str) -> SyncPayload {
         sessions: file.sessions.clone(),
         endings: file.endings.clone(),
         reading_entries: file.reading_entries.clone(),
+        global_notes: file.global_notes.clone(),
+        reading_goals: file.reading_goals.clone(),
+        achievement_unlocks: file.achievement_unlocks.clone(),
     }
 }
 
@@ -760,5 +765,64 @@ async fn a_screenshot_travels_with_the_library_file() {
             .await
             .unwrap(),
         b"jpeg-bytes"
+    );
+}
+
+#[tokio::test]
+async fn achievement_unlocks_are_counted_and_unknown_or_duplicate_slugs_rejected() {
+    let (db, device) = target().await;
+    let store = ImportDraftStore::default();
+    let mut file = serde_json::to_value(transfer(&fixture(), "source-device")).unwrap();
+    let unlock = json!({
+        "meta": {
+            "id": "01a151d6-eca1-76f0-961d-a7a586661ecd",
+            "updated_at": 1000,
+            "device_id_device": "source-device",
+            "deleted": false
+        },
+        "achievement_id": "first-session",
+        "unlocked_at": 1000
+    });
+    file["achievement_unlocks"] = json!([unlock.clone()]);
+
+    // A known slug previews with its count.
+    let id = store.begin_open().unwrap();
+    let draft = prepare_import(&store, &id, db.pool(), &device, &file.to_string())
+        .await
+        .expect("valid unlock");
+    assert_eq!(draft.achievement_unlocks, 1);
+
+    // An unknown slug is refused before any write.
+    let mut unknown = file.clone();
+    unknown["achievement_unlocks"][0]["achievement_id"] = json!("not-in-catalog");
+    let id = store.begin_open().unwrap();
+    assert_eq!(
+        prepare_import(&store, &id, db.pool(), &device, &unknown.to_string())
+            .await
+            .unwrap_err()
+            .code,
+        "invalid_file"
+    );
+
+    // Two rows for one slug are refused (the slug is the storage identity).
+    let mut duplicate = file.clone();
+    let mut second = unlock;
+    second["meta"]["id"] = json!("01a151d6-eca1-76f0-961d-a7a586661ece");
+    duplicate["achievement_unlocks"]
+        .as_array_mut()
+        .unwrap()
+        .push(second);
+    let id = store.begin_open().unwrap();
+    assert_eq!(
+        prepare_import(&store, &id, db.pool(), &device, &duplicate.to_string())
+            .await
+            .unwrap_err()
+            .code,
+        "invalid_file"
+    );
+    assert_eq!(
+        game_count(&db).await,
+        0,
+        "nothing may be written on refusal"
     );
 }

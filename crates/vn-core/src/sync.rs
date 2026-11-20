@@ -79,6 +79,8 @@ pub enum Reason {
     /// Timestamps matched; higher `device_id` broke the tie.
     TieBreak,
     DeleteWins,
+    /// Monotonic achievement merge: the earliest live unlock for a slug wins.
+    UnlockWins,
 }
 
 /// The outcome of merging one row.

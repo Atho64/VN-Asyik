@@ -3,14 +3,11 @@
 //! Layout follows AGENTS.md §3. Everything user-visible goes through the
 //! `commands` module; the frontend has no direct database or filesystem access.
 
-pub mod ai;
 pub mod commands;
-pub mod companion;
 pub mod db;
 pub mod platform;
 pub mod presence;
 pub mod screenshots;
-pub mod script;
 pub mod secrets;
 pub mod startup;
 pub mod state;
@@ -21,7 +18,7 @@ pub mod vndb;
 pub mod walkthrough;
 pub mod window_launch;
 
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 fn android_screenshot_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     #[cfg(target_os = "android")]
@@ -77,6 +74,10 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::reading::reading_session_context,
         commands::reading::reading_save,
         commands::reading::reading_delete,
+        commands::reading::global_notes_list,
+        commands::reading::global_note_save,
+        commands::reading::global_note_set_pinned,
+        commands::reading::global_note_delete,
         commands::reading::journal_export_file,
         commands::reading::journal_search,
         commands::library::list_endings,
@@ -100,7 +101,6 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::library::set_game_custom_cover,
         commands::library::clear_game_custom_cover,
         commands::prefs::get_prefs,
-        commands::prefs::set_beta_features,
         commands::prefs::set_theme,
         commands::prefs::set_language,
         commands::prefs::set_nsfw_mode,
@@ -126,6 +126,14 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::vndb::vndb_search,
         commands::for_you::for_you_profile,
         commands::for_you::for_you_search,
+        commands::goals::reading_goals_list,
+        commands::goals::reading_goal_save,
+        commands::goals::reading_goal_set_pinned,
+        commands::goals::reading_goal_set_progress,
+        commands::goals::reading_goal_delete,
+        commands::achievements::achievements_list,
+        commands::achievements::achievements_evaluate,
+        commands::achievements::achievements_note_discover_import,
         commands::vndb::vndb_preview,
         commands::vndb::vndb_import,
         commands::vndb::vndb_import_many,
@@ -171,7 +179,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::sync::sync_export_file,
         commands::sync::sync_import_file,
         commands::sync::sync_share_file,
-        commands::ai::ai_taste_profile,
+        commands::for_you::taste_profile,
         commands::appearance::appearance_get,
         commands::appearance::appearance_set,
         commands::appearance::theme_export_file,
@@ -186,56 +194,6 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::screenshots::screenshot_save,
         commands::update::update_check,
         commands::update::update_install,
-        commands::ai::ai_llm_profiles,
-        commands::ai::ai_llm_save_profile,
-        commands::ai::ai_llm_activate_profile,
-        commands::ai::ai_llm_delete_profile,
-        commands::ai::ai_llm_clear_key,
-        commands::chat::chat_list,
-        commands::chat::chat_create,
-        commands::chat::chat_messages,
-        commands::chat::chat_update,
-        commands::chat::chat_delete,
-        commands::chat::chat_send,
-        commands::chat::chat_cancel,
-        commands::companion::companion_snapshot,
-        commands::companion::companion_start,
-        commands::companion::companion_vision_windows,
-        commands::companion::companion_vision_select,
-        commands::companion::companion_vision_preview,
-        commands::companion::companion_vision_probe,
-        commands::companion::companion_vision_control,
-        commands::companion::companion_vision_send,
-        commands::companion::companion_control,
-        commands::companion::companion_send,
-        commands::companion::companion_memory_view,
-        commands::companion::companion_memory_save,
-        commands::companion::companion_memory_forget,
-        commands::companion::companion_memory_settings,
-        commands::companion::companion_memory_sources,
-        commands::companion::companion_recap,
-        commands::companion::companion_recap_resume,
-        commands::companion::companion_recap_review,
-        commands::companion::companion_list,
-        commands::companion::companion_messages,
-        commands::companion::companion_delete,
-        commands::companion::companion_profiles,
-        commands::companion::companion_save_profile,
-        commands::companion::companion_delete_profile,
-        commands::companion::companion_apply_profile,
-        companion::window::companion_open_overlay,
-        companion::window::companion_hide_overlay,
-        companion::window::companion_show_main,
-        commands::script::script_import,
-        commands::script::script_list,
-        commands::script::script_delete,
-        commands::script::script_compact,
-        commands::script::script_agent_settings,
-        commands::script::script_save_agent_settings,
-        commands::luna::luna_settings,
-        commands::luna::luna_save_settings,
-        commands::luna::luna_status,
-        commands::luna::luna_test,
         commands::launch::launch_capability,
         commands::launch::launch_save_settings,
         commands::launch::launch_game,
@@ -243,10 +201,6 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::tracking::tracking_title_config,
         commands::tracking::tracking_save_title_config,
         commands::tracking::tracking_test_title_pattern,
-        commands::ai::ai_recommend_settings,
-        commands::ai::ai_save_tavily_key,
-        commands::ai::ai_clear_tavily_key,
-        commands::ai::ai_recommend,
         commands::tracking::tracking_rename_chapter,
         commands::tracking::tracking_manual_status,
         commands::tracking::tracking_manual_start,
@@ -254,6 +208,9 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::tracking::tracking_manual_pause,
         commands::tracking::tracking_manual_resume,
         commands::tracking::tracking_manual_stop,
+        commands::tracking::tracking_set_auto_resume_route,
+        commands::tracking::tracking_auto_route_status,
+        commands::tracking::tracking_clear_auto_route,
         commands::tracking::tracking_create_chapter,
         commands::tracking::tracking_remove_executable,
         commands::tracking::tracking_pause,
@@ -263,7 +220,6 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
         commands::tracking::tracking_add_scan_folder,
         commands::tracking::tracking_remove_scan_folder,
         commands::tracking::tracking_scan_folder,
-        commands::hook::hook_status,
         commands::presence::presence_status,
         commands::presence::presence_get_settings,
         commands::presence::presence_save_settings,
@@ -304,6 +260,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
 /// onto the async runtime so the plugin thread never blocks on COM.
 #[cfg(not(any(windows, target_os = "android")))]
 fn screenshot_shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    use tauri::Emitter;
     use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 
     let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyS);
@@ -353,7 +310,6 @@ pub fn run() {
             let handle = app.handle().clone();
             let state = tauri::async_runtime::block_on(state::AppState::boot(&handle))?;
             app.manage(state);
-            app.manage(companion::window::OverlayWindow::default());
             app.manage(window_launch::WindowLaunchTracker::default());
             #[cfg(desktop)]
             {
@@ -380,15 +336,6 @@ pub fn run() {
                 )));
                 startup::apply_startup_mode(&handle, &startup_prefs);
             }
-            let events = handle.clone();
-            app.state::<state::AppState>()
-                .companion()
-                .set_notifier(move |notice| {
-                    // No subscribers is normal; loss of a page cannot cancel a turn.
-                    let _ = events.emit_to("main", companion::EVENT, &notice);
-                    let _ = events.emit_to(companion::window::LABEL, companion::EVENT, &notice);
-                });
-            commands::companion::spawn_monitor(handle.clone());
             commands::tracking::spawn_loop(handle.clone());
             #[cfg(windows)]
             screenshots::shortcut::spawn(handle.clone());
@@ -405,11 +352,10 @@ pub fn run() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     // Synchronous handler: consult the in-memory mirror rather than querying SQLite.
-                    let hides = window.label() == companion::window::LABEL
-                        || window
-                            .app_handle()
-                            .try_state::<startup::CloseBehavior>()
-                            .is_none_or(|behavior| behavior.hides_to_tray());
+                    let hides = window
+                        .app_handle()
+                        .try_state::<startup::CloseBehavior>()
+                        .is_none_or(|behavior| behavior.hides_to_tray());
                     if hides {
                         api.prevent_close();
                         let _ = window.hide();
@@ -422,12 +368,6 @@ pub fn run() {
             }
         })
         .invoke_handler(handlers())
-        .build(tauri::generate_context!())
-        .expect("error while building VN Asyik")
-        .run(|app, event| {
-            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
-                let state = app.state::<state::AppState>();
-                let _ = tauri::async_runtime::block_on(state.companion().shutdown(&state));
-            }
-        });
+        .run(tauri::generate_context!())
+        .expect("error while running VN Asyik");
 }

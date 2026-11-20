@@ -9,7 +9,7 @@ use vn_core::{EntityId, reading::ReadingEntry};
 
 use super::journey::TimelineCursor;
 use super::{CommandError, CommandResult};
-use crate::db::{DbError, queries, reading};
+use crate::db::{DbError, notes, queries, reading};
 use crate::state::AppState;
 use crate::vndb::cache::{self, CachedScreenshot};
 use crate::vndb::screenshots::{self, ScreenshotStore};
@@ -63,6 +63,66 @@ pub async fn reading_delete(
         state.db().pool(),
         state.device(),
         EntityId::parse(&game_id)?,
+        EntityId::parse(&id)?,
+        expected_updated_at,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn global_notes_list(
+    state: State<'_, AppState>,
+    query: Option<String>,
+    game_id: Option<String>,
+    global_only: Option<bool>,
+) -> CommandResult<Vec<notes::GlobalNoteView>> {
+    if let Some(q) = query.as_deref()
+        && q.chars().count() > 200
+    {
+        return Err(CommandError::new("invalid", "search query is too long"));
+    }
+    let game = game_id.map(|id| EntityId::parse(&id)).transpose()?;
+    Ok(notes::list(
+        state.db().pool(),
+        query.as_deref(),
+        game,
+        global_only.unwrap_or(false),
+    )
+    .await?)
+}
+
+#[tauri::command]
+pub async fn global_note_save(
+    state: State<'_, AppState>,
+    input: notes::SaveGlobalNoteInput,
+) -> CommandResult<notes::GlobalNoteView> {
+    notes::save(state.db().pool(), state.device(), input).await
+}
+
+#[tauri::command]
+pub async fn global_note_set_pinned(
+    state: State<'_, AppState>,
+    id: String,
+    pinned: bool,
+) -> CommandResult<notes::GlobalNoteView> {
+    notes::set_pinned(
+        state.db().pool(),
+        state.device(),
+        EntityId::parse(&id)?,
+        pinned,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn global_note_delete(
+    state: State<'_, AppState>,
+    id: String,
+    expected_updated_at: Option<i64>,
+) -> CommandResult<()> {
+    notes::delete(
+        state.db().pool(),
+        state.device(),
         EntityId::parse(&id)?,
         expected_updated_at,
     )

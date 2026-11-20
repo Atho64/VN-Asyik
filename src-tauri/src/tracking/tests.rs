@@ -1121,3 +1121,294 @@ async fn a_manual_timer_ends_when_the_game_closes() {
         "and its time is written, not dropped"
     );
 }
+
+#[tokio::test]
+async fn auto_resumes_last_route_on_relaunch_without_double_counting() {
+    let (db, device, game, probe, service) = fixture().await;
+    let route = vn_core::model::Route::new(&device, t(0), game, "Shiroha").expect("route");
+    let route_id = route.meta.id;
+    queries::upsert_route(db.pool(), &route)
+        .await
+        .expect("insert route");
+
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .manual_start_route(route_id, game, t(0))
+        .await
+        .expect("start route timer");
+    service
+        .poll(db.pool(), &device, t(0))
+        .await
+        .expect("poll 0");
+    service
+        .poll(db.pool(), &device, t(4_000))
+        .await
+        .expect("poll 4s");
+
+    // Game closes: session 1 saves under route_id, and the route stays remembered.
+    probe.set(vec![], None, 0);
+    service
+        .poll(db.pool(), &device, t(6_000))
+        .await
+        .expect("poll exit");
+    assert!(service.manual_state().await.is_none());
+
+    // Relaunch the game at t=10s: poll must automatically resume timing Shiroha
+    // from millisecond 0 and hand off automatic tracking so nothing double-counts.
+    probe.set(
+        vec![process(901, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(901),
+        0,
+    );
+    service
+        .poll(db.pool(), &device, t(10_000))
+        .await
+        .expect("poll relaunch");
+    let resumed = service
+        .manual_state()
+        .await
+        .expect("auto-resumed manual timer");
+    assert_eq!(resumed.route_id, Some(route_id));
+    assert_eq!(resumed.chapter_id, None);
+    assert_eq!(resumed.phase(), Phase::Tracking);
+
+    service
+        .poll(db.pool(), &device, t(15_000))
+        .await
+        .expect("poll 15s");
+    probe.set(vec![], None, 0);
+    service
+        .poll(db.pool(), &device, t(17_000))
+        .await
+        .expect("poll second exit");
+
+    let rows: Vec<(Option<String>, Option<String>, i64)> = sqlx::query_as(
+        "SELECT route_id, chapter_id, counted_ms FROM play_sessions WHERE game_id = ? AND deleted = 0 ORDER BY started_at",
+    )
+    .bind(game.to_string())
+    .fetch_all(db.pool())
+    .await
+    .expect("sessions");
+    assert_eq!(
+        rows.len(),
+        2,
+        "only the two route-timed sessions may exist (zero unattributed automatic sessions)"
+    );
+    assert_eq!(rows[0].0.as_deref(), Some(route_id.to_string().as_str()));
+    assert_eq!(rows[0].1, None);
+    assert_eq!(rows[0].2, 6_000);
+    assert_eq!(rows[1].0.as_deref(), Some(route_id.to_string().as_str()));
+    assert_eq!(rows[1].1, None);
+    assert_eq!(rows[1].2, 7_000);
+}
+
+#[tokio::test]
+async fn explicit_stop_clears_auto_resume_for_next_launch() {
+    let (db, device, game, probe, service) = fixture().await;
+    let route = vn_core::model::Route::new(&device, t(0), game, "Kamome").expect("route");
+    let route_id = route.meta.id;
+    queries::upsert_route(db.pool(), &route)
+        .await
+        .expect("insert route");
+
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .manual_start_route(route_id, game, t(0))
+        .await
+        .expect("start route");
+    service
+        .poll(db.pool(), &device, t(0))
+        .await
+        .expect("poll 0");
+    service
+        .poll(db.pool(), &device, t(4_000))
+        .await
+        .expect("poll 4s");
+
+    // Explicit user Stop clears the remembered target for this game.
+    service
+        .send(db.pool(), &device, Event::Stop, t(5_000))
+        .await
+        .expect("explicit stop");
+    assert!(service.manual_state().await.is_none());
+    assert_eq!(
+        super::auto_route::resolve_for_game(db.pool(), game).await,
+        None
+    );
+
+    // Next poll / launch tracks at game level without restarting the route timer.
+    service
+        .poll(db.pool(), &device, t(10_000))
+        .await
+        .expect("relaunch poll");
+    assert!(service.manual_state().await.is_none());
+}
+
+#[tokio::test]
+async fn disabled_auto_resume_does_not_restart_route_on_relaunch() {
+    let (db, device, game, probe, service) = fixture().await;
+    let route = vn_core::model::Route::new(&device, t(0), game, "Ao").expect("route");
+    let route_id = route.meta.id;
+    queries::upsert_route(db.pool(), &route)
+        .await
+        .expect("insert route");
+
+    service.set_auto_resume_route(false).await;
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .manual_start_route(route_id, game, t(0))
+        .await
+        .expect("start route");
+    service
+        .poll(db.pool(), &device, t(0))
+        .await
+        .expect("poll 0");
+    probe.set(vec![], None, 0);
+    service
+        .poll(db.pool(), &device, t(4_000))
+        .await
+        .expect("exit");
+
+    probe.set(
+        vec![process(901, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(901),
+        0,
+    );
+    service
+        .poll(db.pool(), &device, t(8_000))
+        .await
+        .expect("relaunch with auto-resume off");
+    assert!(service.manual_state().await.is_none());
+}
+
+#[tokio::test]
+async fn auto_resume_follows_merged_route_survivor() {
+    let (db, device, game, probe, service) = fixture().await;
+    let survivor = vn_core::model::Route::new(&device, t(0), game, "Tsumugi True").expect("route");
+    let survivor_id = survivor.meta.id;
+    queries::upsert_route(db.pool(), &survivor)
+        .await
+        .expect("insert survivor");
+
+    let mut old = vn_core::model::Route::new(&device, t(0), game, "Tsumugi Draft").expect("route");
+    let old_id = old.meta.id;
+    queries::upsert_route(db.pool(), &old)
+        .await
+        .expect("insert old");
+
+    super::auto_route::remember(
+        db.pool(),
+        game,
+        &super::auto_route::AutoResumeTarget::Route {
+            route_id: old_id.to_string(),
+        },
+    )
+    .await;
+
+    // User merges old into survivor before next launch.
+    old.merged_into = Some(survivor_id);
+    queries::upsert_route(db.pool(), &old)
+        .await
+        .expect("merge old into survivor");
+
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .poll(db.pool(), &device, t(1_000))
+        .await
+        .expect("launch after merge");
+    let run = service.manual_state().await.expect("resumed survivor");
+    assert_eq!(run.route_id, Some(survivor_id));
+}
+
+#[tokio::test]
+async fn auto_resume_does_not_overwrite_running_manual_timer() {
+    let (db, device, game, probe, service) = fixture().await;
+    let route_a = vn_core::model::Route::new(&device, t(0), game, "Route A").expect("route");
+    let route_b = vn_core::model::Route::new(&device, t(0), game, "Route B").expect("route");
+    let id_a = route_a.meta.id;
+    let id_b = route_b.meta.id;
+    queries::upsert_route(db.pool(), &route_a).await.expect("a");
+    queries::upsert_route(db.pool(), &route_b).await.expect("b");
+
+    // Remember Route A in sync_state, but manually start Route B before launching.
+    super::auto_route::remember(
+        db.pool(),
+        game,
+        &super::auto_route::AutoResumeTarget::Route {
+            route_id: id_a.to_string(),
+        },
+    )
+    .await;
+    service
+        .manual_start_route(id_b, game, t(0))
+        .await
+        .expect("manual start B");
+
+    probe.set(
+        vec![process(900, "game.exe", "C:/Games/Tracked/game.exe", true)],
+        Some(900),
+        0,
+    );
+    service
+        .poll(db.pool(), &device, t(1_000))
+        .await
+        .expect("poll");
+    let run = service.manual_state().await.expect("manual still running");
+    assert_eq!(
+        run.route_id,
+        Some(id_b),
+        "must keep the explicitly running timer rather than clobbering it with stored state"
+    );
+}
+
+#[tokio::test]
+async fn a_manual_timer_does_not_count_when_the_game_is_not_open() {
+    let (db, device, game, probe, service) = fixture().await;
+    // No processes running at all: the game is completely closed.
+    probe.set(vec![], Some(1), 0);
+
+    let route = vn_core::model::Route::new(&device, t(0), game, "Shiroha").expect("route");
+    queries::upsert_route(db.pool(), &route)
+        .await
+        .expect("insert route");
+
+    service
+        .manual_start_route(route.meta.id, game, t(0))
+        .await
+        .expect("start route timer while game is closed");
+    service.sample_manual(db.pool(), t(0)).await;
+
+    let initial = service.manual_state().await.expect("timer armed");
+    assert_eq!(
+        initial.phase(),
+        Phase::Unfocused,
+        "a closed game has no focused window, so the timer must wait in Unfocused"
+    );
+    assert_eq!(initial.projected_total(t(5_000)), 0);
+
+    poll_range(&service, &db, &device, 1, 5).await;
+    let after_closed_polls = service.manual_state().await.expect("timer still armed");
+    assert_eq!(after_closed_polls.phase(), Phase::Unfocused);
+    assert_eq!(
+        after_closed_polls.total_ms(),
+        0,
+        "zero milliseconds may accrue while the game is not open"
+    );
+    assert_eq!(after_closed_polls.projected_total(t(20_000)), 0);
+}

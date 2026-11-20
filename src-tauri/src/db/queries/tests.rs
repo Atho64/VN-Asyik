@@ -389,7 +389,6 @@ async fn prefs_default_then_persist() {
     let defaults = load_prefs(db.pool()).await.expect("prefs");
     assert_eq!(defaults.theme, "dark");
     assert_eq!(defaults.nsfw_mode(), NsfwMode::Blur);
-    assert!(!defaults.beta_features);
 
     set_pref(db.pool(), "theme", ThemeMode::Light.as_str())
         .await
@@ -401,10 +400,6 @@ async fn prefs_default_then_persist() {
     let updated = load_prefs(db.pool()).await.expect("prefs");
     assert_eq!(updated.theme, "light");
     assert!(updated.reduce_effects);
-    set_pref(db.pool(), "beta_features", "true").await.unwrap();
-    assert!(load_prefs(db.pool()).await.unwrap().beta_features);
-    set_pref(db.pool(), "beta_features", "false").await.unwrap();
-    assert!(!load_prefs(db.pool()).await.unwrap().beta_features);
 }
 
 #[tokio::test]

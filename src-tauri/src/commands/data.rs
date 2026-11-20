@@ -40,6 +40,9 @@ pub struct DataImportPreview {
     pub sessions: usize,
     pub endings: usize,
     pub reading_entries: usize,
+    pub global_notes: usize,
+    pub reading_goals: usize,
+    pub achievement_unlocks: usize,
     pub same_device: bool,
     pub can_restore: bool,
 }
@@ -250,7 +253,10 @@ fn parse_file(contents: &str) -> CommandResult<ImportPayload> {
             &payload.sessions,
             &payload.endings,
             &payload.reading_entries,
+            &payload.global_notes,
         )?;
+        validate_reading_goals(&payload.reading_goals)?;
+        validate_achievement_unlocks(&payload.achievement_unlocks)?;
         Ok(ImportPayload::Backup(payload))
     } else if transfer_marker && !backup_marker {
         let payload: SyncPayload = serde_json::from_str(contents).map_err(|_| invalid_file())?;
@@ -285,7 +291,34 @@ fn validate_transfer(payload: &SyncPayload) -> CommandResult<()> {
         &payload.sessions,
         &payload.endings,
         &payload.reading_entries,
-    )
+        &payload.global_notes,
+    )?;
+    validate_reading_goals(&payload.reading_goals)?;
+    validate_achievement_unlocks(&payload.achievement_unlocks)
+}
+
+fn validate_achievement_unlocks(
+    unlocks: &[vn_core::achievements::AchievementUnlock],
+) -> CommandResult<()> {
+    unique_ids(unlocks.iter().map(|row| row.meta.id))?;
+    let mut slugs = HashSet::new();
+    for unlock in unlocks {
+        // Known catalog slug, and one row per slug (the storage natural key).
+        unlock.validate().map_err(|_| invalid_file())?;
+        if !slugs.insert(unlock.achievement_id.as_str()) {
+            return Err(invalid_file());
+        }
+    }
+    Ok(())
+}
+
+fn validate_reading_goals(reading_goals: &[vn_core::goals::ReadingGoal]) -> CommandResult<()> {
+    unique_ids(reading_goals.iter().map(|row| row.meta.id))?;
+    for goal in reading_goals {
+        let mut normalized = goal.clone();
+        vn_core::goals::validate_reading_goal(&mut normalized).map_err(|_| invalid_file())?;
+    }
+    Ok(())
 }
 
 fn unique_ids(ids: impl Iterator<Item = EntityId>) -> CommandResult<()> {
@@ -303,6 +336,7 @@ fn validate_rows(
     sessions: &[PlaySession],
     endings: &[Ending],
     reading_entries: &[vn_core::reading::ReadingEntry],
+    global_notes: &[vn_core::reading::GlobalNote],
 ) -> CommandResult<()> {
     unique_ids(games.iter().map(|row| row.meta.id))?;
     unique_ids(routes.iter().map(|row| row.meta.id))?;
@@ -310,8 +344,12 @@ fn validate_rows(
     unique_ids(sessions.iter().map(|row| row.meta.id))?;
     unique_ids(endings.iter().map(|row| row.meta.id))?;
     unique_ids(reading_entries.iter().map(|row| row.meta.id))?;
+    unique_ids(global_notes.iter().map(|row| row.meta.id))?;
     for entry in reading_entries {
         entry.validate().map_err(|_| invalid_file())?;
+    }
+    for note in global_notes {
+        note.validate().map_err(|_| invalid_file())?;
     }
     for game in games {
         // Mirror existing storage constraints; do not invent stricter limits
@@ -401,43 +439,105 @@ pub async fn prepare_import(
     contents: &str,
 ) -> CommandResult<DataImportPreview> {
     let payload = parse_file(contents)?;
-    let (kind, at, same_device, games, routes, chapters, sessions, endings, reading_entries) =
-        match &payload {
-            ImportPayload::Library(file) => (
-                DataImportKind::Library,
-                file.payload.written_at_ms,
-                file.payload.device_id == device.as_str(),
-                &file.payload.games,
-                &file.payload.routes,
-                &file.payload.chapters,
-                &file.payload.sessions,
-                &file.payload.endings,
-                &file.payload.reading_entries,
-            ),
-            ImportPayload::Backup(file) => (
-                DataImportKind::Backup,
-                file.header.created_at_ms,
-                false,
-                &file.games,
-                &file.routes,
-                &file.chapters,
-                &file.sessions,
-                &file.endings,
-                &file.reading_entries,
-            ),
-            ImportPayload::Transfer(file) => (
-                DataImportKind::Transfer,
-                file.written_at_ms,
-                file.device_id == device.as_str(),
-                &file.games,
-                &file.routes,
-                &file.chapters,
-                &file.sessions,
-                &file.endings,
-                &file.reading_entries,
-            ),
-        };
+    let (
+        kind,
+        at,
+        same_device,
+        games,
+        routes,
+        chapters,
+        sessions,
+        endings,
+        reading_entries,
+        global_notes,
+    ) = match &payload {
+        ImportPayload::Library(file) => (
+            DataImportKind::Library,
+            file.payload.written_at_ms,
+            file.payload.device_id == device.as_str(),
+            &file.payload.games,
+            &file.payload.routes,
+            &file.payload.chapters,
+            &file.payload.sessions,
+            &file.payload.endings,
+            &file.payload.reading_entries,
+            &file.payload.global_notes,
+        ),
+        ImportPayload::Backup(file) => (
+            DataImportKind::Backup,
+            file.header.created_at_ms,
+            false,
+            &file.games,
+            &file.routes,
+            &file.chapters,
+            &file.sessions,
+            &file.endings,
+            &file.reading_entries,
+            &file.global_notes,
+        ),
+        ImportPayload::Transfer(file) => (
+            DataImportKind::Transfer,
+            file.written_at_ms,
+            file.device_id == device.as_str(),
+            &file.games,
+            &file.routes,
+            &file.chapters,
+            &file.sessions,
+            &file.endings,
+            &file.reading_entries,
+            &file.global_notes,
+        ),
+    };
     validate_references(pool, games, routes, chapters, sessions, endings).await?;
+    validate_note_and_journal_parents(pool, games, sessions, reading_entries, global_notes).await?;
+    let reading_goals_count = match &payload {
+        ImportPayload::Library(file) => file.payload.reading_goals.len(),
+        ImportPayload::Backup(file) => file.reading_goals.len(),
+        ImportPayload::Transfer(file) => file.reading_goals.len(),
+    };
+    let achievement_unlocks_count = match &payload {
+        ImportPayload::Library(file) => file.payload.achievement_unlocks.len(),
+        ImportPayload::Backup(file) => file.achievement_unlocks.len(),
+        ImportPayload::Transfer(file) => file.achievement_unlocks.len(),
+    };
+    let preview = DataImportPreview {
+        id: id.to_owned(),
+        kind,
+        created_at_ms: at,
+        games: games.len(),
+        routes: routes.len(),
+        chapters: chapters.len(),
+        sessions: sessions.len(),
+        endings: endings.len(),
+        reading_entries: reading_entries.len(),
+        global_notes: global_notes.len(),
+        reading_goals: reading_goals_count,
+        achievement_unlocks: achievement_unlocks_count,
+        same_device,
+        can_restore: !matches!(payload, ImportPayload::Transfer(_)),
+    };
+    store.publish(id, payload)?;
+    Ok(preview)
+}
+
+async fn validate_note_and_journal_parents(
+    pool: &SqlitePool,
+    games: &[Game],
+    sessions: &[PlaySession],
+    reading_entries: &[vn_core::reading::ReadingEntry],
+    global_notes: &[vn_core::reading::GlobalNote],
+) -> CommandResult<()> {
+    for note in global_notes {
+        if let Some(game_id) = note.game_id {
+            let game_exists = games.iter().any(|game| game.meta.id == game_id)
+                || queries::get_game_including_deleted(pool, game_id)
+                    .await?
+                    .is_some();
+            if !game_exists {
+                return Err(invalid_file());
+            }
+        }
+    }
     // Journal parent validation happens at preview time as well as during writes.
     for entry in reading_entries {
         let game_exists = games.iter().any(|game| game.meta.id == entry.game_id)
@@ -470,21 +570,7 @@ pub async fn prepare_import(
             }
         }
     }
-    let preview = DataImportPreview {
-        id: id.to_owned(),
-        kind,
-        created_at_ms: at,
-        games: games.len(),
-        routes: routes.len(),
-        chapters: chapters.len(),
-        sessions: sessions.len(),
-        endings: endings.len(),
-        reading_entries: reading_entries.len(),
-        same_device,
-        can_restore: !matches!(payload, ImportPayload::Transfer(_)),
-    };
-    store.publish(id, payload)?;
-    Ok(preview)
+    Ok(())
 }
 
 /// Consume the preview before writing, including when an import subsequently fails.
@@ -523,6 +609,9 @@ pub async fn apply_import_with_mode(
                 sessions: file.sessions,
                 endings: file.endings,
                 reading_entries: file.reading_entries,
+                global_notes: file.global_notes,
+                reading_goals: file.reading_goals,
+                achievement_unlocks: file.achievement_unlocks,
             },
             Some(file.prefs),
             Vec::new(),
@@ -548,6 +637,9 @@ pub async fn apply_import_with_mode(
             sessions: snapshot.sessions,
             endings: snapshot.endings,
             reading_entries: snapshot.reading_entries,
+            global_notes: snapshot.global_notes,
+            reading_goals: snapshot.reading_goals,
+            achievement_unlocks: snapshot.achievement_unlocks,
             prefs,
         };
         let summary = backup::import_payload(pool, &file).await?;
@@ -597,11 +689,12 @@ pub async fn data_open_file(
 
 #[tauri::command]
 pub async fn data_apply_import(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     id: String,
     mode: Option<DataImportMode>,
 ) -> CommandResult<DataImportResult> {
-    apply_import_with_mode(
+    let result = apply_import_with_mode(
         state.import_drafts(),
         state.db().pool(),
         state.device(),
@@ -609,7 +702,10 @@ pub async fn data_apply_import(
         &id,
         mode.unwrap_or_default(),
     )
-    .await
+    .await?;
+    // Imported history can earn achievements retroactively.
+    super::achievements::refresh_quietly(&app, state.db().pool(), state.device()).await;
+    Ok(result)
 }
 
 /// Collect the same complete snapshot for Save and Share.
@@ -731,16 +827,29 @@ pub async fn data_export_file(
     let filename = format!("vn-asyik-library-{}.json", file.payload.written_at_ms);
     let contents = serde_json::to_string_pretty(&file)
         .map_err(|err| CommandError::new("document", err.to_string()))?;
-    crate::platform::storage::save_library_document(app, filename, contents).await
+    let saved =
+        crate::platform::storage::save_library_document(app.clone(), filename, contents).await?;
+    // A .vn-asyik-library export is a backup for the F7 achievement.
+    if saved {
+        super::achievements::note_backup_made(state.db().pool()).await?;
+        super::achievements::refresh_quietly(&app, state.db().pool(), state.device()).await;
+    }
+    Ok(saved)
 }
 
 #[tauri::command]
-pub async fn data_share_file(state: State<'_, AppState>) -> CommandResult<()> {
+pub async fn data_share_file(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
     let file = collect_library_file(state.db().pool(), state.device(), state.data_dir()).await?;
     let filename = format!("vn-asyik-library-{}.json", file.payload.written_at_ms);
     let contents = serde_json::to_string_pretty(&file)
         .map_err(|err| CommandError::new("document", err.to_string()))?;
-    crate::platform::storage::share_document(filename, contents).await
+    crate::platform::storage::share_document(filename, contents).await?;
+    super::achievements::note_backup_made(state.db().pool()).await?;
+    super::achievements::refresh_quietly(&app, state.db().pool(), state.device()).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -749,8 +858,11 @@ pub async fn data_cancel_import(state: State<'_, AppState>, id: String) -> Comma
 }
 
 #[tauri::command]
-pub async fn share_backup_file(state: State<'_, AppState>) -> CommandResult<()> {
-    let payload = backup::export_backup(state).await?;
+pub async fn share_backup_file(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    let payload = backup::export_backup(app, state).await?;
     let filename = format!("vn-asyik-backup-{}.json", payload.header.created_at_ms);
     let contents = serde_json::to_string_pretty(&payload)
         .map_err(|err| CommandError::new("backup", err.to_string()))?;

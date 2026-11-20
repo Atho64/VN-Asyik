@@ -4,9 +4,8 @@
 //! destabilise the game process while staying accurate to the configured AFK threshold.
 
 pub mod android;
+pub mod auto_route;
 pub mod chapter;
-pub mod hook;
-pub mod luna;
 pub mod manual;
 pub mod mapping;
 pub mod mode;
@@ -119,6 +118,8 @@ pub struct TrackingService {
     /// How detected time is measured: focus-aware, or every second the game
     /// process runs. See `tracking::mode`.
     mode: RwLock<TrackingMode>,
+    /// Whether opening a game automatically restarts its last manual route/chapter timer.
+    auto_resume_route: RwLock<bool>,
     /// A chapter the user is timing by hand, when there is one.
     ///
     /// Held here rather than in the tracker because it is driven by the user, not
@@ -179,9 +180,9 @@ impl TrackingService {
         self.probe.as_ref()
     }
 
-    /// Cheap metadata snapshot for companion lifecycle checks. Reading it does
-    /// not enumerate processes, take over the tracker, or change counted time.
-    pub async fn companion_target(&self) -> Option<(String, u32)> {
+    /// Cheap metadata snapshot of the active tracked game and PID. Reading it
+    /// does not enumerate processes, take over the tracker, or change counted time.
+    pub async fn tracked_target(&self) -> Option<(String, u32)> {
         let snapshot = self.snapshot.read().await;
         Some((snapshot.game_id?.to_string(), snapshot.pid?))
     }
@@ -206,6 +207,7 @@ impl TrackingService {
             snapshot: RwLock::new(RunSnapshot::default()),
             enabled: RwLock::new(true),
             mode: RwLock::new(TrackingMode::Auto),
+            auto_resume_route: RwLock::new(true),
             manual: RwLock::new(None),
             manual_paused: RwLock::new(false),
             launched: RwLock::new(None),
@@ -223,6 +225,7 @@ impl TrackingService {
             snapshot: RwLock::new(RunSnapshot::default()),
             enabled: RwLock::new(true),
             mode: RwLock::new(TrackingMode::Auto),
+            auto_resume_route: RwLock::new(true),
             manual: RwLock::new(None),
             manual_paused: RwLock::new(false),
             launched: RwLock::new(None),
@@ -362,6 +365,61 @@ impl TrackingService {
         *self.mode.read().await
     }
 
+    /// Enable or disable auto-resuming the last manual route/chapter timer when a game opens.
+    pub async fn set_auto_resume_route(&self, enabled: bool) {
+        *self.auto_resume_route.write().await = enabled;
+    }
+
+    /// Whether auto-resuming the last manual route/chapter timer is enabled.
+    pub async fn auto_resume_route(&self) -> bool {
+        *self.auto_resume_route.read().await
+    }
+
+    /// Drop an open manual timer for `game_id` without saving a session or clearing auto-resume.
+    pub async fn discard_manual_for(&self, game_id: EntityId) {
+        let mut slot = self.manual.write().await;
+        if slot.as_ref().is_some_and(|run| run.game_id == game_id) {
+            *slot = None;
+            *self.manual_paused.write().await = false;
+        }
+    }
+
+    async fn start_or_handoff_on_launch(
+        &self,
+        pool: &SqlitePool,
+        game_id: EntityId,
+        now: Timestamp,
+    ) -> Event {
+        if self.auto_resume_route().await
+            && self.manual.read().await.is_none()
+            && let Some(target) = auto_route::resolve_for_game(pool, game_id).await
+        {
+            let mut slot = self.manual.write().await;
+            if slot.is_none() {
+                *slot = Some(match target {
+                    auto_route::ResolvedAutoTarget::Route { route_id } => {
+                        manual::ManualRun::start_route(route_id, game_id, now)
+                    }
+                    auto_route::ResolvedAutoTarget::Chapter { chapter_id } => {
+                        manual::ManualRun::start(chapter_id, game_id, now)
+                    }
+                });
+            }
+        }
+        let manual_owns = self
+            .manual
+            .read()
+            .await
+            .as_ref()
+            .is_some_and(|run| run.game_id == game_id);
+        if manual_owns {
+            *self.manual_paused.write().await = true;
+            Event::HandoffToManual
+        } else {
+            Event::FocusGained
+        }
+    }
+
     /// Current status for the UI.
     pub async fn status(&self, pool: &SqlitePool) -> TrackingStatus {
         let snapshot = self.snapshot.read().await.clone();
@@ -483,7 +541,8 @@ impl TrackingService {
                     },
                     now,
                 );
-                events.push((Event::FocusGained, now));
+                let initial = self.start_or_handoff_on_launch(pool, game_id, now).await;
+                events.push((initial, now));
             }
         } else if let Some(target) = tracker.target().cloned()
             && let Some(event) = self.focus_event(&tracker, &target).await
@@ -531,7 +590,7 @@ impl TrackingService {
         // would bill wall-clock minutes to a chapter nobody is reading, and the
         // user asked for a run that stops when the window does.
         if let Some(game_id) = exited_game {
-            self.finish_manual_for(pool, device, game_id, now, tracker.afk_config())
+            self.finish_manual_for(pool, device, game_id, now, tracker.afk_config(), true)
                 .await?;
         }
 
@@ -773,17 +832,36 @@ impl TrackingService {
             .probe
             .presence()
             .map_or(0, |presence| presence.idle_for_ms);
-        // Before automatic tracking has opened a run, a mapped game's process
-        // still gives the manual timer a window to watch.
-        let mapped_pid = if target.is_none() && mode == TrackingMode::Auto {
-            self.candidates(pool)
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .find(|candidate| candidate.game_id == manual_game.to_string())
-                .map(|candidate| candidate.pid)
-        } else {
-            None
+        // Resolve the running process for `manual_game`, whether automatic
+        // tracking has already latched onto it or it is still a candidate.
+        let running_pid = match &target {
+            Some(t)
+                if t.game_id == manual_game && self.probe.is_running(t.pid).unwrap_or(false) =>
+            {
+                Some(t.pid)
+            }
+            _ => {
+                let candidate_pid = self
+                    .candidates(pool)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .find(|candidate| candidate.game_id == manual_game.to_string())
+                    .map(|candidate| candidate.pid);
+                match candidate_pid {
+                    Some(pid) => Some(pid),
+                    None => self
+                        .launched
+                        .read()
+                        .await
+                        .as_ref()
+                        .filter(|bound| {
+                            bound.game_id == manual_game
+                                && self.probe.is_running(bound.pid).unwrap_or(false)
+                        })
+                        .map(|bound| bound.pid),
+                }
+            }
         };
 
         let mut slot = self.manual.write().await;
@@ -794,18 +872,26 @@ impl TrackingService {
             return;
         }
 
-        let sample = if mode == TrackingMode::Always {
-            // Wall clock: nothing is away, so the idle reading cannot remove time.
+        let sample = if !self.available {
+            // A platform with no process probe has no window to watch, so the OS
+            // idle reading is the only honest sample.
             manual::ManualSample::Count {
-                idle_for_ms: 0,
-                all_active: true,
+                idle_for_ms: idle,
+                all_active: false,
                 threshold_ms: afk.threshold_ms,
             }
-        } else if let Some(target) = target {
-            if target.game_id != run.game_id || focused != Some(target.pid) {
-                // Another game, or this one behind a browser. Automatic playtime
-                // pauses here, so the manual timer pauses with it instead of
-                // billing minutes nobody read.
+        } else if let Some(pid) = running_pid {
+            if mode == TrackingMode::Always {
+                // Wall clock while the game process is running: nothing is away.
+                manual::ManualSample::Count {
+                    idle_for_ms: 0,
+                    all_active: true,
+                    threshold_ms: afk.threshold_ms,
+                }
+            } else if focused != Some(pid) {
+                // Another window is in front. Automatic playtime pauses here, so
+                // the manual timer pauses with it instead of billing minutes
+                // nobody read.
                 manual::ManualSample::Skip
             } else {
                 manual::ManualSample::Count {
@@ -814,16 +900,9 @@ impl TrackingService {
                     threshold_ms: afk.threshold_ms,
                 }
             }
-        } else if mapped_pid.is_some() && mapped_pid != focused {
-            manual::ManualSample::Skip
         } else {
-            // A game nothing can detect: there is no window to watch, so the OS
-            // idle reading is the only honest sample.
-            manual::ManualSample::Count {
-                idle_for_ms: idle,
-                all_active: false,
-                threshold_ms: afk.threshold_ms,
-            }
+            // The game is not open at all: never bill time to a closed game.
+            manual::ManualSample::Skip
         };
         run.tick(now, sample);
     }
@@ -839,6 +918,7 @@ impl TrackingService {
         game_id: EntityId,
         now: Timestamp,
         afk: AfkConfig,
+        remember: bool,
     ) -> Result<(), TrackingError> {
         let finished = {
             let mut slot = self.manual.write().await;
@@ -850,6 +930,14 @@ impl TrackingService {
         let Some(mut run) = finished else {
             return Ok(());
         };
+        *self.manual_paused.write().await = false;
+        if remember {
+            if let Some(target) = auto_route::target_from_manual(&run) {
+                auto_route::remember(pool, run.game_id, &target).await;
+            }
+        } else {
+            auto_route::clear(pool, run.game_id).await;
+        }
         let (active, away) = run.finish(now, afk);
         if active + away <= 0 {
             return Ok(());
@@ -958,8 +1046,12 @@ impl TrackingService {
                     }
                     self.tick_manual(pool, &tracker, now).await;
                 }
-                Event::Stop | Event::Shutdown | Event::ProcessExited => {
-                    self.finish_manual_for(pool, device, game_id, now, tracker.afk_config())
+                Event::Stop => {
+                    self.finish_manual_for(pool, device, game_id, now, tracker.afk_config(), false)
+                        .await?;
+                }
+                Event::Shutdown | Event::ProcessExited => {
+                    self.finish_manual_for(pool, device, game_id, now, tracker.afk_config(), true)
                         .await?;
                 }
                 _ => {}

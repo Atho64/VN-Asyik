@@ -77,12 +77,14 @@ async fn populated() -> (Db, BackupFile) {
             .await
             .expect("endings"),
         reading_entries: Vec::new(),
+        global_notes: Vec::new(),
+        reading_goals: Vec::new(),
+        achievement_unlocks: Vec::new(),
         prefs: PrefsSnapshot {
             theme: "light".to_owned(),
             language: "en".to_owned(),
             nsfw: "hide".to_owned(),
             reduce_effects: true,
-            beta_features: false,
         },
     };
 

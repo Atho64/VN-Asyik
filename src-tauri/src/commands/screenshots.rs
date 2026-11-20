@@ -153,7 +153,7 @@ async fn capture_target(state: &AppState) -> CommandResult<Option<CaptureTarget>
     {
         Ok(state
             .tracker()
-            .companion_target()
+            .tracked_target()
             .await
             .map(|(game_id, pid)| CaptureTarget {
                 game_id,

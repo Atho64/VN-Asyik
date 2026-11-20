@@ -40,7 +40,7 @@ pub(crate) fn spawn(app: AppHandle) {
         let mut press = ShortcutPress::default();
         loop {
             let state = app.state::<AppState>();
-            let target = state.tracker().companion_target().await.filter(|(_, pid)| {
+            let target = state.tracker().tracked_target().await.filter(|(_, pid)| {
                 *pid != std::process::id()
                     && state.tracker().probe().focused_pid().ok().flatten() == Some(*pid)
             });

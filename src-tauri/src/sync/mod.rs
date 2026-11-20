@@ -7,11 +7,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
+use vn_core::achievements::{AchievementUnlock, merge_unlocks};
 use vn_core::clock::Timestamp;
+use vn_core::goals::{ReadingGoal, validate_reading_goal};
 use vn_core::ids::DeviceId;
 use vn_core::migration::SCHEMA_VERSION;
 use vn_core::model::{Chapter, Ending, Game, PlaySession, Route};
-use vn_core::reading::ReadingEntry;
+use vn_core::reading::{GlobalNote, ReadingEntry};
 use vn_core::sync::{self, Conflict, MetaFields, Reason, Side};
 
 use crate::db::{DbError, queries};
@@ -38,6 +40,15 @@ pub struct SyncPayload {
     /// Absent in pre-journal payloads.
     #[serde(default)]
     pub reading_entries: Vec<ReadingEntry>,
+    /// Global notes, including tombstones.
+    #[serde(default)]
+    pub global_notes: Vec<GlobalNote>,
+    /// Custom reading goals, including tombstones.
+    #[serde(default)]
+    pub reading_goals: Vec<ReadingGoal>,
+    /// Achievement unlocks (monotonic merge). Absent in pre-achievement payloads.
+    #[serde(default)]
+    pub achievement_unlocks: Vec<AchievementUnlock>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -116,6 +127,9 @@ pub async fn collect_local(pool: &SqlitePool, device: &DeviceId) -> Result<SyncP
         endings.extend(queries::list_endings_including_deleted(pool, game.meta.id).await?);
         reading_entries.extend(crate::db::reading::list_all(pool, game.meta.id).await?);
     }
+    let global_notes = crate::db::notes::list_all_including_deleted(pool).await?;
+    let reading_goals = crate::db::goals::list_all_including_deleted(pool).await?;
+    let achievement_unlocks = crate::db::achievements::list_all_including_deleted(pool).await?;
 
     Ok(SyncPayload {
         schema_version: SCHEMA_VERSION,
@@ -128,6 +142,9 @@ pub async fn collect_local(pool: &SqlitePool, device: &DeviceId) -> Result<SyncP
         sessions,
         endings,
         reading_entries,
+        global_notes,
+        reading_goals,
+        achievement_unlocks,
     })
 }
 
@@ -353,18 +370,7 @@ async fn apply_payload(
         }
     }
 
-    let mut local_sessions = Vec::new();
-    for game in &games {
-        local_sessions
-            .extend(queries::list_sessions_including_deleted(&mut *tx, game.meta.id).await?);
-    }
-    let (sessions, added) = sync::merge_sessions(&local_sessions, &payload.sessions);
-    for session in &sessions {
-        if added.contains(&session.meta.id.to_string()) {
-            queries::insert_session(&mut *tx, session).await?;
-            delta.pulled += 1;
-        }
-    }
+    merge_play_sessions(&mut tx, &games, &payload.sessions, &mut delta).await?;
 
     let mut local_endings = Vec::new();
     for game in &games {
@@ -396,10 +402,107 @@ async fn apply_payload(
             delta.pulled += 1;
         }
     }
+    merge_global_notes(&mut tx, &payload.global_notes, &mut delta).await?;
+    merge_reading_goals(&mut tx, &payload.reading_goals, &mut delta).await?;
+    merge_achievement_unlocks(&mut tx, &payload.achievement_unlocks, &mut delta).await?;
 
     tx.commit().await.map_err(DbError::from)?;
     outcome.pulled += delta.pulled;
     outcome.conflicts.extend(delta.conflicts);
+    Ok(())
+}
+
+async fn merge_reading_goals(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    incoming: &[ReadingGoal],
+    delta: &mut SyncOutcome,
+) -> Result<(), SyncError> {
+    let local_goals = crate::db::goals::list_all_including_deleted(&mut **tx).await?;
+    for goal in incoming {
+        let mut normalized = goal.clone();
+        validate_reading_goal(&mut normalized).map_err(DbError::Corrupt)?;
+    }
+    let (goals, conflicts) = sync::merge_rows("reading_goals", &local_goals, incoming);
+    record(delta, conflicts);
+    for goal in &goals {
+        if should_write(&local_goals, goal) {
+            crate::db::goals::upsert(&mut **tx, goal).await?;
+            delta.pulled += 1;
+        }
+    }
+    Ok(())
+}
+
+async fn merge_global_notes(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    incoming: &[GlobalNote],
+    delta: &mut SyncOutcome,
+) -> Result<(), SyncError> {
+    let local_notes = crate::db::notes::list_all_including_deleted(&mut **tx).await?;
+    for note in incoming {
+        note.validate().map_err(DbError::Corrupt)?;
+    }
+    let (notes, conflicts) = sync::merge_rows("global_notes", &local_notes, incoming);
+    record(delta, conflicts);
+    for note in &notes {
+        if should_write(&local_notes, note) {
+            crate::db::notes::upsert(&mut **tx, note).await?;
+            delta.pulled += 1;
+        }
+    }
+    Ok(())
+}
+
+/// Append-only session merge: new UUIDs are inserted, existing ones untouched.
+async fn merge_play_sessions(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    games: &[Game],
+    incoming: &[PlaySession],
+    delta: &mut SyncOutcome,
+) -> Result<(), SyncError> {
+    let mut local_sessions = Vec::new();
+    for game in games {
+        local_sessions
+            .extend(queries::list_sessions_including_deleted(&mut **tx, game.meta.id).await?);
+    }
+    let (sessions, added) = sync::merge_sessions(&local_sessions, incoming);
+    for session in &sessions {
+        if added.contains(&session.meta.id.to_string()) {
+            queries::insert_session(&mut **tx, session).await?;
+            delta.pulled += 1;
+        }
+    }
+    Ok(())
+}
+
+/// Monotonic unlock merge: identity is the slug, not the row UUID, so two
+/// devices unlocking the same achievement converge on one row with the
+/// earliest unlock date. A tombstone never revokes a live unlock.
+async fn merge_achievement_unlocks(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    incoming: &[AchievementUnlock],
+    delta: &mut SyncOutcome,
+) -> Result<(), SyncError> {
+    let local_unlocks = crate::db::achievements::list_all_including_deleted(&mut **tx).await?;
+    for unlock in incoming {
+        unlock.validate().map_err(DbError::Corrupt)?;
+    }
+    let (unlocks, conflicts) = merge_unlocks(&local_unlocks, incoming);
+    record(delta, conflicts);
+    for unlock in &unlocks {
+        // Compare by slug: the stored UUID may differ from the merged winner's.
+        let changed = match local_unlocks
+            .iter()
+            .find(|row| row.achievement_id == unlock.achievement_id)
+        {
+            None => true,
+            Some(existing) => existing != unlock,
+        };
+        if changed {
+            crate::db::achievements::upsert(&mut **tx, unlock).await?;
+            delta.pulled += 1;
+        }
+    }
     Ok(())
 }
 
@@ -425,6 +528,7 @@ fn record(outcome: &mut SyncOutcome, conflicts: Vec<Conflict>) {
                 Reason::Newer => "newer".to_owned(),
                 Reason::TieBreak => "tie_break".to_owned(),
                 Reason::DeleteWins => "delete_wins".to_owned(),
+                Reason::UnlockWins => "unlock_wins".to_owned(),
             },
             discarded_updated_at_ms: conflict.discarded_updated_at_ms,
         });

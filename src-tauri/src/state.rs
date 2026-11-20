@@ -15,11 +15,7 @@ pub struct AppState {
     data_dir: PathBuf,
     vndb: VndbClient,
     tracker: TrackingService,
-    hook: std::sync::Arc<crate::tracking::hook::HookHost>,
-    luna: std::sync::Arc<crate::tracking::luna::LunaMonitor>,
     import_drafts: crate::commands::data::ImportDraftStore,
-    chat: crate::ai::conversation::ChatRuntime,
-    companion: crate::companion::CompanionRuntime,
     presence: std::sync::Arc<crate::presence::PresenceService>,
 }
 
@@ -43,15 +39,6 @@ impl AppState {
         let db_path = data_dir.join("vn-tracker.sqlite");
         let db = Db::open(&db_path).await?;
         let device = queries::ensure_device_id(db.pool()).await?;
-        crate::ai::conversation::store::recover(db.pool())
-            .await
-            .map_err(|code| BootError::Db(DbError::Corrupt(code)))?;
-        crate::companion::store::recover(db.pool())
-            .await
-            .map_err(|code| BootError::Db(DbError::Corrupt(code)))?;
-        crate::companion::memory::recover(db.pool())
-            .await
-            .map_err(|code| BootError::Db(DbError::Corrupt(code)))?;
         // The client is created once so its rate limiter is shared by every
         // command rather than reset per request.
         let vndb = VndbClient::new().map_err(BootError::Vndb)?;
@@ -67,9 +54,22 @@ impl AppState {
         // first poll already respects it rather than starting in the default.
         let mode = crate::tracking::mode::load(db.pool()).await;
         tracker.set_mode(mode).await;
+        let auto_resume = crate::tracking::auto_route::load_enabled(db.pool()).await;
+        tracker.set_auto_resume_route(auto_resume).await;
         let recovered = crate::tracking::recover(db.pool(), &device, now).await?;
         if recovered > 0 {
             queries::record_recovery(db.pool(), recovered, now).await?;
+        }
+
+        // Retroactive achievement scan over the recovered history. Spawned so
+        // boot never waits on it, and a failure is logged, never fatal.
+        {
+            let app = app.clone();
+            let pool = db.pool().clone();
+            let device = device.clone();
+            tauri::async_runtime::spawn(async move {
+                crate::commands::achievements::refresh_quietly(&app, &pool, &device).await;
+            });
         }
 
         let presence_settings = queries::load_presence_settings(db.pool())
@@ -78,35 +78,13 @@ impl AppState {
         let presence =
             std::sync::Arc::new(crate::presence::PresenceService::new(presence_settings));
 
-        let hook = std::sync::Arc::new(crate::tracking::hook::HookHost::default());
-        let luna = std::sync::Arc::new(crate::tracking::luna::LunaMonitor::new(
-            hook.clone(),
-            crate::tracking::luna::LunaMonitor::load(db.pool()).await,
-        ));
-        luna.apply_beta(
-            db.pool(),
-            queries::load_prefs(db.pool()).await?.beta_features,
-        )
-        .await;
-        // One supervisor for the app's lifetime: connects to LunaTranslator's
-        // websocket when enabled, idles when not, and picks up settings
-        // changes without a restart.
-        let luna_task = std::sync::Arc::clone(&luna);
-        tauri::async_runtime::spawn(async move {
-            luna_task.supervise().await;
-        });
-
         Ok(Self {
             db,
             device,
             data_dir,
             vndb,
             tracker,
-            hook,
-            luna,
             import_drafts: crate::commands::data::ImportDraftStore::default(),
-            chat: crate::ai::conversation::ChatRuntime::default(),
-            companion: crate::companion::CompanionRuntime::default(),
             presence,
         })
     }
@@ -114,42 +92,6 @@ impl AppState {
     #[must_use]
     pub fn db(&self) -> &Db {
         &self.db
-    }
-
-    pub fn chat(&self) -> &crate::ai::conversation::ChatRuntime {
-        &self.chat
-    }
-
-    pub fn companion(&self) -> &crate::companion::CompanionRuntime {
-        &self.companion
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn for_companion_test(
-        db: Db,
-        probe: std::sync::Arc<dyn crate::platform::probe::SystemProbe>,
-    ) -> Self {
-        let device = queries::ensure_device_id(db.pool()).await.unwrap();
-        let hook = std::sync::Arc::new(crate::tracking::hook::HookHost::default());
-        let luna = std::sync::Arc::new(crate::tracking::luna::LunaMonitor::new(
-            hook.clone(),
-            crate::tracking::luna::LunaSettings::default(),
-        ));
-        Self {
-            db,
-            device,
-            data_dir: PathBuf::new(),
-            vndb: VndbClient::new().unwrap(),
-            tracker: TrackingService::with_probe(probe, vn_core::clock::Timestamp::now().unwrap()),
-            hook,
-            luna,
-            import_drafts: crate::commands::data::ImportDraftStore::default(),
-            chat: crate::ai::conversation::ChatRuntime::default(),
-            companion: crate::companion::CompanionRuntime::default(),
-            presence: std::sync::Arc::new(crate::presence::PresenceService::new(
-                vn_core::presence::PresenceSettings::default(),
-            )),
-        }
     }
 
     #[must_use]
@@ -171,16 +113,6 @@ impl AppState {
     #[must_use]
     pub fn tracker(&self) -> &TrackingService {
         &self.tracker
-    }
-
-    #[must_use]
-    pub fn hook(&self) -> &std::sync::Arc<crate::tracking::hook::HookHost> {
-        &self.hook
-    }
-
-    #[must_use]
-    pub fn luna(&self) -> &std::sync::Arc<crate::tracking::luna::LunaMonitor> {
-        &self.luna
     }
 
     #[must_use]

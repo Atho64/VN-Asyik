@@ -7,14 +7,11 @@ use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use vn_core::walkthrough::translation::{
-    apply_translated_texts, character_glossary, model_translation_prompt, replace_names,
+    apply_translated_texts, character_glossary, replace_names,
 };
 use vn_core::walkthrough::{
     Walkthrough, WalkthroughIndexEntry, WalkthroughRoute, decode_html_bytes, parse_index_links,
 };
-
-use crate::ai::chat::{ChatConfig, complete};
-use crate::secrets::ChatApiKey;
 
 const SEIYA_IP_PORT_443: &str = "157.7.107.46:443";
 const SEIYA_PC_KOURYAKU_URL: &str = "https://seiya-saiga.com/game/kouryaku.html";
@@ -464,58 +461,6 @@ fn parse_google_translation(
     Ok(result_lines)
 }
 
-#[allow(clippy::implicit_hasher)]
-pub async fn translate_batch_ai(
-    client: &reqwest::Client,
-    config: &ChatConfig,
-    key: Option<&ChatApiKey>,
-    texts: &[String],
-    target_lang: &str,
-    glossary: &HashMap<String, String>,
-) -> Result<Vec<String>, WalkthroughError> {
-    if texts.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let system_prompt = model_translation_prompt(target_lang, glossary, texts.len());
-
-    let user_prompt = serde_json::to_string(texts).unwrap_or_default();
-
-    let raw_reply = complete(client, config, key, &system_prompt, &user_prompt)
-        .await
-        .map_err(|e| WalkthroughError::Translation(e.to_string()))?;
-
-    parse_ai_translation(&raw_reply, texts.len())
-}
-
-fn parse_ai_translation(raw_reply: &str, expected: usize) -> Result<Vec<String>, WalkthroughError> {
-    let cleaned = raw_reply.trim();
-    let json_str = if cleaned.starts_with("```") {
-        let lines: Vec<&str> = cleaned.lines().collect();
-        if lines.len() >= 2
-            && lines.first().unwrap().starts_with("```")
-            && lines.last().unwrap().starts_with("```")
-        {
-            lines[1..lines.len() - 1].join("\n")
-        } else {
-            cleaned.to_string()
-        }
-    } else {
-        cleaned.to_string()
-    };
-
-    if let Some(translated_array) = serde_json::from_str::<Vec<String>>(&json_str)
-        .ok()
-        .filter(|arr| arr.len() == expected && arr.iter().all(|text| !text.trim().is_empty()))
-    {
-        return Ok(translated_array);
-    }
-
-    Err(WalkthroughError::Translation(
-        "The model did not return a complete ordered translation; no translation was saved".into(),
-    ))
-}
-
 fn urlencoding(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
@@ -547,22 +492,6 @@ mod tests {
             serde_json::json!([[["One\n\n"]]]),
         ] {
             assert!(parse_google_translation(&malformed, 2).is_err());
-        }
-    }
-
-    #[test]
-    fn model_translation_requires_complete_ordered_json_and_accepts_fences() {
-        assert_eq!(
-            parse_ai_translation("```json\n[\"Kotori\",\"Save 01\"]\n```", 2).unwrap(),
-            ["Kotori", "Save 01"]
-        );
-        for malformed in [
-            "Sorry, translation is unavailable",
-            "[\"Kotori\"]",
-            "[\"Kotori\",\"\"]",
-            "- Kotori\n- Save 01",
-        ] {
-            assert!(parse_ai_translation(malformed, 2).is_err());
         }
     }
 
@@ -604,7 +533,7 @@ mod tests {
     #[tokio::test]
     async fn manual_edits_are_local_separate_and_preserve_checked_choices() {
         let (db, id, original) = fixture().await;
-        save_translation(db.pool(), &original, "ai", "en", &original.routes)
+        save_translation(db.pool(), &original, "google", "en", &original.routes)
             .await
             .unwrap();
         toggle_checked_item(db.pool(), &id, "c_1").await.unwrap();
@@ -624,7 +553,7 @@ mod tests {
             .unwrap();
         assert_eq!(loaded.routes, original.routes);
         assert_eq!(loaded.checked_items, ["c_1"]);
-        assert_eq!(loaded.translations["ai_en"], original.routes);
+        assert_eq!(loaded.translations["google_en"], original.routes);
         assert_eq!(
             loaded.translations["manual_en"][0].items[0].text,
             "Choose Kotori manually"
@@ -671,7 +600,7 @@ mod tests {
     #[tokio::test]
     async fn refreshing_translation_replaces_only_its_cache_and_preserves_original_and_progress() {
         let (db, id, original) = fixture().await;
-        save_translation(db.pool(), &original, "ai", "en", &original.routes)
+        save_translation(db.pool(), &original, "manual", "en", &original.routes)
             .await
             .unwrap();
         save_translation(db.pool(), &original, "google", "id", &original.routes)
@@ -698,14 +627,14 @@ mod tests {
             "Refreshed Kotori route"
         );
         assert_eq!(loaded.translations["google_en"][0].items[0].id, "c_1");
-        assert_eq!(loaded.translations["ai_en"], original.routes);
+        assert_eq!(loaded.translations["manual_en"], original.routes);
         assert_eq!(loaded.translations["google_id"], original.routes);
     }
 
     #[tokio::test]
     async fn changed_source_invalidates_cache_and_rejects_a_late_translation() {
         let (db, id, original) = fixture().await;
-        save_translation(db.pool(), &original, "ai", "en", &original.routes)
+        save_translation(db.pool(), &original, "google", "en", &original.routes)
             .await
             .unwrap();
         let replacement = Walkthrough {
@@ -718,7 +647,7 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            save_translation(db.pool(), &original, "ai", "en", &original.routes)
+            save_translation(db.pool(), &original, "google", "en", &original.routes)
                 .await
                 .is_err()
         );
@@ -733,7 +662,7 @@ mod tests {
     #[tokio::test]
     async fn unchanged_source_keeps_translation_but_changed_steps_reject_stale_results() {
         let (db, id, original) = fixture().await;
-        save_translation(db.pool(), &original, "ai", "en", &original.routes)
+        save_translation(db.pool(), &original, "google", "en", &original.routes)
             .await
             .unwrap();
         let mut source = Walkthrough {

@@ -119,7 +119,7 @@ pub async fn sync_import_file(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<Option<sync::SyncOutcome>> {
-    let Some(contents) = crate::platform::storage::open_document(app).await? else {
+    let Some(contents) = crate::platform::storage::open_document(app.clone()).await? else {
         return Ok(None);
     };
     let payload: sync::SyncPayload = serde_json::from_str(&contents).map_err(|_| {
@@ -134,6 +134,8 @@ pub async fn sync_import_file(
         .map_err(|err| CommandError::new("sync_failed", err.to_string()))?;
     let finished = Timestamp::now()?;
     record_run(state.db().pool(), &outcome, started, finished).await?;
+    // Pulled history can earn achievements retroactively.
+    super::achievements::refresh_quietly(&app, state.db().pool(), state.device()).await;
     Ok(Some(outcome))
 }
 
@@ -145,6 +147,7 @@ pub async fn sync_import_file(
 /// instead of failing the run.
 #[tauri::command]
 pub async fn sync_run(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     folder: String,
 ) -> CommandResult<sync::SyncOutcome> {
@@ -184,6 +187,8 @@ pub async fn sync_run(
     }
 
     record_run(pool, &outcome, started, finished).await?;
+    // A completed sync can earn achievements (sync-first, cross-device, pulled history).
+    super::achievements::refresh_quietly(&app, pool, &device).await;
     Ok(outcome)
 }
 

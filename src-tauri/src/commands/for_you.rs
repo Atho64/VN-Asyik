@@ -201,6 +201,40 @@ pub struct ForYouPage {
     pub note: Option<String>,
 }
 
+/// The library's taste, computed from its own data.
+///
+/// Deterministic and offline: this is the answer a user gets with no API key and
+/// no network.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TasteView {
+    /// The computed profile: the tags the library carries most. The panel
+    /// keeps `considered` and `undetermined` for the missing-metadata notice.
+    pub profile: vn_core::taste::TasteProfile,
+    /// Rating-weighted seeds shared with For-you recommendations (same categories and ordering).
+    pub seeds: SeedSummaryView,
+}
+
+fn taste_view(games: &[vn_core::taste::ProfiledGame]) -> TasteView {
+    TasteView {
+        profile: vn_core::taste::profile(games),
+        seeds: seed_summary(&for_you::for_you_seeds(games)),
+    }
+}
+
+/// Compute the library's deterministic reading taste profile.
+///
+/// # Errors
+/// Database failures.
+#[tauri::command]
+pub async fn taste_profile(state: State<'_, AppState>) -> CommandResult<TasteView> {
+    let pool = state.db().pool();
+    let games = crate::db::queries::for_you::seeded_games(pool)
+        .await
+        .map_err(|err| CommandError::new("db", err.to_string()))?;
+    Ok(taste_view(&games))
+}
+
 /// The library's seeds, as the panel header shows them.
 ///
 /// # Errors
@@ -1235,5 +1269,97 @@ mod tests {
             !text.contains("\"g902\""),
             "saturated tag stays out: {text}"
         );
+    }
+
+    #[test]
+    fn taste_view_wire_format_is_camel_case_and_carries_examples() {
+        let tag = |id: &str, name: &str, rating: f32| TagWeight {
+            id: Some(id.to_owned()),
+            name: name.to_owned(),
+            rating,
+            spoiler: 0,
+        };
+        let game = |id: &str, title: &str, tags: Vec<TagWeight>| vn_core::taste::ProfiledGame {
+            id: id.to_owned(),
+            title: title.to_owned(),
+            status: "completed".to_owned(),
+            rating: None,
+            tags,
+            work_id: None,
+            developers: Vec::new(),
+            staff: Vec::new(),
+            voices: Vec::new(),
+        };
+        let games = vec![
+            game("1", "A", vec![tag("g1", "Nakige", 2.98)]),
+            game("2", "B", vec![tag("g1", "Nakige", 2.96)]),
+            game("3", "C", vec![tag("g1", "Nakige", 2.9)]),
+        ];
+        let view = taste_view(&games);
+        let text = serde_json::to_string(&view).expect("serialise");
+        assert!(text.contains("\"profile\""), "got {text}");
+        assert!(text.contains("\"seeds\""), "got {text}");
+        assert!(text.contains("\"topGames\""), "got {text}");
+        assert!(text.contains("\"undetermined\""), "got {text}");
+        assert_eq!(view.seeds.considered, 3);
+        assert_eq!(view.seeds.tags[0].count, 3);
+        assert_eq!(view.seeds.tags[0].examples, vec!["A", "B", "C"]);
+    }
+
+    #[test]
+    fn taste_view_unrated_and_dropped_semantics() {
+        let tag = |id: &str, name: &str, rating: f32| TagWeight {
+            id: Some(id.to_owned()),
+            name: name.to_owned(),
+            rating,
+            spoiler: 0,
+        };
+        let mut dropped = vn_core::taste::ProfiledGame {
+            id: "1".to_owned(),
+            title: "Dropped".to_owned(),
+            status: "dropped".to_owned(),
+            rating: None,
+            tags: vec![tag("g1", "Nakige", 3.0)],
+            work_id: None,
+            developers: Vec::new(),
+            staff: Vec::new(),
+            voices: Vec::new(),
+        };
+        let mut fav = vn_core::taste::ProfiledGame {
+            id: "2".to_owned(),
+            title: "Favourite".to_owned(),
+            status: "completed".to_owned(),
+            rating: Some(85),
+            tags: Vec::new(),
+            work_id: None,
+            developers: vec![NamedEntity {
+                id: "p1".to_owned(),
+                name: "Key".to_owned(),
+            }],
+            staff: Vec::new(),
+            voices: Vec::new(),
+        };
+        let view = taste_view(&[dropped.clone(), fav.clone()]);
+        assert_eq!(view.profile.considered, 1);
+        assert_eq!(view.profile.undetermined, vec!["Favourite"]);
+        assert_eq!(view.seeds.considered, 1);
+        assert!(view.seeds.developers.is_empty());
+        assert_eq!(view.seeds.top_games, vec!["Favourite"]);
+
+        dropped.status = "completed".to_owned();
+        fav.rating = Some(90);
+        fav.staff = vec![StaffCredit {
+            id: "s1".to_owned(),
+            name: "Writer".to_owned(),
+            role: "scenario".to_owned(),
+        }];
+        let mut third = fav.clone();
+        third.id = "3".to_owned();
+        third.title = "Written Two".to_owned();
+        let mut fourth = fav.clone();
+        fourth.id = "4".to_owned();
+        fourth.title = "Written Three".to_owned();
+        let view = taste_view(&[fav, third, fourth]);
+        assert_eq!(view.seeds.staff[0].count, 3);
     }
 }

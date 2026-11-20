@@ -4,14 +4,14 @@
 //! network. That keeps the rules that matter most (identity, time accounting,
 //! merge order) testable at full speed and reusable outside the app.
 
+pub mod achievements;
 pub mod adapter;
 pub mod afk;
 pub mod chapter;
-pub mod chat;
 pub mod clock;
-pub mod companion;
 pub mod emulator;
 pub mod for_you;
+pub mod goals;
 pub mod ids;
 pub mod journal;
 pub mod library;
@@ -22,7 +22,6 @@ pub mod presence;
 pub mod reading;
 pub mod scan_rank;
 pub mod scene;
-pub mod script;
 pub mod search;
 pub mod stats;
 pub mod sync;

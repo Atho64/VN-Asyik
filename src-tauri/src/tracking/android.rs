@@ -43,6 +43,10 @@ pub struct ActiveSelection {
     pub package: String,
     #[serde(default)]
     pub runner_kind: Option<String>,
+    #[serde(default)]
+    pub route_id: Option<String>,
+    #[serde(default)]
+    pub chapter_id: Option<String>,
     pub started_at_ms: i64,
     pub cursor_ms: i64,
     pub counted_ms: i64,
@@ -60,12 +64,42 @@ pub struct AndroidSessionView {
     pub game_title: Option<String>,
     pub package: Option<String>,
     pub runner_kind: Option<String>,
+    pub route_id: Option<String>,
+    pub chapter_id: Option<String>,
+    pub target_name: Option<String>,
     pub started_at_ms: Option<i64>,
     pub counted_ms: i64,
     /// Persisted foreground playtime; never elapsed wall-clock time.
     pub elapsed_ms: i64,
     pub last_imported_at_ms: Option<i64>,
     pub reason: Option<String>,
+}
+
+async fn resolve_target_name(
+    pool: &SqlitePool,
+    game_id: &str,
+    chapter_id: Option<&str>,
+    route_id: Option<&str>,
+) -> Result<Option<String>, DbError> {
+    if let Some(cid) = chapter_id {
+        let name: Option<String> = sqlx::query_scalar(
+            "SELECT COALESCE(NULLIF(display_name, ''), name) FROM chapters WHERE id = ? AND deleted = 0",
+        )
+        .bind(cid)
+        .fetch_optional(pool)
+        .await?;
+        return Ok(name);
+    }
+    if let Some(rid) = route_id
+        && let Ok(gid) = EntityId::parse(game_id)
+    {
+        return Ok(
+            crate::tracking::auto_route::resolve_route_survivor(pool, gid, rid)
+                .await
+                .map(|(_, name)| name),
+        );
+    }
+    Ok(None)
 }
 
 /// Read the active Android selection without ending it.
@@ -83,12 +117,22 @@ pub async fn status(pool: &SqlitePool) -> Result<AndroidSessionView, DbError> {
         Ok(gid) => mapping::game_title(pool, gid).await?,
         Err(_) => None,
     };
+    let target_name = resolve_target_name(
+        pool,
+        &selection.game_id,
+        selection.chapter_id.as_deref(),
+        selection.route_id.as_deref(),
+    )
+    .await?;
     Ok(AndroidSessionView {
         active: selection.stopped_at_ms.is_none(),
         game_id: Some(selection.game_id),
         game_title: title,
         package: Some(selection.package),
         runner_kind: selection.runner_kind,
+        route_id: selection.route_id,
+        chapter_id: selection.chapter_id,
+        target_name,
         started_at_ms: Some(selection.started_at_ms),
         counted_ms: selection.counted_ms,
         elapsed_ms: selection.counted_ms,
@@ -101,6 +145,8 @@ pub async fn status(pool: &SqlitePool) -> Result<AndroidSessionView, DbError> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveAndroidTarget {
     pub game_id: EntityId,
+    pub route_id: Option<EntityId>,
+    pub chapter_id: Option<EntityId>,
     pub package: String,
     pub active_ms: i64,
     pub start_epoch: i64,
@@ -154,8 +200,18 @@ pub async fn active_target(pool: &SqlitePool, now_ms: i64) -> Option<ActiveAndro
     // tolerance window may tick over non-play seconds by no more than that.
     let active_ms = selection.counted_ms + (now_ms - last_foreground).max(0);
     let start_epoch = (now_ms - active_ms) / 1000;
+    let route_id = selection
+        .route_id
+        .as_deref()
+        .and_then(|raw| EntityId::parse(raw).ok());
+    let chapter_id = selection
+        .chapter_id
+        .as_deref()
+        .and_then(|raw| EntityId::parse(raw).ok());
     Some(ActiveAndroidTarget {
         game_id,
+        route_id,
+        chapter_id,
         package: selection.package,
         active_ms,
         start_epoch,
@@ -191,10 +247,29 @@ pub async fn launch(
         reconcile_locked(pool, device, now_ms, true).await?;
     }
 
+    let (route_id, chapter_id) = if crate::tracking::auto_route::load_enabled(pool).await {
+        match EntityId::parse(&target.game_id) {
+            Ok(gid) => match crate::tracking::auto_route::resolve_for_game(pool, gid).await {
+                Some(crate::tracking::auto_route::ResolvedAutoTarget::Route { route_id }) => {
+                    (Some(route_id.to_string()), None)
+                }
+                Some(crate::tracking::auto_route::ResolvedAutoTarget::Chapter { chapter_id }) => {
+                    (None, Some(chapter_id.to_string()))
+                }
+                None => (None, None),
+            },
+            Err(_) => (None, None),
+        }
+    } else {
+        (None, None)
+    };
+
     let selection = ActiveSelection {
         game_id: target.game_id.clone(),
         package,
         runner_kind: Some(target.runner_kind.clone()),
+        route_id,
+        chapter_id,
         started_at_ms: now_ms,
         cursor_ms: now_ms,
         counted_ms: 0,
@@ -337,12 +412,23 @@ async fn apply_query_result(
     commit_events(pool, device, &mut selection, &events, cutoff, keep_active)
         .await
         .map_err(|err| err.to_string())?;
+    let target_name = resolve_target_name(
+        pool,
+        &selection.game_id,
+        selection.chapter_id.as_deref(),
+        selection.route_id.as_deref(),
+    )
+    .await
+    .map_err(|err| err.to_string())?;
     Ok(AndroidSessionView {
         active: keep_active,
         game_id: Some(selection.game_id),
         game_title: title,
         package: Some(selection.package),
         runner_kind: selection.runner_kind,
+        route_id: selection.route_id,
+        chapter_id: selection.chapter_id,
+        target_name,
         started_at_ms: Some(selection.started_at_ms),
         counted_ms: selection.counted_ms,
         elapsed_ms: selection.counted_ms,
@@ -402,12 +488,16 @@ pub async fn commit_events(
             let mut row = existing.unwrap_or_else(|| AndroidCheckpoint {
                 id: EntityId::new().to_string(),
                 game_id: selection.game_id.clone(),
+                chapter_id: selection.chapter_id.clone(),
                 started_at,
                 ended_at: started_at,
                 counted_ms: 0,
                 device_id: device.as_str().to_owned(),
                 written_at: until_ms,
             });
+            if row.chapter_id.is_none() {
+                row.chapter_id.clone_from(&selection.chapter_id);
+            }
             row.ended_at = row.ended_at.max(ended_at);
             row.counted_ms = row.counted_ms.saturating_add(delta);
             row.written_at = until_ms;
@@ -415,7 +505,7 @@ pub async fn commit_events(
             if keep_active && interval.end_ms > until_ms {
                 save_checkpoint(&mut tx, &row).await?;
             } else {
-                finalize_checkpoint(&mut tx, &row).await?;
+                finalize_checkpoint(&mut tx, &row, selection.route_id.as_deref()).await?;
             }
             if row.credited_ms() > 0 {
                 mark_game_started(&mut tx, &row).await?;
@@ -428,7 +518,7 @@ pub async fn commit_events(
     // portion when closing, never guess the missing shutdown tail.
     if !keep_active || !live_game {
         for row in pending {
-            finalize_checkpoint(&mut tx, &row).await?;
+            finalize_checkpoint(&mut tx, &row, selection.route_id.as_deref()).await?;
         }
     }
 
@@ -439,17 +529,83 @@ pub async fn commit_events(
     if keep_active {
         save_selection_tx(&mut tx, &committed).await?;
     } else {
-        clear_selection_tx(&mut tx).await?;
+        clear_selection_tx(&mut tx, selection.route_id.as_deref()).await?;
     }
     tx.commit().await?;
     *selection = committed;
     Ok(added_ms)
 }
 
+/// Retarget an active Android selection's route or chapter in one transaction,
+/// finalizing any open checkpoints under the previous route/chapter first so
+/// accrued time is not retroactively moved to the new target.
+pub(crate) async fn retarget_selection_tx(
+    pool: &SqlitePool,
+    game_id: &str,
+    route_id: Option<String>,
+    chapter_id: Option<String>,
+) -> Result<bool, DbError> {
+    let mut tx = pool.begin().await?;
+    let raw: Option<String> = sqlx::query_scalar("SELECT value FROM sync_state WHERE key = ?")
+        .bind(ACTIVE_SELECTION_KEY)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let Some(raw) = raw else {
+        return Ok(false);
+    };
+    let mut selection: ActiveSelection = serde_json::from_str(&raw)
+        .map_err(|err| DbError::Corrupt(format!("corrupt Android active selection: {err}")))?;
+    if selection.stopped_at_ms.is_some() || selection.game_id != game_id {
+        return Ok(false);
+    }
+    for row in android_checkpoints(&mut tx).await? {
+        if row.game_id == game_id {
+            finalize_checkpoint(&mut tx, &row, selection.route_id.as_deref()).await?;
+        }
+    }
+    // Enforce mutual exclusion: a chapter target clears `route_id` so `route_total`
+    // never double-counts the session.
+    if chapter_id.is_some() {
+        selection.chapter_id = chapter_id;
+        selection.route_id = None;
+    } else {
+        selection.chapter_id = None;
+        selection.route_id = route_id;
+    }
+    save_selection_tx(&mut tx, &selection).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Reconcile any elapsed foreground time on an active Android selection for `game_id`
+/// and switch its route/chapter attribution to `(route_id, chapter_id)`.
+/// Returns `Ok(false)` when no active selection exists for `game_id`.
+pub async fn bind_target(
+    pool: &SqlitePool,
+    device: &DeviceId,
+    game_id: &str,
+    route_id: Option<String>,
+    chapter_id: Option<String>,
+    now_ms: i64,
+) -> Result<bool, String> {
+    let _guard = SESSION_LOCK.lock().await;
+    let Some(existing) = load_selection(pool).await.map_err(|err| err.to_string())? else {
+        return Ok(false);
+    };
+    if existing.stopped_at_ms.is_some() || existing.game_id != game_id {
+        return Ok(false);
+    }
+    let _ = reconcile_locked(pool, device, now_ms, false).await;
+    retarget_selection_tx(pool, game_id, route_id, chapter_id)
+        .await
+        .map_err(|err| err.to_string())
+}
+
 #[derive(Debug, sqlx::FromRow)]
 struct AndroidCheckpoint {
     id: String,
     game_id: String,
+    chapter_id: Option<String>,
     started_at: i64,
     ended_at: i64,
     counted_ms: i64,
@@ -471,7 +627,7 @@ async fn android_checkpoints(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> Result<Vec<AndroidCheckpoint>, DbError> {
     Ok(sqlx::query_as(
-        "SELECT id, game_id, started_at, ended_at, counted_ms, device_id, written_at \
+        "SELECT id, game_id, chapter_id, started_at, ended_at, counted_ms, device_id, written_at \
          FROM pending_sessions WHERE source = 'android_usage' ORDER BY started_at",
     )
     .fetch_all(&mut **tx)
@@ -485,12 +641,13 @@ async fn save_checkpoint(
     sqlx::query(
         "INSERT INTO pending_sessions \
          (id, game_id, chapter_id, started_at, ended_at, counted_ms, afk_ms, source, device_id, written_at) \
-         VALUES (?, ?, NULL, ?, ?, ?, 0, 'android_usage', ?, ?) \
-         ON CONFLICT(id) DO UPDATE SET ended_at = excluded.ended_at, \
+         VALUES (?, ?, ?, ?, ?, ?, 0, 'android_usage', ?, ?) \
+         ON CONFLICT(id) DO UPDATE SET chapter_id = excluded.chapter_id, ended_at = excluded.ended_at, \
            counted_ms = excluded.counted_ms, written_at = excluded.written_at",
     )
     .bind(&row.id)
     .bind(&row.game_id)
+    .bind(&row.chapter_id)
     .bind(row.started_at)
     .bind(row.ended_at)
     .bind(row.counted_ms)
@@ -504,16 +661,24 @@ async fn save_checkpoint(
 async fn finalize_checkpoint(
     tx: &mut Transaction<'_, Sqlite>,
     row: &AndroidCheckpoint,
+    route_id: Option<&str>,
 ) -> Result<(), DbError> {
+    let effective_route_id = if row.chapter_id.is_some() {
+        None
+    } else {
+        route_id
+    };
     if row.credited_ms() > 0 && game_is_live(tx, &row.game_id).await? {
         sqlx::query(
             "INSERT INTO play_sessions \
-             (id, game_id, chapter_id, started_at, ended_at, counted_ms, afk_ms, source, updated_at, device_id, deleted) \
-             VALUES (?, ?, NULL, ?, ?, ?, 0, 'android_usage', ?, ?, 0) \
+             (id, game_id, chapter_id, route_id, started_at, ended_at, counted_ms, afk_ms, source, updated_at, device_id, deleted) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'android_usage', ?, ?, 0) \
              ON CONFLICT(id) DO NOTHING",
         )
         .bind(&row.id)
         .bind(&row.game_id)
+        .bind(&row.chapter_id)
+        .bind(effective_route_id)
         .bind(row.started_at)
         .bind(row.ended_at)
         .bind(row.counted_ms)
@@ -593,15 +758,19 @@ async fn save_selection_tx(
 }
 
 async fn clear_selection(pool: &SqlitePool) -> Result<(), DbError> {
+    let route_id = load_selection(pool).await?.and_then(|sel| sel.route_id);
     let mut tx = pool.begin().await?;
-    clear_selection_tx(&mut tx).await?;
+    clear_selection_tx(&mut tx, route_id.as_deref()).await?;
     tx.commit().await?;
     Ok(())
 }
 
-async fn clear_selection_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<(), DbError> {
+async fn clear_selection_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    route_id: Option<&str>,
+) -> Result<(), DbError> {
     for row in android_checkpoints(tx).await? {
-        finalize_checkpoint(tx, &row).await?;
+        finalize_checkpoint(tx, &row, route_id).await?;
     }
     sqlx::query("DELETE FROM sync_state WHERE key = ?")
         .bind(ACTIVE_SELECTION_KEY)
@@ -655,6 +824,8 @@ mod tests {
             game_id: game_id.to_string(),
             package: "org.example.runner".to_owned(),
             runner_kind: Some("custom".to_owned()),
+            route_id: None,
+            chapter_id: None,
             started_at_ms: 1_000,
             cursor_ms: 1_000,
             counted_ms: 0,
@@ -1355,6 +1526,8 @@ mod tests {
             game_id: game_a.to_string(),
             package: "org.tvp.kirikiri2".to_owned(),
             runner_kind: Some("kirikiroid2".to_owned()),
+            route_id: None,
+            chapter_id: None,
             started_at_ms: 1_000,
             cursor_ms: 1_000,
             counted_ms: 0,
@@ -1493,6 +1666,143 @@ mod tests {
         assert_eq!(
             target.start_epoch, 32,
             "now minus counted time, so the card shows 20 s at t=52 s"
+        );
+    }
+
+    #[tokio::test]
+    async fn android_selection_records_route_or_chapter_without_double_counting() {
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Summer Pockets").await;
+        let now = Timestamp::from_millis(1_000);
+        let route = vn_core::model::Route::new(&device, now, game, "Shiroha").expect("route");
+        let route_id = route.meta.id;
+        queries::upsert_route(db.pool(), &route)
+            .await
+            .expect("seed route");
+
+        let mut selected = selection(game);
+        selected.route_id = Some(route_id.to_string());
+        save_selection(db.pool(), &selected)
+            .await
+            .expect("save selection");
+
+        let view = status(db.pool()).await.expect("status");
+        assert_eq!(
+            view.route_id.as_deref(),
+            Some(route_id.to_string().as_str())
+        );
+        assert_eq!(view.target_name.as_deref(), Some("Shiroha"));
+
+        let events = vec![
+            UsageEvent {
+                package: Some("org.example.runner".to_owned()),
+                activity: None,
+                kind: UsageEventKind::Resumed,
+                at_ms: 2_000,
+            },
+            UsageEvent {
+                package: Some("org.example.runner".to_owned()),
+                activity: None,
+                kind: UsageEventKind::Paused,
+                at_ms: 32_000,
+            },
+        ];
+        commit_events(db.pool(), &device, &mut selected, &events, 40_000, false)
+            .await
+            .expect("commit route session");
+
+        let stored: (Option<String>, Option<String>, i64) = sqlx::query_as(
+            "SELECT route_id, chapter_id, counted_ms FROM play_sessions WHERE game_id = ?",
+        )
+        .bind(game.to_string())
+        .fetch_one(db.pool())
+        .await
+        .expect("stored session");
+        assert_eq!(stored.0.as_deref(), Some(route_id.to_string().as_str()));
+        assert_eq!(
+            stored.1, None,
+            "route-only session must leave chapter_id NULL"
+        );
+        assert_eq!(stored.2, 30_000);
+    }
+
+    #[tokio::test]
+    async fn retarget_selection_splits_intervals_across_routes_and_updates_presence_target() {
+        let db = Db::open_memory().await.expect("db");
+        let device = queries::ensure_device_id(db.pool()).await.expect("device");
+        let game = seed_game(db.pool(), &device, "Rewrite").await;
+        let now = Timestamp::from_millis(1_000);
+        let route_a = vn_core::model::Route::new(&device, now, game, "Kotori").expect("route");
+        let route_b = vn_core::model::Route::new(&device, now, game, "Chihaya").expect("route");
+        let id_a = route_a.meta.id;
+        let id_b = route_b.meta.id;
+        queries::upsert_route(db.pool(), &route_a).await.expect("a");
+        queries::upsert_route(db.pool(), &route_b).await.expect("b");
+
+        let mut selected = selection(game);
+        selected.route_id = Some(id_a.to_string());
+        save_selection(db.pool(), &selected)
+            .await
+            .expect("save selection");
+
+        // Continuous foreground interval from 2s to 62s, checkpointed at 32s while on Route A.
+        let events = vec![
+            UsageEvent {
+                package: Some("org.example.runner".to_owned()),
+                activity: None,
+                kind: UsageEventKind::Resumed,
+                at_ms: 2_000,
+            },
+            UsageEvent {
+                package: Some("org.example.runner".to_owned()),
+                activity: None,
+                kind: UsageEventKind::Paused,
+                at_ms: 62_000,
+            },
+        ];
+        commit_events(db.pool(), &device, &mut selected, &events, 32_000, true)
+            .await
+            .expect("checkpoint route A");
+
+        // Reader switches to Route B at 32s: checkpoint [2s, 32s] is finalized under Route A,
+        // and the remaining [32s, 62s] commits under Route B.
+        assert!(
+            retarget_selection_tx(db.pool(), &game.to_string(), Some(id_b.to_string()), None)
+                .await
+                .expect("retarget")
+        );
+        let mut reloaded = load_selection(db.pool())
+            .await
+            .expect("reload")
+            .expect("active");
+        assert_eq!(
+            reloaded.route_id.as_deref(),
+            Some(id_b.to_string().as_str())
+        );
+
+        let presence = active_target(db.pool(), 35_000)
+            .await
+            .expect("presence target");
+        assert_eq!(presence.route_id, Some(id_b));
+
+        commit_events(db.pool(), &device, &mut reloaded, &events, 70_000, false)
+            .await
+            .expect("commit route B");
+
+        let rows: Vec<(Option<String>, i64)> = sqlx::query_as(
+            "SELECT route_id, counted_ms FROM play_sessions WHERE game_id = ? ORDER BY started_at",
+        )
+        .bind(game.to_string())
+        .fetch_all(db.pool())
+        .await
+        .expect("rows");
+        assert_eq!(
+            rows,
+            vec![
+                (Some(id_a.to_string()), 30_000),
+                (Some(id_b.to_string()), 30_000),
+            ]
         );
     }
 }

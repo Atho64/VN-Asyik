@@ -282,9 +282,6 @@ pub struct PrefsSnapshot {
     pub nsfw: String,
     /// Swap glass for solid surfaces.
     pub reduce_effects: bool,
-    /// Device-local opt-in; old snapshots default to disabled.
-    #[serde(default)]
-    pub beta_features: bool,
 }
 
 impl Default for PrefsSnapshot {
@@ -295,7 +292,6 @@ impl Default for PrefsSnapshot {
             language: prefs.language,
             nsfw: prefs.nsfw.as_str().to_owned(),
             reduce_effects: prefs.reduce_effects,
-            beta_features: false,
         }
     }
 }

@@ -56,7 +56,7 @@ internal fun decodeDocumentUtf8(bytes: ByteArray): String =
 /** Ciphertext lives outside Android Auto Backup; the non-exportable key stays in Keystore. */
 internal class SecureVault(private val directory: File, private val alias: String) {
     private fun file(name: String): AtomicFile {
-        require(name in setOf("vndb", "chat", "tavily", "discord", "imgbb")) { "Unknown credential" }
+        require(name in setOf("vndb", "discord", "imgbb")) { "Unknown credential" }
         check(directory.isDirectory || directory.mkdirs()) { "Credential directory unavailable" }
         return AtomicFile(File(directory, "$name.enc"))
     }

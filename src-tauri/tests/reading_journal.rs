@@ -704,6 +704,9 @@ async fn library_export_preview_merge_and_restore_keep_the_journal() {
         sessions: file.payload.sessions,
         endings: file.payload.endings,
         reading_entries: vec![],
+        global_notes: vec![],
+        reading_goals: vec![],
+        achievement_unlocks: vec![],
         prefs: file.prefs,
     };
     let mut old = serde_json::to_value(&backup).unwrap();

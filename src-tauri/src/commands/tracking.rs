@@ -41,6 +41,8 @@ pub struct TrackerCapability {
     /// How detected time is measured: `auto` (focus-aware) or `always` (wall clock
     /// while the game process runs). See `tracking::mode`.
     pub mode: String,
+    /// Whether opening a game automatically restarts its last manual route/chapter timer.
+    pub auto_resume_route: bool,
     /// Poll interval in milliseconds, for honesty about granularity.
     pub poll_interval_ms: i64,
 }
@@ -54,9 +56,76 @@ pub async fn tracking_capability(state: State<'_, AppState>) -> CommandResult<Tr
         reason: status.unavailable_reason.clone(),
         enabled: state.tracker().is_enabled().await,
         mode: state.tracker().mode().await.as_str().to_owned(),
+        auto_resume_route: state.tracker().auto_resume_route().await,
         poll_interval_ms: i64::try_from(crate::tracking::POLL_INTERVAL.as_millis())
             .unwrap_or(2_000),
     })
+}
+
+/// Enable or disable auto-resuming the last manual route/chapter timer when a game opens.
+#[tauri::command]
+pub async fn tracking_set_auto_resume_route(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> CommandResult<TrackerCapability> {
+    state.tracker().set_auto_resume_route(enabled).await;
+    crate::tracking::auto_route::save_enabled(state.db().pool(), enabled).await;
+    tracking_capability(state).await
+}
+
+/// Remembered auto-resume route/chapter status for one game.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoRouteStatusView {
+    pub enabled: bool,
+    pub route_id: Option<String>,
+    pub chapter_id: Option<String>,
+    pub target_name: Option<String>,
+}
+
+/// Read the remembered auto-resume route/chapter for `game_id`, if any.
+#[tauri::command]
+pub async fn tracking_auto_route_status(
+    state: State<'_, AppState>,
+    game_id: String,
+) -> CommandResult<AutoRouteStatusView> {
+    let game = EntityId::parse(&game_id)?;
+    let enabled = state.tracker().auto_resume_route().await;
+    let described = crate::tracking::auto_route::describe_for_game(state.db().pool(), game).await;
+    Ok(AutoRouteStatusView {
+        enabled,
+        route_id: described
+            .as_ref()
+            .and_then(|d| d.route_id.map(|id| id.to_string())),
+        chapter_id: described
+            .as_ref()
+            .and_then(|d| d.chapter_id.map(|id| id.to_string())),
+        target_name: described.map(|d| d.name),
+    })
+}
+
+/// Clear the remembered auto-resume route/chapter for `game_id`.
+#[tauri::command]
+pub async fn tracking_clear_auto_route(
+    state: State<'_, AppState>,
+    game_id: String,
+) -> CommandResult<AutoRouteStatusView> {
+    let game = EntityId::parse(&game_id)?;
+    crate::tracking::auto_route::clear(state.db().pool(), game).await;
+    if cfg!(target_os = "android") {
+        let timestamp = now()?;
+        let _ = crate::tracking::android::bind_target(
+            state.db().pool(),
+            state.device(),
+            &game.to_string(),
+            None,
+            None,
+            timestamp.as_millis(),
+        )
+        .await;
+        sync_presence_loop(&state, timestamp).await;
+    }
+    tracking_auto_route_status(state, game_id).await
 }
 
 /// Choose how detected playtime is measured.
@@ -220,15 +289,7 @@ pub async fn tracking_set_enabled(
     enabled: bool,
 ) -> CommandResult<TrackerCapability> {
     state.tracker().set_enabled(enabled).await;
-    let status = state.tracker().status(state.db().pool()).await;
-    Ok(TrackerCapability {
-        available: status.available,
-        reason: status.unavailable_reason.clone(),
-        enabled,
-        mode: state.tracker().mode().await.as_str().to_owned(),
-        poll_interval_ms: i64::try_from(crate::tracking::POLL_INTERVAL.as_millis())
-            .unwrap_or(2_000),
-    })
+    tracking_capability(state).await
 }
 
 /// List metadata for the executable window picker (Windows only).
@@ -441,6 +502,29 @@ pub async fn tracking_manual_start(
     let chapter = EntityId::parse(&chapter_id)?;
     let game = EntityId::parse(&game_id)?;
     let timestamp = now()?;
+    crate::tracking::auto_route::remember(
+        state.db().pool(),
+        game,
+        &crate::tracking::auto_route::AutoResumeTarget::Chapter {
+            chapter_id: chapter.to_string(),
+        },
+    )
+    .await;
+    if cfg!(target_os = "android")
+        && crate::tracking::android::bind_target(
+            state.db().pool(),
+            state.device(),
+            &game.to_string(),
+            None,
+            Some(chapter.to_string()),
+            timestamp.as_millis(),
+        )
+        .await
+        .unwrap_or(false)
+    {
+        sync_presence_loop(&state, timestamp).await;
+        return tracking_manual_status(state).await;
+    }
     state
         .tracker()
         .manual_start(chapter, game, timestamp)
@@ -468,6 +552,29 @@ pub async fn tracking_manual_start_route(
     let route = EntityId::parse(&route_id)?;
     let game = EntityId::parse(&game_id)?;
     let timestamp = now()?;
+    crate::tracking::auto_route::remember(
+        state.db().pool(),
+        game,
+        &crate::tracking::auto_route::AutoResumeTarget::Route {
+            route_id: route.to_string(),
+        },
+    )
+    .await;
+    if cfg!(target_os = "android")
+        && crate::tracking::android::bind_target(
+            state.db().pool(),
+            state.device(),
+            &game.to_string(),
+            Some(route.to_string()),
+            None,
+            timestamp.as_millis(),
+        )
+        .await
+        .unwrap_or(false)
+    {
+        sync_presence_loop(&state, timestamp).await;
+        return tracking_manual_status(state).await;
+    }
     state
         .tracker()
         .manual_start_route(route, game, timestamp)
@@ -522,6 +629,7 @@ pub async fn tracking_manual_stop(state: State<'_, AppState>) -> CommandResult<M
         .manual_stop()
         .await
         .map_err(|err| CommandError::new("manual", err.to_string()))?;
+    crate::tracking::auto_route::clear(state.db().pool(), run.game_id).await;
 
     let finished = now()?;
     let afk = state.tracker().afk_config().await;
@@ -966,6 +1074,10 @@ pub fn spawn_loop(app: AppHandle) {
         // a suspended machine with hours of phantom playtime.
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+        // Achievement evaluation is debounced to at most once per minute; the
+        // 15s/2s poll ticks must never each run the aggregate scan.
+        let mut last_achievement_refresh = std::time::Instant::now();
+
         loop {
             ticker.tick().await;
             let Some(state) = app.try_state::<AppState>() else {
@@ -987,19 +1099,28 @@ pub fn spawn_loop(app: AppHandle) {
                     eprintln!("android usage reconcile failed: {err}");
                 }
                 sync_presence_loop(&state, timestamp).await;
-                continue;
+            } else {
+                // A failing poll must never kill the loop; the next tick may succeed.
+                // It is still reported: `poll` advances the machine before persisting, so
+                // a swallowed error hides a slice of playtime that will not be retried.
+                if let Err(err) = state
+                    .tracker()
+                    .poll(state.db().pool(), state.device(), timestamp)
+                    .await
+                {
+                    eprintln!("playtime poll failed: {err}");
+                }
+                sync_presence_loop(&state, timestamp).await;
             }
-            // A failing poll must never kill the loop; the next tick may succeed.
-            // It is still reported: `poll` advances the machine before persisting, so
-            // a swallowed error hides a slice of playtime that will not be retried.
-            if let Err(err) = state
-                .tracker()
-                .poll(state.db().pool(), state.device(), timestamp)
-                .await
-            {
-                eprintln!("playtime poll failed: {err}");
+            if last_achievement_refresh.elapsed() >= Duration::from_mins(1) {
+                last_achievement_refresh = std::time::Instant::now();
+                crate::commands::achievements::refresh_quietly(
+                    &app,
+                    state.db().pool(),
+                    state.device(),
+                )
+                .await;
             }
-            sync_presence_loop(&state, timestamp).await;
         }
     });
 }
@@ -1008,6 +1129,7 @@ pub fn spawn_loop(app: AppHandle) {
 struct ActivePresenceTarget {
     game_id: EntityId,
     chapter_id: Option<EntityId>,
+    route_id: Option<EntityId>,
     exe_name: Option<String>,
     active_ms: i64,
     start_epoch: Option<i64>,
@@ -1046,6 +1168,7 @@ fn target_from_manual(
         ActivePresenceTarget {
             game_id: manual.game_id,
             chapter_id: manual.chapter_id,
+            route_id: manual.route_id,
             exe_name: None,
             active_ms: elapsed,
             start_epoch: Some(start_epoch(now, elapsed)),
@@ -1076,6 +1199,7 @@ fn target_from_status(
             .chapter_id
             .as_deref()
             .and_then(|c| EntityId::parse(c).ok()),
+        route_id: None,
         exe_name: status.exe_path.as_deref().and_then(exe_file_name),
         // While unfocused nothing accrues, so `active_ms` is frozen. That is
         // exactly what the card should show: the elapsed timer stops rather than
@@ -1115,7 +1239,8 @@ async fn sync_presence_loop(state: &AppState, now: Timestamp) {
             .await
             .map(|active| ActivePresenceTarget {
                 game_id: active.game_id,
-                chapter_id: None,
+                chapter_id: active.chapter_id,
+                route_id: active.route_id,
                 exe_name: Some(active.package),
                 active_ms: active.active_ms,
                 start_epoch: Some(active.start_epoch),
@@ -1133,15 +1258,25 @@ async fn sync_presence_loop(state: &AppState, now: Timestamp) {
         return;
     };
 
-    let (chapter_name, route_name) = match target.chapter_id {
-        Some(cid) => match queries::chapter_by_id(pool, cid).await {
+    let (chapter_name, route_name) = match (target.chapter_id, target.route_id) {
+        (Some(cid), _) => match queries::chapter_by_id(pool, cid).await {
             Ok(Some(chap)) => (
                 Some(chap.display_name.unwrap_or(chap.name)),
                 chap.route_name,
             ),
             _ => (None, None),
         },
-        None => (None, None),
+        (None, Some(rid)) => (
+            None,
+            crate::tracking::auto_route::resolve_route_survivor(
+                pool,
+                target.game_id,
+                &rid.to_string(),
+            )
+            .await
+            .map(|(_, name)| name),
+        ),
+        (None, None) => (None, None),
     };
 
     // Per-game overrides layer on the global settings for the game that is
@@ -1183,9 +1318,8 @@ async fn sync_presence_loop(state: &AppState, now: Timestamp) {
             base.exe_name = icon.exe_name;
         }
     }
-    state
-        .presence()
-        .update_context(vn_core::presence::PresenceContext {
+    state.presence().update_context_with_settings(
+        vn_core::presence::PresenceContext {
             exe_name: target.exe_name.unwrap_or_else(|| base.exe_name.clone()),
             elapsed_time: vn_core::time_fmt::format_duration(target.active_ms),
             date,
@@ -1198,7 +1332,9 @@ async fn sync_presence_loop(state: &AppState, now: Timestamp) {
             // is not running".
             is_unfocused: target.phase == Phase::Unfocused,
             ..base
-        });
+        },
+        presence_settings,
+    );
 }
 
 #[cfg(test)]
@@ -1342,6 +1478,17 @@ mod presence_target_tests {
                 .active_ms,
             4_000
         );
+    }
+
+    #[test]
+    fn a_route_only_manual_timer_preserves_its_route_id_for_presence() {
+        let route_id = EntityId::new();
+        let game_id = EntityId::new();
+        let run = ManualRun::start_route(route_id, game_id, at(100));
+        let target = target_from_manual(&run, at(130), true).expect("route target");
+        assert_eq!(target.game_id, game_id);
+        assert_eq!(target.route_id, Some(route_id));
+        assert_eq!(target.chapter_id, None);
     }
 }
 

@@ -133,6 +133,14 @@ pub fn base_context(game: &Game) -> PresenceContext {
         status: Some(status_label(game.status).to_string()),
         vndb_status: Some(status_label(game.status).to_string()),
         title_original: game.title_original.clone(),
+        // Fallback for unlinked local games or linked games before `vndb_details` is cached.
+        // Overwritten cleanly in `context_for_game` once VNDB title variants and `olang` are loaded.
+        title_japanese: game
+            .title_original
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned),
         vndb_length: game
             .length_minutes
             .map(length_label)
@@ -147,9 +155,91 @@ pub fn base_context(game: &Game) -> PresenceContext {
     }
 }
 
+fn trimmed_non_empty(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|s| !s.is_empty())
+}
+
+/// Pick the best title variant for `lang`, preferring `main`, then `official`, then VNDB order.
+fn pick_title_variant<'a, F>(
+    titles: &'a [crate::vndb::dto::TitleVariant],
+    lang: &str,
+    field: F,
+) -> Option<String>
+where
+    F: Fn(&'a crate::vndb::dto::TitleVariant) -> Option<&'a str>,
+{
+    let mut best: Option<(u8, &str)> = None;
+    for variant in titles {
+        if variant.lang.as_deref() != Some(lang) {
+            continue;
+        }
+        let Some(text) = trimmed_non_empty(field(variant)) else {
+            continue;
+        };
+        let rank =
+            u8::from(variant.main == Some(true)) * 2 + u8::from(variant.official == Some(true));
+        if best.is_none_or(|(best_rank, _)| rank > best_rank) {
+            best = Some((rank, text));
+        }
+    }
+    best.map(|(_, text)| text.to_owned())
+}
+
+/// Extract `(english, romaji, japanese)` title variants from a cached `vndb_details` row.
+///
+/// Tolerates older rows with empty `titles_json` (`[]`) by falling back to `title`/`alttitle`
+/// only when `olang` matches, so a Chinese or Korean `alttitle` is never mislabelled as Japanese.
+fn extract_title_variants(
+    game: &Game,
+    vndb_title: Option<&str>,
+    alttitle: Option<&str>,
+    olang: Option<&str>,
+    titles: &[crate::vndb::dto::TitleVariant],
+) -> (Option<String>, Option<String>, Option<String>) {
+    let vndb_title = trimmed_non_empty(vndb_title);
+    let alttitle = trimmed_non_empty(alttitle);
+    let olang = trimmed_non_empty(olang);
+    let game_title = trimmed_non_empty(Some(game.title.as_str()));
+    let game_original = trimmed_non_empty(game.title_original.as_deref());
+
+    let english = pick_title_variant(titles, "en", |v| v.title.as_deref()).or_else(|| {
+        (olang == Some("en"))
+            .then(|| vndb_title.or(game_title))
+            .flatten()
+            .map(str::to_owned)
+    });
+
+    let romaji = pick_title_variant(titles, "ja", |v| v.latin.as_deref()).or_else(|| {
+        (olang == Some("ja"))
+            .then_some(vndb_title)
+            .flatten()
+            .filter(|t| t.is_ascii() || Some(*t) != alttitle)
+            .map(str::to_owned)
+    });
+
+    let japanese = pick_title_variant(titles, "ja", |v| v.title.as_deref()).or_else(|| {
+        (olang.is_none() || olang == Some("ja"))
+            .then(|| alttitle.or(game_original))
+            .flatten()
+            .map(str::to_owned)
+    });
+
+    (english, romaji, japanese)
+}
+
+type VndbPresenceRow = (
+    String,
+    Option<String>,
+    Option<f64>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
 /// Build [`base_context`] and enrich it with cached `vndb_details` facts
-/// (`{vndb_developer}`, `{vndb_released}`, `{vndb_year}`, and VNDB's community
-/// rating for `{vndb_rating}`) when the game is linked to VNDB.
+/// (`{vndb_developer}`, `{vndb_released}`, `{vndb_year}`, VNDB's community rating
+/// for `{vndb_rating}`, and English/Romaji/Japanese title variants) when linked to VNDB.
 pub async fn context_for_game(pool: &sqlx::SqlitePool, game: &Game) -> PresenceContext {
     let mut ctx = base_context(game);
     // Read for every game, VNDB-linked or not: `{playtime}` is the user's own
@@ -171,8 +261,8 @@ pub async fn context_for_game(pool: &sqlx::SqlitePool, game: &Game) -> PresenceC
     let Some(ref vn_id) = game.vndb_id else {
         return ctx;
     };
-    let row: Option<(String, Option<String>, Option<f64>)> = sqlx::query_as(
-        "SELECT developers_json, released, rating FROM vndb_details WHERE vn_id = ?",
+    let row: Option<VndbPresenceRow> = sqlx::query_as(
+        "SELECT developers_json, released, rating, title, alttitle, olang, titles_json FROM vndb_details WHERE vn_id = ?",
     )
     .bind(vn_id)
     .fetch_optional(pool)
@@ -180,7 +270,16 @@ pub async fn context_for_game(pool: &sqlx::SqlitePool, game: &Game) -> PresenceC
     .ok()
     .flatten();
 
-    if let Some((developers_json, released, vndb_rating)) = row {
+    if let Some((
+        developers_json,
+        released,
+        vndb_rating,
+        vndb_title,
+        alttitle,
+        olang,
+        titles_json,
+    )) = row
+    {
         let devs: Vec<crate::vndb::dto::Producer> =
             serde_json::from_str(&developers_json).unwrap_or_default();
         let names: Vec<String> = devs
@@ -199,6 +298,21 @@ pub async fn context_for_game(pool: &sqlx::SqlitePool, game: &Game) -> PresenceC
         }
         ctx.vndb_released = released;
         ctx.vndb_rating = vndb_rating.map(|r| format!("{:.2}", r / 10.0));
+
+        let titles: Vec<crate::vndb::dto::TitleVariant> = titles_json
+            .as_deref()
+            .and_then(|json| serde_json::from_str(json).ok())
+            .unwrap_or_default();
+        let (english, romaji, japanese) = extract_title_variants(
+            game,
+            vndb_title.as_deref(),
+            alttitle.as_deref(),
+            olang.as_deref(),
+            &titles,
+        );
+        ctx.title_english = english;
+        ctx.title_romaji = romaji;
+        ctx.title_japanese = japanese;
     }
     ctx
 }
@@ -591,7 +705,7 @@ fn apply_settings(
 }
 
 enum PresenceMsg {
-    Update(Box<PresenceContext>),
+    Update(Box<PresenceContext>, Option<Box<PresenceSettings>>),
     Clear,
     SetSettings(Box<PresenceSettings>),
     Shutdown,
@@ -672,8 +786,9 @@ impl PresenceService {
 
             while let Some(msg) = rx.recv().await {
                 match msg {
-                    PresenceMsg::Update(mut ctx) => {
-                        if !current_settings.enabled {
+                    PresenceMsg::Update(mut ctx, effective_override) => {
+                        let effective = effective_override.as_deref().unwrap_or(&current_settings);
+                        if !effective.enabled {
                             if has_activity {
                                 let _ = sink.clear();
                                 has_activity = false;
@@ -697,7 +812,7 @@ impl PresenceService {
                             publish(
                                 &mut *sink,
                                 &mut debouncer,
-                                &current_settings,
+                                effective,
                                 &mut ctx,
                                 &mut cycle,
                                 now_secs,
@@ -771,7 +886,15 @@ impl PresenceService {
     /// queue and, with an awaiting `send`, freeze playtime tracking. A full queue
     /// drops the update instead; the next poll sends a fresh one.
     pub fn update_context(&self, ctx: PresenceContext) {
-        let _ = self.tx.try_send(PresenceMsg::Update(Box::new(ctx)));
+        let _ = self.tx.try_send(PresenceMsg::Update(Box::new(ctx), None));
+    }
+
+    /// Offer the latest activity with game-scoped effective settings (per-game overrides layered
+    /// over global defaults). Never waits.
+    pub fn update_context_with_settings(&self, ctx: PresenceContext, settings: PresenceSettings) {
+        let _ = self
+            .tx
+            .try_send(PresenceMsg::Update(Box::new(ctx), Some(Box::new(settings))));
     }
 
     /// Ask the service to clear the activity. Never waits, for the reason above.
@@ -1657,5 +1780,139 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn context_for_game_extracts_english_romaji_and_japanese_titles_from_vndb_details() {
+        let db = crate::db::Db::open_memory().await.expect("db");
+        let game_id = "01a151db-7777-7000-8000-000000000010";
+        sqlx::query(
+            "INSERT INTO games (id, title, title_original, vndb_id, status, updated_at, device_id) \
+             VALUES (?, 'Ao no Kanata no Four Rhythm', '蒼の彼方のフォーリズム', 'v12849', 'playing', 1, 'dev')",
+        )
+        .bind(game_id)
+        .execute(db.pool())
+        .await
+        .expect("insert game");
+        let titles_json = serde_json::json!([
+            {"lang": "en", "title": "Aokana Fan Title", "latin": null, "official": false, "main": false},
+            {"lang": "en", "title": "Aokana: Four Rhythms Across the Blue", "latin": null, "official": true, "main": false},
+            {"lang": "ja", "title": "蒼の彼方のフォーリズム", "latin": "Ao no Kanata no Four Rhythm", "official": true, "main": true}
+        ])
+        .to_string();
+        sqlx::query(
+            "INSERT INTO vndb_details (vn_id, title, alttitle, titles_json, olang, developers_json, fetched_at) \
+             VALUES ('v12849', 'Ao no Kanata no Four Rhythm', '蒼の彼方のフォーリズム', ?, 'ja', '[]', 1)",
+        )
+        .bind(&titles_json)
+        .execute(db.pool())
+        .await
+        .expect("insert vndb_details");
+
+        let game =
+            crate::db::queries::get_game(db.pool(), vn_core::EntityId::parse(game_id).unwrap())
+                .await
+                .unwrap()
+                .unwrap();
+        let ctx = context_for_game(db.pool(), &game).await;
+        assert_eq!(
+            ctx.title_english.as_deref(),
+            Some("Aokana: Four Rhythms Across the Blue")
+        );
+        assert_eq!(
+            ctx.title_romaji.as_deref(),
+            Some("Ao no Kanata no Four Rhythm")
+        );
+        assert_eq!(
+            ctx.title_japanese.as_deref(),
+            Some("蒼の彼方のフォーリズム")
+        );
+    }
+
+    #[tokio::test]
+    async fn context_for_game_handles_empty_titles_json_and_non_japanese_olang_honestly() {
+        let db = crate::db::Db::open_memory().await.expect("db");
+
+        // Legacy Japanese row without `titles_json` still yields romaji and Japanese.
+        let jp_id = "01a151db-7777-7000-8000-000000000011";
+        sqlx::query(
+            "INSERT INTO games (id, title, title_original, vndb_id, status, updated_at, device_id) \
+             VALUES (?, 'Clannad', 'クラナド', 'v4', 'playing', 1, 'dev')",
+        )
+        .bind(jp_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO vndb_details (vn_id, title, alttitle, titles_json, olang, developers_json, fetched_at) \
+             VALUES ('v4', 'Clannad', 'クラナド', '[]', 'ja', '[]', 1)",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        let jp_game =
+            crate::db::queries::get_game(db.pool(), vn_core::EntityId::parse(jp_id).unwrap())
+                .await
+                .unwrap()
+                .unwrap();
+        let jp_ctx = context_for_game(db.pool(), &jp_game).await;
+        assert_eq!(jp_ctx.title_english, None);
+        assert_eq!(jp_ctx.title_romaji.as_deref(), Some("Clannad"));
+        assert_eq!(jp_ctx.title_japanese.as_deref(), Some("クラナド"));
+
+        // Non-Japanese VN without a `ja` variant must not mislabel its Chinese alttitle as Japanese.
+        let zh_id = "01a151db-7777-7000-8000-000000000012";
+        sqlx::query(
+            "INSERT INTO games (id, title, title_original, vndb_id, status, updated_at, device_id) \
+             VALUES (?, 'Tricolour Lovestory', '三色绘恋', 'v21899', 'playing', 1, 'dev')",
+        )
+        .bind(zh_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO vndb_details (vn_id, title, alttitle, titles_json, olang, developers_json, fetched_at) \
+             VALUES ('v21899', 'Tricolour Lovestory', '三色绘恋', '[]', 'zh-Hans', '[]', 1)",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        let zh_game =
+            crate::db::queries::get_game(db.pool(), vn_core::EntityId::parse(zh_id).unwrap())
+                .await
+                .unwrap()
+                .unwrap();
+        let zh_ctx = context_for_game(db.pool(), &zh_game).await;
+        assert_eq!(zh_ctx.title_japanese, None);
+        assert_eq!(zh_ctx.title_romaji, None);
+    }
+
+    #[tokio::test]
+    async fn update_context_with_settings_applies_per_game_title_language_override() {
+        let sent = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let service = PresenceService::with_sink(
+            PresenceSettings {
+                enabled: true,
+                title_language: vn_core::presence::PresenceTitleLanguage::Default,
+                ..Default::default()
+            },
+            Box::new(RecordingSink {
+                sent: Arc::clone(&sent),
+            }),
+        );
+        let mut ctx = tracking_context("Ao no Kanata no Four Rhythm");
+        ctx.title_japanese = Some("蒼の彼方のフォーリズム".to_string());
+
+        let scoped = PresenceSettings {
+            enabled: true,
+            title_language: vn_core::presence::PresenceTitleLanguage::Japanese,
+            ..Default::default()
+        };
+        service.update_context_with_settings(ctx, scoped);
+        settle().await;
+
+        let captured = sent.lock().unwrap();
+        assert_eq!(captured.len(), 1);
+        assert_eq!(captured[0].name.as_deref(), Some("蒼の彼方のフォーリズム"));
     }
 }

@@ -1,4 +1,4 @@
-//! Queries for "For you" recommendations and `ai_taste_profile`.
+//! Queries for "For you" recommendations and `taste_profile`.
 //! Both consumers share this view of live games and cached VNDB credits.
 
 use sqlx::SqlitePool;

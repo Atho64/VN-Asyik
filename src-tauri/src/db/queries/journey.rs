@@ -68,8 +68,8 @@ pub(crate) async fn games_by_ids(
 }
 
 /// Shared SQL expression for a game's finish timestamp over `alias` (AGENTS.md §5).
-/// Kept in one helper so timeline, year review, and finished-day marks agree.
-fn finish_ts_sql(alias: &str) -> String {
+/// Kept in one helper so timeline, year review, finished-day marks, and goals agree.
+pub(crate) fn finish_ts_sql(alias: &str) -> String {
     format!(
         "COALESCE({alias}.finished_at, \
          (SELECT MIN(en.achieved_at) FROM endings en \

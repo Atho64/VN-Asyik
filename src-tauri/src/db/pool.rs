@@ -111,6 +111,7 @@ mod tests {
         let names: Vec<&str> = tables.iter().map(|t| t.0.as_str()).collect();
         for expected in [
             "_sqlx_migrations",
+            "achievement_unlocks",
             "adapter_profiles",
             "chapters",
             "endings",

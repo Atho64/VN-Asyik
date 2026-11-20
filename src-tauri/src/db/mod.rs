@@ -3,7 +3,10 @@
 //! All `SQL` lives in Rust, behind Tauri commands. The frontend never talks to
 //! `SQLite` directly (AGENTS.md §3), so tracking and sync rules cannot be bypassed.
 
+pub mod achievements;
+pub mod goals;
 pub mod models;
+pub mod notes;
 pub mod pool;
 pub mod queries;
 pub mod reading;

@@ -10,7 +10,7 @@ use crate::state::AppState;
 use crate::walkthrough::{
     USER_AGENT, WalkthroughView, build_seiya_client, clear_checked_items, fetch_master_index,
     fetch_seiya_html, get_walkthrough_view, save_manual_translation, save_translation,
-    save_walkthrough, toggle_checked_item, translate_batch_ai, translate_batch_google,
+    save_walkthrough, toggle_checked_item, translate_batch_google,
 };
 
 fn error(err: impl std::fmt::Display) -> CommandError {
@@ -198,7 +198,7 @@ pub async fn walkthrough_fetch(
     Ok(view)
 }
 
-/// Translate the walkthrough into English or Indonesian using AI (with VNDB glossary) or Google Translate.
+/// Translate the walkthrough into English or Indonesian using Google Translate with the VNDB character glossary.
 #[tauri::command]
 pub async fn walkthrough_translate(
     state: State<'_, AppState>,
@@ -207,8 +207,7 @@ pub async fn walkthrough_translate(
     provider: String,
     target_lang: String,
 ) -> CommandResult<WalkthroughView> {
-    if !matches!(provider.as_str(), "google" | "ai") || !matches!(target_lang.as_str(), "en" | "id")
-    {
+    if provider != "google" || !matches!(target_lang.as_str(), "en" | "id") {
         return Err(error(
             "Unsupported walkthrough translation provider or language",
         ));
@@ -234,23 +233,10 @@ pub async fn walkthrough_translate(
         .build()
         .map_err(|e| error(e.to_string()))?;
 
-    let translated_strings = if provider == "google" {
+    let translated_strings =
         translate_batch_google(&http, &texts_to_translate, &target_lang, &glossary)
             .await
-            .map_err(error)?
-    } else {
-        let chat = crate::ai::profiles::resolve(state.db().pool()).await;
-        translate_batch_ai(
-            &http,
-            &chat.config,
-            chat.key.as_ref(),
-            &texts_to_translate,
-            &target_lang,
-            &glossary,
-        )
-        .await
-        .map_err(error)?
-    };
+            .map_err(error)?;
 
     let mut str_ptr = 0;
     let mut mapped_routes = Vec::new();

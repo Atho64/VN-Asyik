@@ -12,6 +12,8 @@ pub const MAX_POSITION_CHARS: usize = 200;
 /// Longest accepted VNDB image id. Real ids are six or seven characters
 /// (`sf83040`); the cap only bounds what arrives from sync or a hand-edited row.
 pub const MAX_PHOTO_ID_CHARS: usize = 40;
+pub const MAX_GLOBAL_NOTE_TITLE_CHARS: usize = 200;
+pub const MAX_GLOBAL_NOTE_BODY_CHARS: usize = 12_000;
 
 /// A journal entry keeps the names the reader saw when it was written. Renaming
 /// or merging a route later must not rewrite their old reading checkpoints.
@@ -87,6 +89,50 @@ fn validate_photo_id(photo: &str) -> Result<(), String> {
 }
 
 impl crate::sync::MetaFields for ReadingEntry {
+    fn meta(&self) -> &SyncMeta {
+        &self.meta
+    }
+}
+
+/// A freeform library or cross-game note on the Timeline Notes tab.
+///
+/// `game_id` is optional: a note can belong to the library as a whole or be
+/// linked to one visual novel. Edits, pins, and tombstones sync via last-write-wins.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GlobalNote {
+    pub meta: SyncMeta,
+    #[serde(default)]
+    pub game_id: Option<EntityId>,
+    pub created_at: Timestamp,
+    #[serde(default)]
+    pub title: String,
+    pub body: String,
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+impl GlobalNote {
+    /// Validate both local input and incoming sync/backup rows.
+    pub fn validate(&self) -> Result<(), String> {
+        validate_global_note(&self.title, &self.body)
+    }
+}
+
+/// Require at least a title or body, bounded to reasonable lengths.
+pub fn validate_global_note(title: &str, body: &str) -> Result<(), String> {
+    if title.trim().is_empty() && body.trim().is_empty() {
+        return Err("empty_note".to_owned());
+    }
+    if title.chars().count() > MAX_GLOBAL_NOTE_TITLE_CHARS {
+        return Err("title_too_long".to_owned());
+    }
+    if body.chars().count() > MAX_GLOBAL_NOTE_BODY_CHARS {
+        return Err("body_too_long".to_owned());
+    }
+    Ok(())
+}
+
+impl crate::sync::MetaFields for GlobalNote {
     fn meta(&self) -> &SyncMeta {
         &self.meta
     }

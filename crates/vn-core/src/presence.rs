@@ -11,6 +11,21 @@ pub enum PresenceDetailsMode {
     Manual,
 }
 
+/// Which language/script variant of the visual novel title Discord Rich Presence displays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PresenceTitleLanguage {
+    /// Keep the library's main title (`game.title`), preserving earlier behavior.
+    #[default]
+    Default,
+    /// Published English title from VNDB when available, falling back to the library title.
+    English,
+    /// Romanised Japanese title (`ja.latin`) when available, falling back to the library title.
+    Romaji,
+    /// Japanese script title (`ja.title` or original title) when available, falling back to the library title.
+    Japanese,
+}
+
 /// Per-field text transform, ported from `EwE`'s `*_transform` dictionaries.
 ///
 /// Applied **after** template substitution and **before** Discord sanitizing in
@@ -159,6 +174,8 @@ pub struct PresenceSettings {
     pub show_when_unfocused: bool,
     /// Template for the card **title** (`None` defaults to the VN's title, matching `EwE`).
     pub activity_name: Option<String>,
+    /// Which title language variant fills `{vn_name}` and the card title.
+    pub title_language: PresenceTitleLanguage,
     /// Rotate the VNDB details line (default off: compact rating · year · length summary).
     pub cycle_vndb_details: bool,
     /// Seconds each VNDB fact stays on screen. Floored at [`MIN_CYCLE_SECONDS`].
@@ -217,6 +234,7 @@ impl Default for PresenceSettings {
             show_timestamps: true,
             show_when_unfocused: true,
             activity_name: None,
+            title_language: PresenceTitleLanguage::Default,
             cycle_vndb_details: false,
             cycle_seconds: 5,
             vndb_loading_details: "Reading".to_string(),
@@ -257,6 +275,12 @@ pub struct PresenceContext {
     /// The game's original-script title, when it differs from the shown one.
     /// A local game can carry this too, so it is not a VNDB fact.
     pub title_original: Option<String>,
+    /// Published English title from VNDB (`lang == "en"`), if known.
+    pub title_english: Option<String>,
+    /// Romanised Japanese title from VNDB (`lang == "ja"` `latin`), if known.
+    pub title_romaji: Option<String>,
+    /// Japanese script title from VNDB (`lang == "ja"` `title`), if known.
+    pub title_japanese: Option<String>,
     /// The user's own library status ("Reading", "Completed", ...). Works for
     /// imports and hand-added games alike, unlike `vndb_status`, which is what
     /// the VNDB list says and is empty when the list is not linked.
@@ -488,21 +512,60 @@ pub fn playtime_label(ms: i64) -> String {
     format!("{}:{:02}", minutes / 60, minutes % 60)
 }
 
-/// Extracts tokens map from a `PresenceContext`.
+fn non_empty_text(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|s| !s.is_empty())
+}
+
+/// Resolves the VN title displayed on Discord according to [`PresenceSettings::title_language`].
+/// Falls back to `ctx.vn_name` when the chosen language variant is unavailable.
+#[must_use]
+pub fn resolve_vn_title<'a>(settings: &PresenceSettings, ctx: &'a PresenceContext) -> &'a str {
+    let preferred = match settings.title_language {
+        PresenceTitleLanguage::Default => None,
+        PresenceTitleLanguage::English => non_empty_text(ctx.title_english.as_deref()),
+        PresenceTitleLanguage::Romaji => non_empty_text(ctx.title_romaji.as_deref()),
+        PresenceTitleLanguage::Japanese => non_empty_text(ctx.title_japanese.as_deref()),
+    };
+    preferred.unwrap_or(ctx.vn_name.as_str())
+}
+
+/// Extracts tokens map from a `PresenceContext` using default title-language settings.
 ///
 /// Every known token is inserted, using `""` when the context has no value for
 /// it. Leaving a known token out of the map would make [`render_template`] treat
 /// it as an unknown token and print the literal `{chapter}` on Discord whenever
 /// no chapter is detected.
 #[must_use]
-pub fn build_tokens(ctx: &PresenceContext) -> HashMap<&str, &str> {
+pub fn build_tokens(ctx: &PresenceContext) -> HashMap<&'static str, &str> {
+    build_tokens_for(&PresenceSettings::default(), ctx)
+}
+
+/// Extracts tokens map from a `PresenceContext` honoring [`PresenceSettings::title_language`].
+#[must_use]
+pub fn build_tokens_for<'a>(
+    settings: &PresenceSettings,
+    ctx: &'a PresenceContext,
+) -> HashMap<&'static str, &'a str> {
+    let resolved_title = resolve_vn_title(settings, ctx);
+    let override_default_name = settings.title_language != PresenceTitleLanguage::Default;
+    let activity_token = if override_default_name || ctx.activity_name.trim().is_empty() {
+        resolved_title
+    } else {
+        ctx.activity_name.as_str()
+    };
+    let large_text_token = if override_default_name || ctx.large_text.trim().is_empty() {
+        resolved_title
+    } else {
+        ctx.large_text.as_str()
+    };
+
     let mut map = HashMap::new();
-    map.insert("vn_name", ctx.vn_name.as_str());
-    map.insert("activity_name", ctx.activity_name.as_str());
+    map.insert("vn_name", resolved_title);
+    map.insert("activity_name", activity_token);
     map.insert("exe_name", ctx.exe_name.as_str());
     map.insert("game_key", ctx.game_key.as_str());
     map.insert("window_title", ctx.window_title.as_str());
-    map.insert("large_text", ctx.large_text.as_str());
+    map.insert("large_text", large_text_token);
     map.insert("vndb_id", ctx.vndb_id.as_deref().unwrap_or(""));
     map.insert("vndb_url", ctx.vndb_url.as_deref().unwrap_or(""));
     map.insert("vndb_rating", ctx.vndb_rating.as_deref().unwrap_or(""));
@@ -520,6 +583,12 @@ pub fn build_tokens(ctx: &PresenceContext) -> HashMap<&str, &str> {
     map.insert(
         "title_original",
         ctx.title_original.as_deref().unwrap_or(""),
+    );
+    map.insert("title_english", ctx.title_english.as_deref().unwrap_or(""));
+    map.insert("title_romaji", ctx.title_romaji.as_deref().unwrap_or(""));
+    map.insert(
+        "title_japanese",
+        ctx.title_japanese.as_deref().unwrap_or(""),
     );
     map.insert("status", ctx.status.as_deref().unwrap_or(""));
     map.insert("playtime", ctx.playtime.as_deref().unwrap_or(""));
@@ -747,7 +816,7 @@ fn render_lines(
     settings: &PresenceSettings,
     ctx: &PresenceContext,
 ) -> (Option<String>, Option<String>) {
-    let tokens = build_tokens(ctx);
+    let tokens = build_tokens_for(settings, ctx);
     match settings.details_mode {
         PresenceDetailsMode::Manual => (
             sanitize_discord_string(&settings.manual_details),
@@ -887,7 +956,7 @@ pub fn valid_image_asset(raw: &str) -> bool {
 
 /// Builds a `PresenceActivity` from settings and current session context.
 pub fn build_activity(settings: &PresenceSettings, ctx: &PresenceContext) -> PresenceActivity {
-    let tokens = build_tokens(ctx);
+    let tokens = build_tokens_for(settings, ctx);
     let name = activity_name(settings, &tokens);
 
     let (raw_details, raw_state) = render_lines(settings, ctx);
@@ -996,7 +1065,7 @@ pub fn small_icon_tooltip(settings: &PresenceSettings, ctx: &PresenceContext) ->
     } else {
         &settings.small_text
     };
-    sanitize_discord_string(&render_template(template, &build_tokens(ctx)))
+    sanitize_discord_string(&render_template(template, &build_tokens_for(settings, ctx)))
 }
 
 /// Activity key used for deduplicating identical updates to avoid spamming Discord.
@@ -2360,5 +2429,125 @@ mod tests {
             "alt-tab back, two seconds later"
         );
         assert!(debouncer.should_send(&act, 115));
+    }
+
+    #[test]
+    fn title_language_switches_card_title_tooltip_and_vn_name_token() {
+        let ctx = PresenceContext {
+            vn_name: "Ao no Kanata no Four Rhythm".to_string(),
+            activity_name: "Ao no Kanata no Four Rhythm".to_string(),
+            large_text: "Ao no Kanata no Four Rhythm".to_string(),
+            title_english: Some("Aokana: Four Rhythms Across the Blue".to_string()),
+            title_romaji: Some("Ao no Kanata no Four Rhythm".to_string()),
+            title_japanese: Some("蒼の彼方のフォーリズム".to_string()),
+            cover_url: Some("https://t.vndb.org/cv/00/100.jpg".to_string()),
+            ..Default::default()
+        };
+
+        let cases = [
+            (
+                PresenceTitleLanguage::Default,
+                "Ao no Kanata no Four Rhythm",
+            ),
+            (
+                PresenceTitleLanguage::English,
+                "Aokana: Four Rhythms Across the Blue",
+            ),
+            (PresenceTitleLanguage::Romaji, "Ao no Kanata no Four Rhythm"),
+            (PresenceTitleLanguage::Japanese, "蒼の彼方のフォーリズム"),
+        ];
+
+        for (lang, expected) in cases {
+            let settings = PresenceSettings {
+                title_language: lang,
+                details_mode: PresenceDetailsMode::Custom,
+                custom_details: "Reading {vn_name}".to_string(),
+                show_cover: true,
+                ..Default::default()
+            };
+            let act = build_activity(&settings, &ctx);
+            assert_eq!(act.name.as_deref(), Some(expected), "{lang:?} card title");
+            assert_eq!(
+                act.large_text.as_deref(),
+                Some(expected),
+                "{lang:?} tooltip"
+            );
+            assert_eq!(
+                act.details.as_deref(),
+                Some(format!("Reading {expected}").as_str()),
+                "{lang:?} details token"
+            );
+        }
+    }
+
+    #[test]
+    fn title_language_falls_back_to_library_title_when_variant_missing() {
+        let ctx = PresenceContext {
+            vn_name: "Sakura no Uta".to_string(),
+            title_japanese: Some("サクラノ詩".to_string()),
+            ..Default::default()
+        };
+        let english = PresenceSettings {
+            title_language: PresenceTitleLanguage::English,
+            ..Default::default()
+        };
+        assert_eq!(
+            build_activity(&english, &ctx).name.as_deref(),
+            Some("Sakura no Uta")
+        );
+        let romaji = PresenceSettings {
+            title_language: PresenceTitleLanguage::Romaji,
+            ..Default::default()
+        };
+        assert_eq!(
+            build_activity(&romaji, &ctx).name.as_deref(),
+            Some("Sakura no Uta")
+        );
+        let japanese = PresenceSettings {
+            title_language: PresenceTitleLanguage::Japanese,
+            ..Default::default()
+        };
+        assert_eq!(
+            build_activity(&japanese, &ctx).name.as_deref(),
+            Some("サクラノ詩")
+        );
+    }
+
+    #[test]
+    fn explicit_language_title_tokens_expand_independently() {
+        let ctx = PresenceContext {
+            vn_name: "Ao no Kanata no Four Rhythm".to_string(),
+            title_english: Some("Aokana".to_string()),
+            title_romaji: Some("Ao no Kanata no Four Rhythm".to_string()),
+            title_japanese: Some("蒼の彼方のフォーリズム".to_string()),
+            ..Default::default()
+        };
+        let settings = PresenceSettings {
+            details_mode: PresenceDetailsMode::Custom,
+            custom_details: "{title_english} / {title_japanese}".to_string(),
+            custom_state: "{title_romaji}".to_string(),
+            ..Default::default()
+        };
+        let act = build_activity(&settings, &ctx);
+        assert_eq!(
+            act.details.as_deref(),
+            Some("Aokana / 蒼の彼方のフォーリズム")
+        );
+        assert_eq!(act.state.as_deref(), Some("Ao no Kanata no Four Rhythm"));
+    }
+
+    #[test]
+    fn older_presence_settings_json_defaults_title_language_and_overrides_preserve_it() {
+        let decoded: PresenceSettings = serde_json::from_str("{}").expect("empty json decodes");
+        assert_eq!(decoded.title_language, PresenceTitleLanguage::Default);
+
+        let global = PresenceSettings::default();
+        let per_game = PresenceSettings {
+            title_language: PresenceTitleLanguage::Japanese,
+            ..global.clone()
+        };
+        let overrides = diff_settings(&global, &per_game);
+        let merged = overrides.apply(&global);
+        assert_eq!(merged.title_language, PresenceTitleLanguage::Japanese);
     }
 }

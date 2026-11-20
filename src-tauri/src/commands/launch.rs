@@ -320,6 +320,9 @@ async fn launch_android_game(
         .android_package()
         .ok_or_else(|| CommandError::new("invalid", "invalid Android package mapping"))?;
     let now = vn_core::clock::Timestamp::now()?;
+    if let Ok(gid) = vn_core::ids::EntityId::parse(game_id) {
+        state.tracker().discard_manual_for(gid).await;
+    }
     crate::tracking::android::launch(state.db().pool(), state.device(), target, now.as_millis())
         .await
         .map_err(|err| CommandError::new("android_launch", err))?;

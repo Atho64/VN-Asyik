@@ -1,22 +1,18 @@
 //! Tauri commands. Thin wrappers: validation and rules live in `vn-core`.
 
-pub mod ai;
+pub mod achievements;
 pub mod appearance;
 pub mod backup;
-pub mod chat;
-pub mod companion;
 pub mod data;
 pub mod for_you;
-pub mod hook;
+pub mod goals;
 pub mod journey;
 pub mod launch;
 pub mod library;
-pub mod luna;
 pub mod prefs;
 pub mod presence;
 pub mod reading;
 pub mod screenshots;
-pub mod script;
 pub mod sync;
 pub mod system;
 pub mod tracking;
